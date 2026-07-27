@@ -1,0 +1,554 @@
+// Forecasting: what the pipeline is worth once every deal is weighed by how likely it is, cut by the period
+// it will close in, and held against what the rep was asked for.
+//
+// This module sits at the bottom of the diamond — it imports crm, pipeline and activity, and reaches crm's
+// Amount by three routes that are all the same Amount, because a module is resolved once per compile. It is
+// also the one module here with no `exposing` clause, and the two choices are worth seeing side by side:
+// example.quoting writes a list although nothing imports it, and this one omits it although nothing imports
+// it either. Omitting makes every generated class public, which is what the Java side wants when everything
+// in the module is a report somebody reads; writing one is a statement about which names are the module's
+// interface. Nothing here is anybody's interface. Every rollup is an endpoint.
+//
+// What is on show:
+//   - A map key the domain *builds* rather than receives. FiscalPeriod is "FY26-Q3", assembled from the
+//     close date and the org's fiscal-year start month, and its own regex then checks the result exactly as
+//     it would check one that arrived from outside.
+//   - `Decimal` arithmetic where the rounding is named at the call: a weighted figure is
+//     probability × amount ÷ 100, and dividing by a hundred is the one division in the project that has to be
+//     a division, so the scale and the mode are stated where it happens.
+//   - `Map.upsert` where the absent branch inserts this deal's own figure and the present branch adds to it.
+//     Writing a zero into the absent branch and adding afterwards would lose the first deal of every period.
+//   - `Map.union`'s absence as the lesson. A manager's forecast is the reps' forecasts summed, and union is
+//     left-biased and never merges values, so it would silently drop a rep's number on a shared period.
+//     Combining two values under one key is a domain decision, and this is where it lives.
+//   - A two-argument injected behavior, which is the third generated shape after pipeline's zero-argument one
+//     and crm's one-argument one.
+//   - An optional read as a business outcome: a period with no deals in it is NoForecastForPeriod, not a
+//     forecast of zero, because the two mean different things to whoever is being asked about the quarter.
+//
+// Findings recorded here: F3 at CategoryName, F5 at attainmentOf, F16 at amountOfOpen, F23 at weightedOf.
+module example.forecasting
+import example.crm ( Amount, UserId, AccountId, CurrencyCode )
+import example.pipeline ( OpportunityId, OpportunityName, Opportunity, OpenOpportunity, ClosedWon
+                        , Prospecting, Qualification, NeedsAnalysis, ValueProposition
+                        , IdDecisionMakers, PerceptionAnalysis, ProposalPriceQuote, NegotiationReview
+                        , ClosedLost, ForecastCategory, Pipeline, BestCase, Commit, Closed, Omitted )
+import example.activity ( StaleReport )
+
+// === Values ===
+
+// "FY26-Q3". Built by periodOf rather than received, and legal as a boundary map key because it is a
+// String-backed newtype — which is the whole reason the period is a string and not a product of a year and a
+// quarter. A product cannot be a key, so a shape that would have been two Ints is one formatted string, and
+// the format is a rule rather than a convention.
+data FiscalPeriod = String
+    invariant String.matches("FY[0-9]{2}-Q[1-4]", value)
+
+// example.pipeline's ForecastCategory is a sum, and a sum is not a boundary map key, so the category's *name*
+// is a type of its own and the match that produces it is where the five names get written down a second
+// time. Nothing keeps the two lists in step except that match being exhaustive. Finding F3.
+data CategoryName = String
+    invariant String.length(value) >= 1
+
+data ForecastAmount = Decimal
+    invariant value >= 0.0m
+
+// A zero quota is not a target, so it is not a quota.
+data Quota = Decimal
+    invariant value > 0.0m
+
+// Attainment as a percentage. It runs past a hundred, because a rep who beats quota has beaten it, and it
+// stops at 999 because a figure past that is a data error rather than a quarter.
+data Attainment = Int
+    invariant value >= 0 && value <= 999
+
+// === Reports ===
+
+data Forecast =
+    { owner: UserId
+    , periods: List<FiscalPeriod>
+    , byPeriod: Map<FiscalPeriod, ForecastAmount>
+    , total: ForecastAmount
+    , dealCount: Int
+    }
+
+data CategoryRollup =
+    { byCategory: Map<CategoryName, ForecastAmount>
+    , countByCategory: Map<CategoryName, Int>
+    }
+
+data RiskReport =
+    { atRisk: List<OpportunityId>
+    , atRiskAmount: ForecastAmount
+    , healthy: Int
+    }
+
+data Leaderboard = { owners: List<UserId> }
+
+data OnTrack      = { attainment: Attainment }
+data ShortOfQuota = { gap: ForecastAmount, attainment: Attainment }
+
+// === periodOf: the key the domain builds ===
+// Salesforce's fiscal year starts in a month the org chooses, so the month is a parameter rather than a
+// constant. The year is the calendar year the fiscal year starts in; the quarter counts from that month.
+//
+// This is where Date.year and Date.month earn their place, and where the result being checked by the
+// newtype's own invariant matters: the string this behavior assembles goes through exactly the check a string
+// arriving from a boundary would.
+let fiscalYearOf (d: Date, fyStart: Int): Int =
+    if Date.month(d) >= fyStart then Date.year(d) else Date.year(d) - 1
+
+let quarterOf (d: Date, fyStart: Int): Int =
+    Int.modBy(12, Date.month(d) - fyStart + 12) / 3 + 1
+
+let periodLabel (d: Date, fyStart: Int): String =
+    "FY" ++ String.padLeft(2, "0", String.fromInt(Int.modBy(100, fiscalYearOf(d, fyStart))))
+         ++ "-Q" ++ String.fromInt(quarterOf(d, fyStart))
+
+behavior periodOf : (closeDate: Date, fiscalYearStartMonth: Int) -> FiscalPeriod | InvalidFiscalYearStart
+    constructs FiscalPeriod, InvalidFiscalYearStart
+
+let periodOf (closeDate, fiscalYearStartMonth) = {
+    require fiscalYearStartMonth >= 1 && fiscalYearStartMonth <= 12 else InvalidFiscalYearStart
+    FiscalPeriod(periodLabel(closeDate, fiscalYearStartMonth))
+}
+
+example periodOf
+    | "a calendar fiscal year puts the end of September in the third quarter" :
+        (Date("2026-09-30"), 1)
+        -> FiscalPeriod("FY26-Q3")
+    | "an April fiscal year puts the same date in the second" :
+        (Date("2026-09-30"), 4)
+        -> FiscalPeriod("FY26-Q2")
+    | "a date before an April fiscal year's start belongs to the year that started" :
+        (Date("2026-03-31"), 4)
+        -> FiscalPeriod("FY25-Q4")
+    | "the first day of a fiscal year is its first quarter" :
+        (Date("2026-04-01"), 4)
+        -> FiscalPeriod("FY26-Q1")
+    | "there is no thirteenth month, and that is a case rather than an abort" :
+        (Date("2026-09-30"), 13)
+        -> InvalidFiscalYearStart
+
+// === Reading a deal ===
+// The probability and the amount both live in example.pipeline, and neither is reachable as a call from here:
+// probabilityOf is a behavior, and a behavior's body may only call the behaviors it requires, so an imported
+// behavior cannot be called at all. amountOf is a helper, and a helper is not exported.
+//
+// So the mapping is written a second time, in the module that consumes it. Ten probabilities and eight field
+// reads, copied — and nothing but a comment keeps them in step with the stage machine that owns them. A stage
+// added to example.pipeline breaks three matches there and silently leaves this file weighing the new stage
+// at whatever its own match happens to say. This is the single worst thing about the model as written, and it
+// is a language limitation rather than a modelling choice. Finding F23.
+//
+// The compiler is explicit about it: calling an imported behavior gets E1401, "`probabilityOf` is neither a
+// behavior nor a builtin", with a hint to declare one without a `let` and implement it in Java. That is the
+// only other route — re-declare probabilityOf here as an injected behavior and bind example.pipeline's
+// implementation at the boundary — and it is worse: a pure, total, compile-time-checkable mapping would become
+// an injected dependency that has to be wired up in every caller, and every `example` in this file would need
+// a `fake` for it. Copying the match keeps the checking; injecting it would keep the single source. Neither
+// keeps both.
+let weightedProbabilityOf (opp: OpenOpportunity): Int =
+    match opp with
+        | Prospecting        -> 10
+        | Qualification      -> 10
+        | NeedsAnalysis      -> 20
+        | ValueProposition   -> 50
+        | IdDecisionMakers   -> 60
+        | PerceptionAnalysis -> 70
+        | ProposalPriceQuote -> 75
+        | NegotiationReview  -> 90
+
+// Eight arms to read a field every case has, because a sum has no fields. Finding F16.
+let amountOfOpen (opp: OpenOpportunity): Decimal =
+    match opp with
+        | Prospecting { amount }        -> amount.value
+        | Qualification { amount }      -> amount.value
+        | NeedsAnalysis { amount }      -> amount.value
+        | ValueProposition { amount }   -> amount.value
+        | IdDecisionMakers { amount }   -> amount.value
+        | PerceptionAnalysis { amount } -> amount.value
+        | ProposalPriceQuote { amount } -> amount.value
+        | NegotiationReview { amount }  -> amount.value
+
+let closeDateOfOpen (opp: OpenOpportunity): Date =
+    match opp with
+        | Prospecting { closeDate }        -> closeDate
+        | Qualification { closeDate }      -> closeDate
+        | NeedsAnalysis { closeDate }      -> closeDate
+        | ValueProposition { closeDate }   -> closeDate
+        | IdDecisionMakers { closeDate }   -> closeDate
+        | PerceptionAnalysis { closeDate } -> closeDate
+        | ProposalPriceQuote { closeDate } -> closeDate
+        | NegotiationReview { closeDate }  -> closeDate
+
+let idOfOpen (opp: OpenOpportunity): OpportunityId =
+    match opp with
+        | Prospecting { id }        -> id
+        | Qualification { id }      -> id
+        | NeedsAnalysis { id }      -> id
+        | ValueProposition { id }   -> id
+        | IdDecisionMakers { id }   -> id
+        | PerceptionAnalysis { id } -> id
+        | ProposalPriceQuote { id } -> id
+        | NegotiationReview { id }  -> id
+
+// === weightedForecast ===
+// The weighted figure is probability × amount ÷ 100, and this is the one place in the project where a division
+// is the arithmetic rather than a way of writing a ratio. So the scale and the rounding mode are named at the
+// call, once per deal, and the answer is a Decimal rather than a union because the denominator is a literal
+// hundred and cannot be zero.
+let weightedOf (opp: OpenOpportunity): Decimal =
+    Decimal.round(Decimal.fromInt(weightedProbabilityOf(opp)) * amountOfOpen(opp) * 0.01m, 2, HALF_UP)
+
+let addToPeriod (acc: Map<FiscalPeriod, Decimal>, opp: OpenOpportunity, fyStart: Int)
+        : Map<FiscalPeriod, Decimal> = {
+    let period = FiscalPeriod(periodLabel(closeDateOfOpen(opp), fyStart))
+    let weighted = weightedOf(opp)
+    Map.upsert(period, weighted, running -> Decimal.add(running, weighted), acc)
+}
+
+behavior weightedForecast : (owner: UserId, opps: List<OpenOpportunity>, fiscalYearStartMonth: Int)
+        -> Forecast | InvalidFiscalYearStart
+    constructs Forecast, FiscalPeriod, ForecastAmount, InvalidFiscalYearStart
+
+let weightedForecast (owner, opps, fiscalYearStartMonth) = {
+    require fiscalYearStartMonth >= 1 && fiscalYearStartMonth <= 12 else InvalidFiscalYearStart
+    let byPeriod: Map<FiscalPeriod, Decimal> =
+        List.fold((acc, opp) -> addToPeriod(acc, opp, fiscalYearStartMonth), Map.empty(), opps)
+    Forecast { owner = owner
+             , periods = List.sort(Map.keys(byPeriod))
+             , byPeriod = Map.map((period, weighted) -> ForecastAmount(weighted), byPeriod)
+             , total = ForecastAmount(List.fold((acc, w) -> Decimal.add(acc, w), 0.0m,
+                                                Map.values(byPeriod)))
+             , dealCount = List.length(opps)
+             }
+}
+
+example weightedForecast
+    | "a deal in the first stage weighs a tenth of itself, in the quarter it closes in" :
+        (UserId("u-001"),
+         [ Prospecting
+            { id = OpportunityId("006000000000001")
+            , accountId = AccountId("001000000000100")
+            , name = OpportunityName("Acme Corp — New Business")
+            , owner = UserId("u-001")
+            , amount = Amount(1000000.00m)
+            , currency = CurrencyCode("JPY")
+            , closeDate = Date("2026-09-30")
+            , openedOn = Date("2026-07-20")
+            } ],
+         1)
+        -> Forecast
+            { owner = UserId("u-001")
+            , periods = [ FiscalPeriod("FY26-Q3") ]
+            , byPeriod = [ (FiscalPeriod("FY26-Q3"), ForecastAmount(100000.00m)) ]
+            , total = ForecastAmount(100000.00m)
+            , dealCount = 1
+            }
+    | "two deals in one quarter add up rather than replacing each other" :
+        (UserId("u-001"),
+         [ Prospecting
+            { id = OpportunityId("006000000000001")
+            , accountId = AccountId("001000000000100")
+            , name = OpportunityName("Acme Corp — New Business")
+            , owner = UserId("u-001")
+            , amount = Amount(1000000.00m)
+            , currency = CurrencyCode("JPY")
+            , closeDate = Date("2026-09-30")
+            , openedOn = Date("2026-07-20")
+            }
+         , Prospecting
+            { id = OpportunityId("006000000000002")
+            , accountId = AccountId("001000000000100")
+            , name = OpportunityName("Acme Corp — New Business")
+            , owner = UserId("u-001")
+            , amount = Amount(500000.00m)
+            , currency = CurrencyCode("JPY")
+            , closeDate = Date("2026-08-31")
+            , openedOn = Date("2026-07-20")
+            } ],
+         1)
+        -> Forecast
+            { owner = UserId("u-001")
+            , periods = [ FiscalPeriod("FY26-Q3") ]
+            , byPeriod = [ (FiscalPeriod("FY26-Q3"), ForecastAmount(150000.00m)) ]
+            , total = ForecastAmount(150000.00m)
+            , dealCount = 2
+            }
+    | "an empty pipeline is a forecast of nothing, not a missing forecast" :
+        (UserId("u-001"), [ ], 1)
+        -> Forecast
+            { owner = UserId("u-001")
+            , periods = [ ]
+            , byPeriod = [ ]
+            , total = ForecastAmount(0.0m)
+            , dealCount = 0
+            }
+    | "there is still no thirteenth month" :
+        (UserId("u-001"), [ ], 13)
+        -> InvalidFiscalYearStart
+
+// === categoryRollup ===
+// The forecast categories are what a sales manager reads before the numbers: pipeline is everything, best case
+// is what could happen, commit is what the rep is promising, closed is done. The category comes from the
+// stage, so the sum is example.pipeline's — and the key is this module's string, because a sum is not a key.
+let categoryNameOf (opp: Opportunity): CategoryName =
+    match opp with
+        | Prospecting        -> CategoryName("Pipeline")
+        | Qualification      -> CategoryName("Pipeline")
+        | NeedsAnalysis      -> CategoryName("Pipeline")
+        | ValueProposition   -> CategoryName("Pipeline")
+        | IdDecisionMakers   -> CategoryName("Best Case")
+        | PerceptionAnalysis -> CategoryName("Best Case")
+        | ProposalPriceQuote -> CategoryName("Best Case")
+        | NegotiationReview  -> CategoryName("Commit")
+        | ClosedWon          -> CategoryName("Closed")
+        | ClosedLost         -> CategoryName("Omitted")
+
+let amountOfAny (opp: Opportunity): Decimal =
+    match opp with
+        | Prospecting { amount }        -> amount.value
+        | Qualification { amount }      -> amount.value
+        | NeedsAnalysis { amount }      -> amount.value
+        | ValueProposition { amount }   -> amount.value
+        | IdDecisionMakers { amount }   -> amount.value
+        | PerceptionAnalysis { amount } -> amount.value
+        | ProposalPriceQuote { amount } -> amount.value
+        | NegotiationReview { amount }  -> amount.value
+        | ClosedWon { wonAmount }       -> wonAmount.value
+        | ClosedLost { amount }         -> amount.value
+
+behavior categoryRollupOf : (opps: List<Opportunity>) -> CategoryRollup
+    constructs CategoryRollup, CategoryName, ForecastAmount
+
+let categoryRollupOf (opps) = {
+    let money: Map<CategoryName, Decimal> =
+        List.fold((acc, opp) -> Map.upsert(categoryNameOf(opp), amountOfAny(opp),
+                                           running -> Decimal.add(running, amountOfAny(opp)), acc),
+                  Map.empty(), opps)
+    CategoryRollup
+        { byCategory = Map.map((name, total) -> ForecastAmount(total), money)
+        , countByCategory = List.fold((acc, opp) -> Map.upsert(categoryNameOf(opp), 1, n -> n + 1, acc),
+                                      Map.empty(), opps)
+        }
+}
+
+// === commitNumber ===
+// The number a rep is actually held to: negotiation only. Everything earlier is a hope and everything closed
+// is history.
+let isCommit (opp: OpenOpportunity): Bool =
+    match opp with
+        | NegotiationReview  -> true
+        | Prospecting        -> false
+        | Qualification      -> false
+        | NeedsAnalysis      -> false
+        | ValueProposition   -> false
+        | IdDecisionMakers   -> false
+        | PerceptionAnalysis -> false
+        | ProposalPriceQuote -> false
+
+behavior commitNumber : (opps: List<OpenOpportunity>) -> ForecastAmount
+    constructs ForecastAmount
+
+let commitNumber (opps) =
+    ForecastAmount(List.fold((acc, opp) -> Decimal.add(acc, amountOfOpen(opp)), 0.0m,
+                             List.filter(opp -> isCommit(opp), opps)))
+
+// === quotaFor and attainment ===
+// Quotas live in the compensation system, which is administered by a different team on a different cycle, so
+// the lookup is injected. Two inputs, which makes its generated base the third injected shape in the project:
+// a standalone abstract class with apply(UserId, FiscalPeriod).
+behavior quotaFor : (owner: UserId, period: FiscalPeriod) -> Quota
+
+// A period with no deals is not a forecast of zero. The difference matters to the person being asked about the
+// quarter, so the optional Map.get answers with is opened into a named case rather than defaulted.
+//
+// The attainment is a percentage of quota, and it is the one figure here computed by dividing a Decimal by a
+// Decimal — so the require above makes the zero denominator unreachable and the operator is used with the
+// rounding named. No DivisionByZero case appears in the output, because the model does not carry a case it can
+// never return. Finding F5.
+let attainmentOf (forecast: Decimal, quota: Decimal): Attainment =
+    Attainment(Int.clamp(0, 999,
+        Decimal.toInt(Decimal.round(forecast * 100.0m, 0, HALF_UP), FLOOR) / Decimal.toInt(quota, FLOOR)))
+
+behavior quotaGap : (forecast: Forecast, quota: Quota, period: FiscalPeriod)
+        -> OnTrack | ShortOfQuota | NoForecastForPeriod
+    constructs OnTrack, ShortOfQuota, NoForecastForPeriod, ForecastAmount, Attainment
+
+let quotaGap (forecast, quota, period) =
+    match Map.get(period, forecast.byPeriod) with
+        | None -> NoForecastForPeriod
+        | Some got ->
+            if Decimal.compare(got.value, quota.value) >= 0
+            then OnTrack { attainment = attainmentOf(got.value, quota.value) }
+            else ShortOfQuota { gap = ForecastAmount(Decimal.subtract(quota.value, got.value))
+                              , attainment = attainmentOf(got.value, quota.value)
+                              }
+
+example quotaGap
+    | "a quarter above quota is on track, and says by how much of it" :
+        (Forecast
+            { owner = UserId("u-001")
+            , periods = [ FiscalPeriod("FY26-Q3") ]
+            , byPeriod = [ (FiscalPeriod("FY26-Q3"), ForecastAmount(150000.00m)) ]
+            , total = ForecastAmount(150000.00m)
+            , dealCount = 1
+            },
+         Quota(100000.00m), FiscalPeriod("FY26-Q3"))
+        -> OnTrack { attainment = Attainment(150) }
+    | "a quarter under quota names the gap rather than a percentage alone" :
+        (Forecast
+            { owner = UserId("u-001")
+            , periods = [ FiscalPeriod("FY26-Q3") ]
+            , byPeriod = [ (FiscalPeriod("FY26-Q3"), ForecastAmount(150000.00m)) ]
+            , total = ForecastAmount(150000.00m)
+            , dealCount = 1
+            },
+         Quota(200000.00m), FiscalPeriod("FY26-Q3"))
+        -> ShortOfQuota { gap = ForecastAmount(50000.00m), attainment = Attainment(75) }
+    | "a quarter with no deals in it has no forecast, which is not a forecast of nothing" :
+        (Forecast
+            { owner = UserId("u-001")
+            , periods = [ FiscalPeriod("FY26-Q3") ]
+            , byPeriod = [ (FiscalPeriod("FY26-Q3"), ForecastAmount(150000.00m)) ]
+            , total = ForecastAmount(150000.00m)
+            , dealCount = 1
+            },
+         Quota(100000.00m), FiscalPeriod("FY26-Q4"))
+        -> NoForecastForPeriod
+
+// The same question with the quota read rather than passed: read, compute, answer. This is the shape every
+// behavior in this project that touches the outside world has, and the only reason quotaGap exists beside it is
+// that a caller who already knows the quota should not have to inject a lookup to say so.
+behavior attainmentFor : (owner: UserId, forecast: Forecast, period: FiscalPeriod)
+        -> OnTrack | ShortOfQuota | NoForecastForPeriod
+    requires quotaFor
+    constructs OnTrack, ShortOfQuota, NoForecastForPeriod, ForecastAmount, Attainment
+
+let attainmentFor (owner, forecast, period, quotaFor) =
+    match Map.get(period, forecast.byPeriod) with
+        | None -> NoForecastForPeriod
+        | Some got -> {
+            let quota = quotaFor(owner, period)
+            if Decimal.compare(got.value, quota.value) >= 0
+            then OnTrack { attainment = attainmentOf(got.value, quota.value) }
+            else ShortOfQuota { gap = ForecastAmount(Decimal.subtract(quota.value, got.value))
+                              , attainment = attainmentOf(got.value, quota.value)
+                              }
+        }
+
+// The comp plan as a table. The `_` row is every other rep and every other quarter, which is what makes the
+// happy path a path rather than the only path.
+fake quotaFor
+    | (UserId("u-001"), FiscalPeriod("FY26-Q3")) -> Quota(100000.00m)
+    | _                                         -> Quota(500000.00m)
+
+example attainmentFor
+    | "the rep's own quota for that quarter is what the forecast is held against" :
+        (UserId("u-001"),
+         Forecast
+            { owner = UserId("u-001")
+            , periods = [ FiscalPeriod("FY26-Q3") ]
+            , byPeriod = [ (FiscalPeriod("FY26-Q3"), ForecastAmount(150000.00m)) ]
+            , total = ForecastAmount(150000.00m)
+            , dealCount = 1
+            },
+         FiscalPeriod("FY26-Q3"))
+        -> OnTrack { attainment = Attainment(150) }
+    | "another rep is held against another number, and the same forecast falls short of it" :
+        (UserId("u-002"),
+         Forecast
+            { owner = UserId("u-002")
+            , periods = [ FiscalPeriod("FY26-Q3") ]
+            , byPeriod = [ (FiscalPeriod("FY26-Q3"), ForecastAmount(150000.00m)) ]
+            , total = ForecastAmount(150000.00m)
+            , dealCount = 1
+            },
+         FiscalPeriod("FY26-Q3"))
+        -> ShortOfQuota { gap = ForecastAmount(350000.00m), attainment = Attainment(30) }
+
+// === dealsAtRisk ===
+// A commit-category deal with no activity inside the cadence is the deal inspection question. It reads
+// example.activity's report and answers with example.forecasting's case: a context that has nothing to say
+// states its own silence, rather than passing activity's NeverTouched through a union declared here.
+let staleDaysOf (opp: OpenOpportunity, stale: StaleReport): Int =
+    Option.withDefault(0, Map.get(accountOfOpen(opp), stale.daysSince))
+
+let accountOfOpen (opp: OpenOpportunity): AccountId =
+    match opp with
+        | Prospecting { accountId }        -> accountId
+        | Qualification { accountId }      -> accountId
+        | NeedsAnalysis { accountId }      -> accountId
+        | ValueProposition { accountId }   -> accountId
+        | IdDecisionMakers { accountId }   -> accountId
+        | PerceptionAnalysis { accountId } -> accountId
+        | ProposalPriceQuote { accountId } -> accountId
+        | NegotiationReview { accountId }  -> accountId
+
+behavior dealsAtRisk : (opps: List<OpenOpportunity>, stale: StaleReport, staleAfter: Int)
+        -> RiskReport | NoActivityRecorded
+    constructs RiskReport, ForecastAmount, NoActivityRecorded
+
+let dealsAtRisk (opps, stale, staleAfter) = {
+    require Map.size(stale.daysSince) >= 1 else NoActivityRecorded
+    let (risky, healthy) =
+        List.partition(opp -> isCommit(opp) && staleDaysOf(opp, stale) >= staleAfter, opps)
+    RiskReport { atRisk = List.map(opp -> idOfOpen(opp), risky)
+               , atRiskAmount = ForecastAmount(List.fold((acc, opp) -> Decimal.add(acc, amountOfOpen(opp)),
+                                                         0.0m, risky))
+               , healthy = List.length(healthy)
+               }
+}
+
+// === rollupTeam ===
+// A manager's number is the reps' numbers summed, and Map.union is the wrong tool for it: union is left-biased
+// and never merges values, so two reps with deals in the same quarter would leave one of them out of the
+// manager's forecast entirely — silently, and by the same amount every quarter. Combining two values under one
+// key is a domain decision, so the rollup is a fold with upsert and the decision is written down here.
+let mergeForecast (acc: Map<FiscalPeriod, Decimal>, one: Forecast): Map<FiscalPeriod, Decimal> =
+    List.fold((inner, entry) -> mergeEntry(inner, entry), acc, Map.toList(one.byPeriod))
+
+let mergeEntry (acc: Map<FiscalPeriod, Decimal>, entry: (FiscalPeriod, ForecastAmount))
+        : Map<FiscalPeriod, Decimal> = {
+    let (period, amount) = entry
+    Map.upsert(period, amount.value, running -> Decimal.add(running, amount.value), acc)
+}
+
+behavior rollupTeam : (manager: UserId, forecasts: List<Forecast>) -> Forecast
+    constructs Forecast, ForecastAmount
+
+let rollupTeam (manager, forecasts) = {
+    let byPeriod: Map<FiscalPeriod, Decimal> =
+        List.fold((acc, one) -> mergeForecast(acc, one), Map.empty(), forecasts)
+    Forecast { owner = manager
+             , periods = List.sort(Map.keys(byPeriod))
+             , byPeriod = Map.map((period, total) -> ForecastAmount(total), byPeriod)
+             , total = ForecastAmount(List.fold((acc, w) -> Decimal.add(acc, w), 0.0m,
+                                                Map.values(byPeriod)))
+             , dealCount = List.fold((acc, one) -> acc + one.dealCount, 0, forecasts)
+             }
+}
+
+// === topPerformers ===
+// Rank by what each owner closed. The amounts have done their work once the list is in order, so what comes
+// back is the owners — a leaderboard is an order, and publishing the figures beside the names is a different
+// decision that whoever displays it can make.
+let wonByOwner (won: List<ClosedWon>): Map<UserId, Decimal> =
+    List.fold((acc, w) -> Map.upsert(w.owner, w.wonAmount.value,
+                                     running -> Decimal.add(running, w.wonAmount.value), acc),
+              Map.empty(), won)
+
+behavior topPerformers : (won: List<ClosedWon>, n: Int) -> Leaderboard
+    constructs Leaderboard
+
+let topPerformers (won, n) = {
+    let (owners, amounts) = List.unzip(List.reverse(List.sortBy(entry -> second(entry),
+                                                                Map.toList(wonByOwner(won)))))
+    Leaderboard { owners = List.take(n, owners) }
+}
+
+let second (entry: (UserId, Decimal)): Decimal = {
+    let (owner, amount) = entry
+    amount
+}
