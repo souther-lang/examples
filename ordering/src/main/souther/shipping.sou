@@ -67,11 +67,10 @@ data PickLine =
     }
 data PickList = { lines: List<PickLine> }
 
-// This module's own departure. inventory has `InsufficientStock` for the allocation that could not
-// be made; this is the different thing of having nothing to walk to (E1606 would reject reusing it
-// here anyway, and the two are not the same event).
-data NothingToShip
-
+// NothingToShip is this module's own departure. inventory has `InsufficientStock` for the allocation
+// that could not be made; this is the different thing of having nothing to walk to (E1606 would
+// reject reusing it here anyway, and the two are not the same event). It carries no fields, so the
+// output below is its declaration (8.4 unit-data).
 behavior planPicks : (order: PricedCart, shelf: Map<Sku, Location>) -> PickList | NothingToShip
     constructs PickList, PickLine, NothingToShip
 

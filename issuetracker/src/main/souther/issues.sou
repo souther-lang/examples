@@ -53,15 +53,15 @@ data Issue =
 // A board is just the issues; countByLabel folds over it.
 data Board = { issues: List<Issue> }
 
-// The domain failure of a lookup by id. A unit data (no fields): the injected implementation builds it
-// through the protected factory it inherits. A platform failure (database down) is not this — it is an
-// exception the boundary throws and Souther passes through (ADR-0029).
-data IssueNotFound
-
 // === the injected database behaviors ===
 // No `let`, so the implementation is injected. An injected behavior's declaration is the input to
 // factory generation, so it writes `constructs` for the cases it has to build itself; a value it reads
 // out of the database (an Issue) is built through the public derived decoder instead.
+//
+// IssueNotFound is the domain failure of a lookup by id. A unit data (no fields) named in an output,
+// so the line below is its declaration and it has no `data` line (8.4 unit-data); the injected
+// implementation builds it through the protected factory it inherits. A platform failure (database
+// down) is not this — it is an exception the boundary throws and Souther passes through (ADR-0029).
 behavior findIssue : (id: IssueId) -> Issue | IssueNotFound
     constructs IssueNotFound
 
@@ -82,7 +82,6 @@ data NewIssue =
     , labels: String
     , assignee: Assignee?
     }
-data NoLabels
 
 behavior openIssue : (draft: NewIssue) -> Issue | NoLabels
     requires createIssue
@@ -203,7 +202,6 @@ example sharedLabels
 // Some's first written layer opens the element type directly, so Some(Assignee(name)) binds name to
 // the bare String in one pattern; the None arm handles the unassigned issue.
 data Assigned = { name: String }
-data Unassigned
 
 behavior assigneeOf : (issue: Issue) -> Assigned | Unassigned
     constructs Assigned, Unassigned

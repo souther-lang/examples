@@ -24,13 +24,14 @@ data WithdrawRequest =
     , amount: Amount
     }
 
-// The outcome of a withdrawal. Withdrawn is the main line; the other two are failure cases.
+// The outcome of a withdrawal. Withdrawn is the main line; InsufficientFunds and NoAccount are the
+// failure cases. NoAccount carries no fields and has no `data` line of its own — naming it in the
+// behavior outputs below is what declares it (8.4 unit-data).
 data Withdrawn =
     { account: AccountNo
     , newBalance: Balance
     }
 data InsufficientFunds = { shortfall: Int }
-data NoAccount
 
 // --- injected outside-world behaviors (no `let`; the implementation comes from the boundary) ---
 // currentBalance is a read: it looks up the account's balance. No row means NoAccount.

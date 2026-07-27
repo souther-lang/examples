@@ -47,9 +47,10 @@ data PricedCart =
     , total: Int
     , highValue: Bool
     }
-data EmptyCart
 data InvalidQuantity = { invalidCount: Int }
 
+// EmptyCart carries no fields, and the output below is where it is named — so it has no `data` line
+// of its own (8.4 unit-data). It is exposed and matched at the boundary like any other case.
 behavior quote : (c: Cart) -> PricedCart | EmptyCart | InvalidQuantity
     constructs PricedCart, EmptyCart, InvalidQuantity
 

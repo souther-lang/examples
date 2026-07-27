@@ -44,8 +44,6 @@ data TaxRate = Decimal
 
 // The category is a sum of value-less cases. What an order carries is the category, not the rate:
 // a rate is revised by law, the category it belongs to is not.
-data StandardRate
-data ReducedRate
 data TaxCategory = StandardRate | ReducedRate
 
 // The rate in force for a category. It is injected, not written here, for the same reason: the

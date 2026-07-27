@@ -45,8 +45,6 @@ data StockSnapshot = { rows: List<StockLine> }
     invariant List.allUniqueBy(.sku, rows)
 
 data Allocated = { total: Int }
-// One short line fails the whole allocation.
-data InsufficientStock
 
 // --- injected dependencies (Java) ---
 // readStock reads the current on-hand for the order's skus.
@@ -108,7 +106,6 @@ data Barcode = String
     invariant String.matches("[0-9]{13}", value)
 
 data InspectionPassed = { code: Barcode }
-data ScanError
 
 behavior inspectBarcode : (barcode: Barcode) -> InspectionPassed | ScanError
     constructs InspectionPassed, ScanError

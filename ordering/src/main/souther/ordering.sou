@@ -48,16 +48,15 @@ data ConfirmedOrder =
     , total: Int
     }
 
-// The domain failure of reservation. A unit data (no fields): the injected Java implementation
-// builds it through the protected factory it inherits. A platform failure (DB down) is not this —
-// it is an exception the Java binding throws and Souther passes through (ADR-0029).
-data OutOfStock
-
 // --- injected DB behaviors (no `let`; implementation comes from Java) ---
 // An injected behavior always writes `constructs`: the declaration is the input to factory generation.
 behavior recordOrder : (order: PricedCart) -> RecordedOrder
     constructs RecordedOrder, OrderId
 
+// OutOfStock is the domain failure of reservation. A unit data (no fields) named in an output, so
+// this line is its declaration and it has no `data` line (8.4 unit-data); the injected Java
+// implementation builds it through the protected factory it inherits. A platform failure (DB down)
+// is not this — it is an exception the Java binding throws and Souther passes through (ADR-0029).
 behavior reserveStock : (recorded: RecordedOrder) -> ConfirmedOrder | OutOfStock
     constructs ConfirmedOrder, OutOfStock
 

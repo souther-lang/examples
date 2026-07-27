@@ -62,9 +62,6 @@ data Amount = Decimal
 // day count, because it is not one: which day it lands on depends on the month. It became writable
 // when `Date.day` arrived (issue #111); before that the month boundary was out of reach and the
 // helper that suggests itself compiles and returns the wrong date.
-data Net15
-data Net30
-data EndOfNextMonth
 data Terms = Net15 | Net30 | EndOfNextMonth
 
 // === issueInvoice: a recorded order and its tax become a statement ===
