@@ -36,12 +36,6 @@ val souther by sourceSets.creating {
     resources.setSrcDirs(emptyList<String>())
 }
 
-// src/main/java belongs to that source set alone. It is `main`'s default Java directory too, and the
-// package-info there carries an annotation, so javac emits a class file for it — from both
-// compilations, which the jar then refuses as a duplicate entry. Nothing but the boundary's Kotlin is
-// left in `main`.
-sourceSets.main { java.setSrcDirs(emptyList<String>()) }
-
 val southerSource: Directory = layout.projectDirectory.dir("src/main/souther")
 
 tasks.named<JavaCompile>(souther.compileJavaTaskName) {
@@ -65,7 +59,6 @@ dependencies {
     "southerAnnotationProcessor"("org.souther-lang:souther-compiler:$southerVersion")
     "southerAnnotationProcessor"("org.souther-lang:souther-runtime:$southerVersion")
     "southerImplementation"("org.souther-lang:souther-runtime:$southerVersion")
-    "southerCompileOnly"("org.jspecify:jspecify:1.0.0")
 
     // The Souther generated code's runtime (decoder/encoder).
     implementation("org.souther-lang:souther-runtime:$southerVersion")
@@ -93,8 +86,8 @@ kotlin {
         jvmTarget = JvmTarget.JVM_21
         // Read the JSR-305 nullability annotations Spring carries as strict Kotlin types rather than
         // platform types. Souther's own generated types say the same thing in JSpecify, which Kotlin
-        // reads strictly on its own: souther-runtime marks its packages, and the module's package is
-        // marked by the package-info under src/main/java.
+        // reads strictly on its own: souther-runtime marks its packages, and every generated class
+        // carries @NullMarked itself, so nothing in this build has to say it.
         freeCompilerArgs.add("-Xjsr305=strict")
     }
 }
