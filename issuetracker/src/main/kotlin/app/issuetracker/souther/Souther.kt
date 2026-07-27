@@ -28,11 +28,16 @@ class DecodeFailed(val issues: Issues) : RuntimeException(issues.toString())
  */
 fun <I, T> Decoder<I, T>.decodeOrFail(input: I): T = decode(input).orElseThrow(::DecodeFailed)
 
-/** Souther's `T?` read as Kotlin's `T?`, so the rest of the boundary uses `?.` and `?:`. */
-fun <T> Option<T>.orNull(): T? = when (this) {
+/**
+ * Souther's `T?` read as Kotlin's `T?`, so the rest of the boundary uses `?.` and `?:`. The `: Any`
+ * bound is what souther-runtime's `@NullMarked` package says: an `Option` holds a value or nothing, and
+ * nothing is `None` rather than a null element. Kotlin's own default `T : Any?` is wider than that, so
+ * without the bound the type argument does not fit. The same holds of `Behavior` below.
+ */
+fun <T : Any> Option<T>.orNull(): T? = when (this) {
     is Option.Some<T> -> value
     is Option.None<T> -> null
 }
 
 /** Calls a bound behavior as a function: `attachLabel(request)` rather than `attachLabel.apply(request)`. */
-operator fun <I, O> Behavior<I, O>.invoke(input: I): O = apply(input)
+operator fun <I : Any, O : Any> Behavior<I, O>.invoke(input: I): O = apply(input)
