@@ -41,22 +41,22 @@ internal fun DSLContext.issueRows(): List<Map<String, Any>> {
 /** Inserts the issue row. The labels are written by replaceLabels. */
 internal fun DSLContext.insertIssue(issue: Issue) {
     insertInto(ISSUES)
-        .set(ID, issue.id().value())
-        .set(TITLE, issue.title())
-        .set(ASSIGNEE, issue.assignee().orNull()?.value())
+        .set(ID, issue.id.value)
+        .set(TITLE, issue.title)
+        .set(ASSIGNEE, issue.assignee.orNull()?.value)
         .execute()
 }
 
 /**
  * Replaces an issue's label rows with the set it now carries. Reading the labels out is plain typed
- * access — a generated data's fields have public accessors, and it is construction, not reading, that
- * the generated path guards (spec 8.5).
+ * access — a generated data is a Java record, so Kotlin reads its fields as properties (`issue.labels`,
+ * `label.value`), and it is construction, not reading, that the generated path guards (spec 8.5).
  */
 internal fun DSLContext.replaceLabels(issue: Issue) {
-    val id = issue.id().value()
+    val id = issue.id.value
     deleteFrom(ISSUE_LABELS).where(ISSUE_ID.eq(id)).execute()
-    issue.labels().forEach { label ->
-        insertInto(ISSUE_LABELS).set(ISSUE_ID, id).set(LABEL, label.value()).execute()
+    issue.labels.forEach { label ->
+        insertInto(ISSUE_LABELS).set(ISSUE_ID, id).set(LABEL, label.value).execute()
     }
 }
 

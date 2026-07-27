@@ -25,7 +25,7 @@ import org.jooq.DSLContext
 /** findIssue: the issue and its labels, or the IssueNotFound case when there is no such row. */
 class JooqFindIssue(private val dsl: DSLContext) : FindIssue() {
     override fun apply(id: IssueId): FindIssueResult =
-        dsl.issueRow(id.value())?.let { Issue.decoder().decodeOrFail(it) } ?: IssueNotFound()
+        dsl.issueRow(id.value)?.let { Issue.decoder().decodeOrFail(it) } ?: IssueNotFound()
 }
 
 /** createIssue: inserts the issue and its labels, and reports it as stored. */

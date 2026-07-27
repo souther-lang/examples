@@ -440,6 +440,14 @@ gets from a `switch` expression.
 Souther's `Option` is a sealed interface too, so it maps onto Kotlin's own nullability in one
 extension (`orNull()`), and the rest of the boundary uses `?.` and `?:`.
 
+A generated data is a Java record, and that is what Kotlin needs to read its fields as properties:
+`issue.id.value` rather than `issue.id().value()`. Kotlin stops resolving a name to the field — and
+reporting that the field is not accessible — only when the class file says the name is a record
+component. The types are non-null too: `issue.title` is `String` and `issue.labels` is `Set<Label>`,
+not the platform types a `@NullMarked` class would hand over through an ordinary accessor. Java and
+Kotlin written the old way still compile, since `issue.id()` is what a record component's accessor is
+called.
+
 A request body arrives as a plain `Map` and is handed to the derived decoder — there is no Kotlin
 data class mirroring the request shape. The shape is already declared in `issues.sou`, and the decoder
 is what checks the invariants and reports failures as Raoh issues with their JSON paths. A data class
@@ -456,7 +464,7 @@ same way `souther-clj` was.
 | --- | --- |
 | `build.gradle.kts` | The build. The `souther` source set that runs the annotation processor, and `implementation(souther.output)` ordering it before kotlinc (above) |
 | `souther/Souther.kt` | The boundary glue, naming no domain type: `DecodeFailed`, `decodeOrFail` (decode or fail the request), `Option.orNull()`, and `operator invoke` for `Behavior` |
-| `IssueRows.kt` | The one place that knows the issue tables. An issue spans `issues` and its `issue_labels` rows, so reading one produces the Map `Issue.decoder()` takes (labels as a list → a `Set` on decode; an absent assignee left out of the Map → `None`). Reading values out of a domain value is plain typed accessor access — construction is the guarded direction, not reading |
+| `IssueRows.kt` | The one place that knows the issue tables. An issue spans `issues` and its `issue_labels` rows, so reading one produces the Map `Issue.decoder()` takes (labels as a list → a `Set` on decode; an absent assignee left out of the Map → `None`). Reading values out of a domain value is plain property access (`issue.id.value`), since a generated data is a record — construction is the guarded direction, not reading |
 | `JooqIssueStore.kt` | The three injected implementations, each **extending** the generated abstract base. A Kotlin subclass reaches the base's `protected` factories, so the unit case is built with the inherited `IssueNotFound()`; values read out of storage go through the public `decoder()`, which re-checks their invariants. SQL exceptions are not caught |
 | `web/IssueTrackerConfig.kt` | The generated-side beans: the injected implementations, `AttachLabel.bind(...)` and friends, the pure behaviors' `of()`, and a jOOQ `Settings` that turns identifier quoting off. DataSource / DSLContext / TransactionManager come from autoconfig |
 | `web/IssueController.kt` | `@RestController`. Every route is decode → one behavior → fold the output union into a status and a body. `@Transactional` on the read-modify-write routes, so a concurrent call cannot drop a label by writing back a set it read too early |

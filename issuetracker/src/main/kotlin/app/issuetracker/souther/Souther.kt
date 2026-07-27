@@ -3,10 +3,11 @@
 // enough to read in one sitting, and written to be lifted out of this example unchanged.
 //
 // Kotlin needs less glue than Clojure did. A generated output union is a Java `sealed` interface, so
-// `when` over it is exhaustive with no macro to check it; a generated data's read accessors are typed,
-// so no reflective unwrapping is needed. What is left is the three places where Souther's shapes and
-// Kotlin's differ: raoh's Result vs Kotlin's exceptions-at-the-boundary, souther's Option vs Kotlin's
-// nullability, and Behavior.apply vs a function call.
+// `when` over it is exhaustive with no macro to check it; a generated data is a Java record, so Kotlin
+// reads its fields as properties (`issue.id.value`) and they are typed non-null, so nothing has to be
+// unwrapped reflectively. What is left is the three places where Souther's shapes and Kotlin's differ:
+// raoh's Result vs Kotlin's exceptions-at-the-boundary, souther's Option vs Kotlin's nullability, and
+// Behavior.apply vs a function call.
 package app.issuetracker.souther
 
 import net.unit8.raoh.Issues
