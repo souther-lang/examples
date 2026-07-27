@@ -3,14 +3,12 @@
 // second diamond, and neither costs anything at the call — a module is resolved once for the whole
 // compile, so `Amount` reaching here through billing is the same `Amount` billing states.
 //
-// What the depth costs is knowing which module may build what. A behavior constructs only what its
-// own module declares, so billing's `Amount` can be read here and cannot be built here, however many
-// modules import it. This module therefore reads the invoiced amount as an `Amount` and states what
-// it produces as a `Refund` of its own — a type returns declares, and therefore may build. Writing
-// `constructs Amount` instead used to compile and then fail at run time inside the example:
-//
-//     aborted: class example.returns.PlanRefund$Impl tried to access method
-//     'souther.runtime.Result example.billing.Amount.__construct(java.math.BigDecimal)'
+// What the depth costs is knowing which module may build what. `constructs` names the types a behavior
+// originates, and a type another module exposes may be named there: `constructs Amount` here would build
+// billing's `Amount` through the same checked entry billing's own code takes, invariant and all. So the
+// compiler no longer decides this — the model does. This module reads the invoiced amount as an `Amount`
+// and states what it produces as a `Refund` of its own, because a refund is an event this context records
+// rather than a figure billing stated, and the two move for different reasons.
 //
 // Naming is the other half of the same question. `Amount` is billing's word, imported rather than
 // re-declared: two modules exposing the same name cannot both be imported by a third, and there is no
