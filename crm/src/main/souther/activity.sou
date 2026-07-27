@@ -1,0 +1,586 @@
+// The activity log: calls, emails and meetings, and the four questions a sales manager asks of them — how
+// recently was this account touched, how many of those touches were real, how many people at the account
+// have we actually met, and what should happen next.
+//
+// This module imports both example.crm and example.pipeline, and the reason is one field. Salesforce's
+// Activity carries a polymorphic WhatId — one column holding the id of an account, an opportunity or a
+// lead, with a type column beside it — which is a sum written as two columns because a relational schema
+// has no other way to say it. Written as a sum, it names the three things an activity can be about, and
+// naming them means speaking all three vocabularies.
+//
+// What is on show:
+//   - The polymorphic lookup as a sum, and the rollup that reads it. An activity about a lead contributes
+//     nothing to an account rollup, so the projection answers with no key rather than with a stand-in one.
+//   - Three kinds of activity with different fields, so a total over them opens each kind before it can
+//     compare anything: a call has a due date, an email a sent date, a meeting a start time that is a
+//     DateTime and has to come down to a Date first.
+//   - `Set` where the question is membership. Multi-threading a deal — how many people at the account have
+//     been in a room with us — is the best-known predictor of a loss, and it is a set question: two
+//     meetings with the same person are not two people.
+//   - `Map.upsert` folding to a minimum rather than a sum, which is what recency is: the freshest touch per
+//     account, not the total.
+//   - `Map<Date, Int>` as an output, keyed by a temporal that crosses the boundary as its ISO form.
+//   - The next-step playbook: an eight-arm match over the open stages, prescribing what that stage's exit
+//     criterion actually needs. This is where the pipeline's stages stop being a report and start telling
+//     somebody what to do on Monday.
+module example.activity exposing (
+    ActivityId,
+    Subject,
+    DurationMinutes,
+    CadenceDays,
+    Attendees,
+    RelatedTo,
+    RelatedToAccount,
+    RelatedToOpportunity,
+    RelatedToLead,
+    CallOutcome,
+    Connected,
+    LeftVoicemail,
+    NoAnswer,
+    WrongNumber,
+    ActivityCommon,
+    CallTask,
+    EmailTask,
+    Meeting,
+    Activity,
+    MeetingDraft,
+    NextStep,
+    Recency,
+    NeverTouched,
+    StaleReport,
+    Coverage,
+    TouchSummary,
+    DayLoad,
+    touchCount,
+    lastActivityOn,
+    staleAccounts,
+    multiThreaded,
+    sharedAttendees,
+    nextStepFor,
+    dayLoadOf,
+    scheduleMeeting
+)
+// The import list is longer than what this module names. nextStepFor takes an OpenOpportunity and reads
+// nothing out of it but the stage, yet its `example` rows have to write a whole NegotiationReview — and
+// writing one means naming every newtype that appears anywhere inside it: OpportunityName, Needs,
+// PainPoint, BusinessCase, DecisionCriterion, DecisionMakers, PerceivedRisk, QuoteNumber, Amount,
+// CurrencyCode. Ten imports exist for the fixtures alone, and a reader of the import list learns nothing
+// true about what this module does with them. Finding F21.
+import example.crm ( AccountId, ContactId, LeadId, UserId, Amount, CurrencyCode )
+import example.pipeline ( OpportunityId, OpportunityName, OpenOpportunity
+                        , Prospecting, Qualification, NeedsAnalysis, ValueProposition
+                        , IdDecisionMakers, PerceptionAnalysis, ProposalPriceQuote, NegotiationReview
+                        , Needs, PainPoint, BusinessCase, DecisionCriterion, DecisionMakers
+                        , PerceivedRisk, QuoteNumber )
+
+// === Values ===
+
+data ActivityId = String
+    invariant String.matches("00T[0-9A-Za-z]{12}([0-9A-Z]{3})?", value)
+
+data Subject = String
+    invariant String.length(value) >= 1
+
+// A quarter of an hour to a full working day. Minutes rather than a duration type, because there is no
+// duration type — so the unit lives in the name, where a reader cannot miss it and a caller cannot get it
+// wrong by passing seconds.
+data DurationMinutes = Int
+    invariant value >= 15 && value <= 480
+
+// How often a stage is worked. A cadence of nothing is not a cadence, and a cadence of half a year is not
+// one either.
+data CadenceDays = Int
+    invariant value >= 1 && value <= 90
+
+// A meeting with nobody in it is not a meeting. The rule is about the set, so the set has a name.
+data Attendees = Set<ContactId>
+    invariant Set.size(value) >= 1
+
+// === What an activity is about ===
+// One column holding one of three kinds of id is a sum, and this is what it looks like written as one. An
+// opportunity-related activity carries the account too, because the account rollup needs it and the
+// opportunity already knows it — the alternative, looking the account up from the opportunity, would make
+// every rollup depend on a second read.
+data RelatedToAccount     = { accountId: AccountId }
+data RelatedToOpportunity = { opportunityId: OpportunityId, accountId: AccountId }
+data RelatedToLead        = { leadId: LeadId }
+data RelatedTo = RelatedToAccount | RelatedToOpportunity | RelatedToLead
+
+// Only a connected call is a touch, and only a connected call has a length. Two levels down from Activity,
+// which is exactly where the touch-count rule lives: the number every sales development rep is measured on
+// is not "calls made".
+data Connected = { minutes: DurationMinutes }
+data CallOutcome = Connected | LeftVoicemail | NoAnswer | WrongNumber
+
+// === The three kinds ===
+// Salesforce keeps Task and Event in one object with half the columns null for whichever kind a row is.
+// Here the three kinds carry different fields, so they are three cases — and a total over them has to open
+// each kind before it can read a date, which is the model refusing to pretend the three are the same shape.
+data ActivityCommon =
+    { id: ActivityId
+    , subject: Subject
+    , owner: UserId
+    , related: RelatedTo
+    }
+
+data CallTask  = { ...ActivityCommon, dueOn: Date, outcome: CallOutcome }
+data EmailTask = { ...ActivityCommon, sentOn: Date, opened: Bool }
+data Meeting   = { ...ActivityCommon, startAt: DateTime, minutes: DurationMinutes, attendees: Attendees }
+data Activity  = CallTask | EmailTask | Meeting
+
+// What a caller hands over to book a meeting: the raw minutes and the raw attendee list, before either has
+// been checked. The checked versions are what the Meeting carries.
+data MeetingDraft =
+    { id: ActivityId
+    , subject: Subject
+    , owner: UserId
+    , related: RelatedTo
+    , startAt: DateTime
+    , attendees: List<ContactId>
+    }
+
+// === Reports ===
+
+data NextStep = { description: Subject, dueOn: Date }
+
+data Recency = { lastOn: Date, daysSince: Int }
+    invariant daysSince >= 0
+
+data StaleReport =
+    { daysSince: Map<AccountId, Int>
+    , stale: List<AccountId>
+    }
+
+data Coverage =
+    { contacts: Set<ContactId>
+    , count: Int
+    , singleThreaded: Bool
+    }
+
+data TouchSummary =
+    { connectedCalls: Int
+    , openedEmails: Int
+    , meetings: Int
+    , touches: Int
+    }
+
+data DayLoad =
+    { minutesPerDay: Map<Date, Int>
+    , busiestMinutes: Int
+    }
+
+// === scheduleMeeting ===
+// Two require-then-wraps in one behavior, over two different kinds of newtype: a range on an Int and a
+// non-empty on a Set. Both rules are things a booking form gets wrong every day, so both are cases rather
+// than aborts.
+behavior scheduleMeeting : (draft: MeetingDraft, minutes: Int)
+        -> Meeting | DurationOutOfRange | NoAttendees
+    constructs Meeting, DurationMinutes, Attendees, DurationOutOfRange, NoAttendees
+
+let scheduleMeeting (draft, minutes) = {
+    require minutes >= 15 && minutes <= 480 else DurationOutOfRange
+    require List.length(draft.attendees) >= 1 else NoAttendees
+    Meeting { id = draft.id
+            , subject = draft.subject
+            , owner = draft.owner
+            , related = draft.related
+            , startAt = draft.startAt
+            , minutes = DurationMinutes(minutes)
+            , attendees = Attendees(Set.fromList(draft.attendees))
+            }
+}
+
+example scheduleMeeting
+    | "a quarter of an hour is a meeting" :
+        (MeetingDraft
+            { id = ActivityId("00T000000000001")
+            , subject = Subject("Discovery call")
+            , owner = UserId("u-001")
+            , related = RelatedToAccount { accountId = AccountId("001000000000100") }
+            , startAt = DateTime("2026-07-28T10:00:00")
+            , attendees = [ ContactId("003000000000100") ]
+            }, 15)
+        -> Meeting
+            { id = ActivityId("00T000000000001")
+            , subject = Subject("Discovery call")
+            , owner = UserId("u-001")
+            , related = RelatedToAccount { accountId = AccountId("001000000000100") }
+            , startAt = DateTime("2026-07-28T10:00:00")
+            , minutes = DurationMinutes(15)
+            , attendees = Attendees([ ContactId("003000000000100") ])
+            }
+    | "fourteen minutes is not, and the range is a case rather than an abort" :
+        (MeetingDraft
+            { id = ActivityId("00T000000000001")
+            , subject = Subject("Discovery call")
+            , owner = UserId("u-001")
+            , related = RelatedToAccount { accountId = AccountId("001000000000100") }
+            , startAt = DateTime("2026-07-28T10:00:00")
+            , attendees = [ ContactId("003000000000100") ]
+            }, 14)
+        -> DurationOutOfRange
+    | "a meeting with nobody in it is not a meeting" :
+        (MeetingDraft
+            { id = ActivityId("00T000000000001")
+            , subject = Subject("Discovery call")
+            , owner = UserId("u-001")
+            , related = RelatedToAccount { accountId = AccountId("001000000000100") }
+            , startAt = DateTime("2026-07-28T10:00:00")
+            , attendees = [ ]
+            }, 60)
+        -> NoAttendees
+
+// === touchCount: what counts as having reached somebody ===
+// A dialled number that rang out is not a touch, and an email nobody opened is not one either. The rule is
+// two levels down for calls, which is why CallOutcome is its own sum: "connected" is a fact about the call,
+// not about the task.
+let isConnected (outcome: CallOutcome): Bool =
+    match outcome with
+        | Connected     -> true
+        | LeftVoicemail -> false
+        | NoAnswer      -> false
+        | WrongNumber   -> false
+
+let isConnectedCall (a: Activity): Bool =
+    match a with
+        | CallTask { outcome } -> isConnected(outcome)
+        | EmailTask            -> false
+        | Meeting              -> false
+
+let isOpenedEmail (a: Activity): Bool =
+    match a with
+        | CallTask            -> false
+        | EmailTask { opened } -> opened
+        | Meeting             -> false
+
+let isMeeting (a: Activity): Bool =
+    match a with
+        | CallTask  -> false
+        | EmailTask -> false
+        | Meeting   -> true
+
+behavior touchCount : (activities: List<Activity>) -> TouchSummary
+    constructs TouchSummary
+
+let touchCount (activities) = {
+    let calls    = List.length(List.filter(a -> isConnectedCall(a), activities))
+    let emails   = List.length(List.filter(a -> isOpenedEmail(a), activities))
+    let meetings = List.length(List.filter(a -> isMeeting(a), activities))
+    TouchSummary { connectedCalls = calls
+                 , openedEmails = emails
+                 , meetings = meetings
+                 , touches = calls + emails + meetings
+                 }
+}
+
+// === lastActivityOn: recency ===
+// The date of an activity depends on which kind it is, and a meeting's is a DateTime that has to come down
+// to a Date before it can be compared with the others. That conversion happening in one place is the whole
+// benefit of the three kinds being three cases.
+let dateOf (a: Activity): Date =
+    match a with
+        | CallTask { dueOn }   -> dueOn
+        | EmailTask { sentOn } -> sentOn
+        | Meeting { startAt }  -> DateTime.toDate(startAt)
+
+behavior lastActivityOn : (activities: List<Activity>, today: Date) -> Recency | NeverTouched
+    constructs Recency, NeverTouched
+
+let lastActivityOn (activities, today) = {
+    require List.length(activities) >= 1 else NeverTouched
+    // The require has already made the empty case impossible, but List.max answers with an optional and the
+    // match still has to state both arms: a guard cannot inform what an Option-returning call knows. The
+    // None arm here is unreachable and has to be written anyway.
+    match List.max(List.map(a -> dateOf(a), activities)) with
+        | Some last -> Recency { lastOn = last, daysSince = Date.daysBetween(last, today) }
+        | None      -> NeverTouched
+}
+
+// === staleAccounts: the freshest touch per account ===
+// A fold with Map.upsert, and the combining function is a minimum rather than a sum — recency is the
+// closest touch, not the total of them. The absent branch inserts this activity's own figure, which is what
+// makes the first activity of every account count.
+//
+// The projection to a key is where absence is sum-shaped: an activity about a lead has no account to roll
+// up to. List.filterMap is the function for this, but its step has to answer an optional and no user code
+// can build one, so the projection answers with a list of nought or one and concatMap does the work.
+// Finding F8.
+let accountKeyOf (a: Activity): List<AccountId> =
+    match relatedOf(a) with
+        | RelatedToAccount { accountId }     -> [ accountId ]
+        | RelatedToOpportunity { accountId } -> [ accountId ]
+        | RelatedToLead                      -> []
+
+let relatedOf (a: Activity): RelatedTo =
+    match a with
+        | CallTask { related }  -> related
+        | EmailTask { related } -> related
+        | Meeting { related }   -> related
+
+let accountDatesOf (a: Activity): List<(AccountId, Date)> =
+    List.map(k -> (k, dateOf(a)), accountKeyOf(a))
+
+behavior staleAccounts : (activities: List<Activity>, today: Date, staleAfter: CadenceDays) -> StaleReport
+    constructs StaleReport
+
+let staleAccounts (activities, today, staleAfter) = {
+    let pairs: List<(AccountId, Date)> = List.concatMap(a -> accountDatesOf(a), activities)
+    let since: Map<AccountId, Int> =
+        List.fold((acc, pair) -> upsertRecency(acc, pair, today), Map.empty(), pairs)
+    StaleReport { daysSince = since
+                , stale = List.sort(Map.keys(Map.filter((k, days) -> days >= staleAfter.value, since)))
+                }
+}
+
+let upsertRecency (acc: Map<AccountId, Int>, pair: (AccountId, Date), today: Date): Map<AccountId, Int> = {
+    let (accountId, on) = pair
+    let days = Date.daysBetween(on, today)
+    Map.upsert(accountId, days, seen -> Int.min(seen, days), acc)
+}
+
+// === multiThreaded: the coverage question ===
+// A deal where we have met one person is a deal that ends when that person changes job. Counting the people
+// is a set question — two meetings with the same person are not two people — so the fold unions the
+// attendee sets and the count is the set's size.
+behavior multiThreaded : (meetings: List<Meeting>) -> Coverage
+    constructs Coverage
+
+let multiThreaded (meetings) = {
+    let everyone: Set<ContactId> =
+        List.fold((acc, m) -> Set.union(acc, m.attendees.value), Set.empty(), meetings)
+    Coverage { contacts = everyone
+             , count = Set.size(everyone)
+             , singleThreaded = Set.size(everyone) <= 1
+             }
+}
+
+// Who was in both rooms. The one place set intersection is the question rather than a way of getting to
+// one: continuity of attendance is what a champion looks like from the outside.
+behavior sharedAttendees : (a: Meeting, b: Meeting) -> Coverage
+    constructs Coverage
+
+let sharedAttendees (a, b) = {
+    let both: Set<ContactId> = Set.intersect(a.attendees.value, b.attendees.value)
+    Coverage { contacts = both, count = Set.size(both), singleThreaded = Set.size(both) <= 1 }
+}
+
+// === nextStepFor: the playbook ===
+// Each open stage has an exit criterion, and the next step is whatever that criterion needs. This is the one
+// behavior in the project that tells somebody what to do rather than reporting what happened, and it is
+// eight arms because there are eight open stages — a lookup table with a default would let a new stage
+// silently inherit somebody else's advice.
+//
+// The cadence is per stage too: an early deal is worked weekly, a deal in negotiation is worked daily,
+// because a negotiation left alone for a week is a negotiation somebody else is having.
+let cadenceFor (opp: OpenOpportunity): CadenceDays =
+    match opp with
+        | Prospecting        -> CadenceDays(14)
+        | Qualification      -> CadenceDays(7)
+        | NeedsAnalysis      -> CadenceDays(7)
+        | ValueProposition   -> CadenceDays(7)
+        | IdDecisionMakers   -> CadenceDays(5)
+        | PerceptionAnalysis -> CadenceDays(5)
+        | ProposalPriceQuote -> CadenceDays(3)
+        | NegotiationReview  -> CadenceDays(2)
+
+let actionFor (opp: OpenOpportunity): Subject =
+    match opp with
+        | Prospecting        -> Subject("Call to confirm there is a project and a budget holder")
+        | Qualification      -> Subject("Book a discovery call and write down what hurts")
+        | NeedsAnalysis      -> Subject("Send the business case against the recorded needs")
+        | ValueProposition   -> Subject("Ask who else has to agree, by name")
+        | IdDecisionMakers   -> Subject("Meet the sponsor and ask what would stop this")
+        | PerceptionAnalysis -> Subject("Send the quote with the risks answered in it")
+        | ProposalPriceQuote -> Subject("Chase the quote and ask what is missing from it")
+        | NegotiationReview  -> Subject("Agree the last point and put a signature date on it")
+
+behavior nextStepFor : (opp: OpenOpportunity, recency: Recency, today: Date) -> NextStep | Overdue
+    constructs NextStep, Subject, CadenceDays, Overdue
+
+let nextStepFor (opp, recency, today) = {
+    let cadence = cadenceFor(opp)
+    require recency.daysSince <= cadence.value else Overdue
+    NextStep { description = actionFor(opp)
+             , dueOn = Date.addDays(cadence.value - recency.daysSince, today)
+             }
+}
+
+// === dayLoad: capacity ===
+// Meeting minutes per day, for one owner. A Date key crosses the boundary as its ISO form, so the JSON is
+// {"2026-07-25": 120} and a calendar view needs no translation. The busiest day falls out of the values,
+// with nought standing in for a week with no meetings — here a default is right, because a person with no
+// meetings has a load and it is zero.
+let meetingOf (a: Activity, owner: UserId): List<Meeting> =
+    match a with
+        | CallTask  -> []
+        | EmailTask -> []
+        | Meeting as m -> if m.owner == owner then [ m ] else []
+
+behavior dayLoadOf : (activities: List<Activity>, owner: UserId) -> DayLoad
+    constructs DayLoad
+
+let dayLoadOf (activities, owner) = {
+    let mine: List<Meeting> = List.concatMap(a -> meetingOf(a, owner), activities)
+    let minutes: Map<Date, Int> =
+        List.fold((acc, m) -> Map.upsert(DateTime.toDate(m.startAt), m.minutes.value,
+                                         sofar -> sofar + m.minutes.value, acc),
+                  Map.empty(), mine)
+    DayLoad { minutesPerDay = minutes
+            , busiestMinutes = Option.withDefault(0, List.max(Map.values(minutes)))
+            }
+}
+
+// === The rows ===
+// Every fixture below restates the whole activity, because a fixture is a value and there is nowhere to
+// name one. Three calls that differ only in their outcome are written out three times. A named fixture, or a
+// spread over one, would turn this section from forty lines into ten — the rules being checked are one line
+// each. Finding F20.
+
+example touchCount
+    | "a voicemail and an unopened email are not touches; a connected call and a meeting are" :
+        ([ CallTask { id = ActivityId("00T000000000001"), subject = Subject("Intro call")
+                    , owner = UserId("u-001")
+                    , related = RelatedToAccount { accountId = AccountId("001000000000100") }
+                    , dueOn = Date("2026-07-20")
+                    , outcome = Connected { minutes = DurationMinutes(20) } }
+         , CallTask { id = ActivityId("00T000000000002"), subject = Subject("Follow up")
+                    , owner = UserId("u-001")
+                    , related = RelatedToAccount { accountId = AccountId("001000000000100") }
+                    , dueOn = Date("2026-07-21")
+                    , outcome = LeftVoicemail }
+         , EmailTask { id = ActivityId("00T000000000003"), subject = Subject("Deck")
+                     , owner = UserId("u-001")
+                     , related = RelatedToAccount { accountId = AccountId("001000000000100") }
+                     , sentOn = Date("2026-07-22"), opened = false }
+         , Meeting { id = ActivityId("00T000000000004"), subject = Subject("Workshop")
+                   , owner = UserId("u-001")
+                   , related = RelatedToAccount { accountId = AccountId("001000000000100") }
+                   , startAt = DateTime("2026-07-23T13:00:00")
+                   , minutes = DurationMinutes(90)
+                   , attendees = Attendees([ ContactId("003000000000100") ]) } ])
+        -> TouchSummary { connectedCalls = 1, openedEmails = 0, meetings = 1, touches = 2 }
+
+example lastActivityOn
+    | "recency is measured from the latest of the three kinds, whichever kind that is" :
+        ([ CallTask { id = ActivityId("00T000000000001"), subject = Subject("Intro call")
+                    , owner = UserId("u-001")
+                    , related = RelatedToAccount { accountId = AccountId("001000000000100") }
+                    , dueOn = Date("2026-07-20")
+                    , outcome = Connected { minutes = DurationMinutes(20) } }
+         , Meeting { id = ActivityId("00T000000000004"), subject = Subject("Workshop")
+                   , owner = UserId("u-001")
+                   , related = RelatedToAccount { accountId = AccountId("001000000000100") }
+                   , startAt = DateTime("2026-07-23T13:00:00")
+                   , minutes = DurationMinutes(90)
+                   , attendees = Attendees([ ContactId("003000000000100") ]) } ],
+         Date("2026-07-30"))
+        -> Recency { lastOn = Date("2026-07-23"), daysSince = 7 }
+    | "an account nobody has touched has no recency, which is not a recency of zero" :
+        ([ ], Date("2026-07-30"))
+        -> NeverTouched
+
+example multiThreaded
+    | "the same person in two rooms is one person" :
+        ([ Meeting { id = ActivityId("00T000000000004"), subject = Subject("Workshop")
+                   , owner = UserId("u-001")
+                   , related = RelatedToAccount { accountId = AccountId("001000000000100") }
+                   , startAt = DateTime("2026-07-23T13:00:00")
+                   , minutes = DurationMinutes(90)
+                   , attendees = Attendees([ ContactId("003000000000100") ]) }
+         , Meeting { id = ActivityId("00T000000000005"), subject = Subject("Follow-up")
+                   , owner = UserId("u-001")
+                   , related = RelatedToAccount { accountId = AccountId("001000000000100") }
+                   , startAt = DateTime("2026-07-25T13:00:00")
+                   , minutes = DurationMinutes(30)
+                   , attendees = Attendees([ ContactId("003000000000100") ]) } ])
+        -> Coverage { contacts = [ ContactId("003000000000100") ], count = 1, singleThreaded = true }
+    | "two people across two rooms is a deal with more than one thread" :
+        ([ Meeting { id = ActivityId("00T000000000004"), subject = Subject("Workshop")
+                   , owner = UserId("u-001")
+                   , related = RelatedToAccount { accountId = AccountId("001000000000100") }
+                   , startAt = DateTime("2026-07-23T13:00:00")
+                   , minutes = DurationMinutes(90)
+                   , attendees = Attendees([ ContactId("003000000000100") ]) }
+         , Meeting { id = ActivityId("00T000000000005"), subject = Subject("Follow-up")
+                   , owner = UserId("u-001")
+                   , related = RelatedToAccount { accountId = AccountId("001000000000100") }
+                   , startAt = DateTime("2026-07-25T13:00:00")
+                   , minutes = DurationMinutes(30)
+                   , attendees = Attendees([ ContactId("003000000000200") ]) } ])
+        -> Coverage { contacts = [ ContactId("003000000000100"), ContactId("003000000000200") ]
+                    , count = 2, singleThreaded = false }
+
+example staleAccounts
+    | "an activity about a lead rolls up to no account, and recency is the freshest touch" :
+        ([ CallTask { id = ActivityId("00T000000000001"), subject = Subject("Intro call")
+                    , owner = UserId("u-001")
+                    , related = RelatedToAccount { accountId = AccountId("001000000000100") }
+                    , dueOn = Date("2026-07-01")
+                    , outcome = Connected { minutes = DurationMinutes(20) } }
+         , CallTask { id = ActivityId("00T000000000002"), subject = Subject("Second call")
+                    , owner = UserId("u-001")
+                    , related = RelatedToAccount { accountId = AccountId("001000000000100") }
+                    , dueOn = Date("2026-07-25")
+                    , outcome = Connected { minutes = DurationMinutes(20) } }
+         , CallTask { id = ActivityId("00T000000000003"), subject = Subject("Lead call")
+                    , owner = UserId("u-002")
+                    , related = RelatedToLead { leadId = LeadId("00Q000000000001") }
+                    , dueOn = Date("2026-07-02")
+                    , outcome = Connected { minutes = DurationMinutes(20) } } ],
+         Date("2026-07-30"), CadenceDays(14))
+        -> StaleReport { daysSince = [ (AccountId("001000000000100"), 5) ], stale = [ ] }
+
+example nextStepFor
+    | "a deal in negotiation is worked every other day, and the step says what to do" :
+        (NegotiationReview
+            { id = OpportunityId("006000000000001")
+            , accountId = AccountId("001000000000100")
+            , name = OpportunityName("Acme Corp — New Business")
+            , owner = UserId("u-001")
+            , amount = Amount(4800000.00m)
+            , currency = CurrencyCode("JPY")
+            , closeDate = Date("2026-09-30")
+            , openedOn = Date("2026-07-20")
+            , qualifiedOn = Date("2026-07-25")
+            , primaryContactId = ContactId("003000000000100")
+            , needs = Needs([ PainPoint("invoicing") ])
+            , businessCase = BusinessCase("Automating invoicing removes three days")
+            , criteria = [ DecisionCriterion("total cost") ]
+            , decisionMakers = DecisionMakers([ ContactId("003000000000200") ])
+            , champion = ContactId("003000000000200")
+            , risks = [ PerceivedRisk("migration risk") ]
+            , quoteNumber = QuoteNumber("0Q0000000000001")
+            , proposedOn = Date("2026-08-10")
+            , proposedAmount = Amount(4600000.00m)
+            , openedNegotiationOn = Date("2026-09-01")
+            , floorAmount = Amount(4200000.00m)
+            },
+         Recency { lastOn = Date("2026-09-09"), daysSince = 1 }, Date("2026-09-10"))
+        -> NextStep { description = Subject("Agree the last point and put a signature date on it")
+                    , dueOn = Date("2026-09-11") }
+    | "the same deal untouched for a week is overdue, not scheduled" :
+        (NegotiationReview
+            { id = OpportunityId("006000000000001")
+            , accountId = AccountId("001000000000100")
+            , name = OpportunityName("Acme Corp — New Business")
+            , owner = UserId("u-001")
+            , amount = Amount(4800000.00m)
+            , currency = CurrencyCode("JPY")
+            , closeDate = Date("2026-09-30")
+            , openedOn = Date("2026-07-20")
+            , qualifiedOn = Date("2026-07-25")
+            , primaryContactId = ContactId("003000000000100")
+            , needs = Needs([ PainPoint("invoicing") ])
+            , businessCase = BusinessCase("Automating invoicing removes three days")
+            , criteria = [ DecisionCriterion("total cost") ]
+            , decisionMakers = DecisionMakers([ ContactId("003000000000200") ])
+            , champion = ContactId("003000000000200")
+            , risks = [ PerceivedRisk("migration risk") ]
+            , quoteNumber = QuoteNumber("0Q0000000000001")
+            , proposedOn = Date("2026-08-10")
+            , proposedAmount = Amount(4600000.00m)
+            , openedNegotiationOn = Date("2026-09-01")
+            , floorAmount = Amount(4200000.00m)
+            },
+         Recency { lastOn = Date("2026-09-03"), daysSince = 7 }, Date("2026-09-10"))
+        -> Overdue

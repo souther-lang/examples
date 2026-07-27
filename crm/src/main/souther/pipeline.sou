@@ -944,6 +944,12 @@ behavior pipelineByStage : (opps: List<Opportunity>) -> StageBreakdown
 let pipelineByStage (opps) = {
     let counts = countByStage(opps)
     StageBreakdown
+        // Alphabetical, which is the wrong order and the only one available. The ten stages have a natural
+        // order — the order they are declared in, which is the order a deal moves through them — and nothing
+        // carries it: a sum's cases have no index, and StageName is a String, so sorting it puts "Closed
+        // Lost" first and "Value Proposition" last. A pipeline report in that order is a pipeline report
+        // nobody reads. Ordering a unit-only sum by its declaration order would fix it in one line.
+        // Finding F19.
         { stages = List.sort(Map.keys(counts))
         , count = counts
         , total = totalByStage(opps)
