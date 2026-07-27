@@ -77,7 +77,7 @@ processor follows `SOUTHER_LANG` and then the JVM's default locale, as `souther 
 | `crm` | The CRM core, and the first of the five Souther modules in the project's largest example. It carries forward what the old `contact` module was the only place to show — a sum decoded and encoded through its `"type"` discriminator, an unknown tag as a decode failure, and a newtype's format invariant enforced when the value is reached *through* the discriminator — now on `ContactPoint`, whose three cases carry payload. **A pair of optionals becomes a sum**: Salesforce's nullable Email plus nullable Phone spells four states and the one that matters, reachable by nothing, is representable; three cases remove it, and `title: JobTitle?` sits three lines below as the optional that is right because no rule depends on it. **The lead's states are the sum**, with the touch record spread onto the common items so only the states past New carry it, and a converted lead cannot be converted again because `convertLead` takes a `QualifiedLead` and produces a `ConvertedLead` — there is no guard to forget. Conversion reports **every** blocking reason rather than the first, which is what building the reasons as a value rather than as a `require`'s departure buys. Duplicate screening keeps Salesforce's two standard rules with their two different match keys: accounts on the email domain, contacts on the exact address, both checked against books passed in as data. One injected behavior, bound from plain Java in the smoke test with no framework |
 | `pipeline` | The SFA core: **the ten Salesforce stages, and the stage is the type**. Every transition takes the exact stage it advances from, so there is no stage argument, no stage check, and no way to write a call that sends a proposal to a deal nobody qualified — `PipelineTest` says so by omission, since the illegal transitions are absent because they do not compile. Six spread layers, because a deal accumulates commitments in six steps and each step is what the next stage needs to exist; that is what makes `withdrawProposal` honest, since pulling a quote returns a state that has no quote number rather than one holding a stale value. The probabilities and forecast categories are the real mappings as ten-arm matches, so adding a stage is a compile error in three places rather than a deal that quietly weighs nothing. `LossReason` nests because win/loss review asks whether somebody else won it or nobody bought, and only the displaced kind names a rival — while the codec folds to the leaf, so the JSON stays one flat tag. The seam with `crm` is two calls with a Java line between them: `crm` builds the account and the contact, `pipeline` builds the opportunity and answers with **its own** `NoOpportunityRequested`, because an output union is built from the cases the module declares |
 | `activity` | The activity log. Salesforce's polymorphic `WhatId` — one column holding an account, an opportunity or a lead id — is a sum, which is why this module imports both `crm` and `pipeline`. Three kinds of activity with different fields, so a total over them opens each kind before it can read a date (a meeting's is a `DateTime` that comes down to a `Date` first). `Set` where the question is membership: multi-threading a deal is the best-known loss predictor and two meetings with one person are not two people. `Map.upsert` folding to a **minimum** rather than a sum, because recency is the freshest touch and not the total. `Map<Date, Int>` as an output, keyed by a temporal that crosses as its ISO form. And the next-step playbook — an eight-arm match over the open stages prescribing what that stage's exit criterion needs, which is where the pipeline stops being a report and starts telling somebody what to do on Monday |
-| `quoting` | Quote lines and CPQ. **Where `pipeline` makes the states the type, this module makes an attribute the sum**: a quote is the same document before and after approval, so its `ApprovalState` is a four-case sum on a field where Salesforce has a flag and three nullable columns — one of whose cases, approved automatically, has nobody to name. A product invariant across three fields pins `net = quantity × list × (1 − discount)`, and **every ratio rule in the file is written as the multiplication it implies**, because a division cannot appear in an invariant at all. Both CPQ caps are real: per line, and **blended**, which is the one that holds — a rep who needs thirty per cent off takes it all off one line and every per-line check passes. The injected `approverFor` answers with `crm`'s `UserId`, a type this module cannot construct, so the implementation builds it through `crm`'s decoder |
+| `quoting` | Quote lines and CPQ. **Where `pipeline` makes the states the type, this module makes an attribute the sum**: a quote is the same document before and after approval, so its `ApprovalState` is a four-case sum on a field where Salesforce has a flag and three nullable columns — one of whose cases, approved automatically, has nobody to name. A product invariant across three fields pins `net = quantity × list × (1 − discount)`, and **every ratio rule in the file is written as the multiplication it implies**, because a division inside an invariant aborts on a zero denominator instead of rejecting the value. Both CPQ caps are real: per line, and **blended**, which is the one that holds — a rep who needs thirty per cent off takes it all off one line and every per-line check passes. The injected `approverFor` answers with `crm`'s `UserId`, which the implementation builds through `crm`'s public decoder — the path a value arriving from outside takes |
 | `forecasting` | The weighted forecast, and the module that **builds its own map key**: `FiscalPeriod` is `"FY26-Q3"`, assembled from the close date and the org's fiscal-year start month with `Date.year` / `Date.month` / `Int.modBy` / `String.padLeft`, then checked by the same regex a key arriving from outside would face. The weighting is the project's one real division, so the scale and the rounding mode are named at the call. It is also where **`Map.union` is deliberately not used**: a manager's forecast is the reps' forecasts summed, and union is left-biased and never merges values, so it would silently drop a rep's number on a shared period — combining two values under one key is a domain decision, and the fold with `upsert` is where that decision lives. A two-argument injected `quotaFor`, which is the third generated shape after `pipeline`'s zero-argument one and `crm`'s one-argument one. The only module here with no `exposing` clause, sitting beside `quoting`, which writes one although nothing imports it either |
 
 Modules that are `.sou`-only with no hand-written Java (email/crm/expense/cart/businesstrip)
@@ -93,17 +93,15 @@ returns `Result<T>`, and `Ok`/`Err` are told apart by pattern match — no wildc
 The `crm` example was written to put the language under a domain that fights back, and what it produced
 besides a model is this list. Every entry is a rule a real CRM enforces, what had to be written instead,
 and what would let it be written directly. Each one is also recorded in the `.sou` file at the
-declaration that hit it, the way `ordering/src/main/souther/returns.sou` records the construction-authority
-trap it ran into.
+declaration that hit it, so a reader meets the finding where the model shows it rather than only here.
 
 ### The rule could not be stated where it belongs
 
 **F1 — an aggregate that spans two contexts cannot be one operation.** Lead conversion produces an
 Account, a Contact *and* an Opportunity together; a conversion that made two of the three is a
-data-integrity bug. Account, Contact and Lead have to be one module, because a behavior constructs only
-what its own module declares; the Opportunity is built in `example.pipeline`; and the two are joined in
-Java, because a cross-module `>->` would put `crm`'s departed cases into a union `pipeline` declares
-(E1606). *Would fix it:* a translating composition — `crm.convertLead >-> openFromLead translating
+data-integrity bug. The Opportunity is built in `example.pipeline`, which imports `crm`, so `crm` cannot
+import it back (E1501); and the two are joined in Java, because a cross-module `>->` would put `crm`'s
+departed cases into a union `pipeline` declares (E1606). *Would fix it:* a translating composition — `crm.convertLead >-> openFromLead translating
 (crm.ConversionBlocked -> ConversionRefused)` — naming the local case each imported departure lands on.
 The compiler already computes the departed set; what is missing is the syntax to land it.
 
@@ -132,18 +130,12 @@ composed across modules because each declares its own reason sum. *Would fix it:
 accumulates applicatively; a `require all` collecting several guards into one case carrying a list would
 give the behavior side the same shape.
 
-**F7 — a division cannot appear in an invariant.** A quote line's effective discount is
-`1 − net ÷ (quantity × list)`. `Decimal.divide` answers with a union and a union is not a `Bool`; the `/`
-operator aborts on a zero denominator, and a zero list price is representable, so the abort would happen
-inside an invariant check. Every ratio rule in `quoting.sou` is therefore written as the multiplication it
-implies. *Would fix it:* a total division that names its behaviour on zero — `Decimal.divideOr(fallback,
-a, b, scale, mode)` — which would be invariant-legal because it is total and answers with a `Decimal`.
-
-**F8 — sum-shaped absence cannot reach `List.filterMap`.** An activity about a Lead contributes no key to
-an account rollup. `filterMap` is the function for that shape, but its step must answer an optional and no
-user code can build one, so the projection answers with a list of nought or one and `concatMap` does the
-work. *Would fix it:* let `filterMap`'s step answer a 0-or-1 list as well as an optional, or let a `let`
-return `'b?` when its body is a total match whose arms are a value or nothing.
+**F8 — `List.filterMap` cannot be given a step.** An activity about a Lead contributes no key to an account
+rollup. `filterMap` is the function for that shape, and it is unreachable from a model: its step answers
+`'b?`, and an optional type may be written on a data field or in the core and nowhere else, so a helper
+that would serve as the step cannot state its own return type. The projection answers a list of nought or
+one instead and `concatMap` does the work. *Would fix it:* let `filterMap`'s step answer a 0-or-1 list as
+well as an optional.
 
 **F13 — an `example` cannot name a case of a behavior's named-sum output.** `tierOf : (a: Account) ->
 AccountTier` with a row expecting `-> Enterprise` is E1904, hinting at `AccountTier` — but no value of type
@@ -151,11 +143,11 @@ AccountTier` with a row expecting `-> Enterprise` is E1904, hinting at `AccountT
 as the case list, which cost the tier vocabulary its name; `categoryOf` is written the same way for the
 same reason. This one reads as a defect rather than a design.
 
-**F15 — a behavior cannot decide that an optional is absent.** An optional field must be given a value
-explicitly (a spread does not supply it, E1005) and `None` is not a value a behavior body can write. So an
-absent optional can only be *passed on* from something that already holds one. `convertLead` carries the
-lead's title to the contact, which is also what Salesforce does — but the model had no other option, and a
-fixture can write `title = None` while the behavior beside it cannot.
+**F15 — an absent optional has no name, only a trick.** An optional field must be given a value explicitly
+(a spread does not supply it, E1005) and `None` is not a value a behavior body can write. What is left is
+`List.get(0, [])` — asking an empty list for an element — which compiles, encodes to a field that is simply
+not there, and says nothing about intent. A fixture writes `title = None`; the behavior beside it writes an
+empty-list lookup for the same value.
 
 **F19 — a unit sum has no order, so the stages sort alphabetically.** The ten stages have a natural order:
 the order they are declared in, which is the order a deal moves through them. Nothing carries it, and
@@ -163,12 +155,6 @@ the order they are declared in, which is the order a deal moves through them. No
 unit-only sum by its declaration order.
 
 ### It could be stated, at several times the length
-
-**F2 — one concept, five money types.** `crm.Amount` for what a record states, plus `pipeline.StageTotal`,
-`quoting.LineTotal`, `quoting.QuoteTotal` and `forecasting.ForecastAmount` for what each context computes:
-five newtypes with the same invariant, because construction authority is per module. *Would fix it:* a
-construction grant on the owning declaration — `data Amount = Decimal invariant value >= 0.0m constructible
-by example.pipeline` — keeping the guarantee one-directional and explicit.
 
 **F16 — reading a field every case has costs an arm per case.** All ten states spread
 `OpportunityCommon`, so all ten have an id, an amount and a close date; a sum has no fields, so `idOf`,
@@ -178,12 +164,6 @@ let a sum whose cases all spread a common type expose that type's fields.
 **F17 — a behavior cannot call another behavior in its own module.** Only the behaviors it `requires`.
 So anything two behaviors share is a helper, and a behavior that is also a building block needs a helper
 twin: `probabilityFor`/`probabilityOf`, `categoryFor`/`categoryOf`, `roleFor`/`approvalNeeded`.
-
-**F18 — a behavior and a data cannot share a word.** A behavior generates a class from its name
-capitalized. This domain has words that are both noun and verb — you *open* an opportunity and you report
-on *open* opportunities; a *win rate* is a number and *working it out* is an operation; a *day load* is a
-report and *computing* one is a behavior. Three collisions, three renames (`openFromLead`, `winRateOf`,
-`dayLoadOf`), and the vocabulary is worse in three places for a reason no reader of the model can see.
 
 **F20 — a fixture cannot be named.** "`quoteAt10` is not a value a fixture can name" is the compiler's own
 wording. Every `example` row restates its whole input, so four rows checking a four-band approval matrix
@@ -202,11 +182,24 @@ newtype is its own helper or its own binding. In `buildQuote` this nearly cost t
 its only use: without a binding the range would have lived only in the `require`, and the type that exists
 to hold the rule would have stopped appearing in the code that applies it.
 
-**F10 — a regex cannot be named.** `String.matches` takes a string literal, which is right, but a
-module-level constant would be equally checkable and cannot be written. Six near-identical Salesforce id
-patterns, and `DomainName`'s pattern appears a second time as a guard, because there is no way to attempt a
-construction and be told it failed — the invariant that makes the type worth having is the invariant the
-caller has to restate to stay off the aborting path.
+**F10 — a pattern can be named but not composed.** A regex does get a name: a zero-argument `let` whose
+body is a literal is accepted where `String.matches` wants a pattern, and the compiler still validates it,
+reporting an invalid one at the `let`. `DomainName`'s pattern is written that way, so its invariant and
+`domainOf`'s guard read the same name. What cannot be done is factoring the shared part out — the three
+Salesforce id patterns differ only in a three-character prefix, and `prefix ++ "[0-9A-Za-z]{12}…"` is no
+longer a literal, so the check refuses it. The tail is written three times.
+
+**F14 — a construction cannot be attempted.** Building a newtype either succeeds or aborts; there is no
+form that answers "it did not hold". `domainOf` therefore restates `DomainName`'s pattern as a guard before
+building one, and the invariant that makes the type worth having is the invariant the caller duplicates to
+stay off the aborting path. *Would fix it:* an attempted construction answering the decoder's `Result`,
+which is the same check the boundary already runs — the difference is only that inside the language it is
+unreachable.
+
+**F4 — a composition cannot carry an `example`.** `disqualifyAndNurture` and `closeAndSummarize` are the
+two most business-meaningful units in the model and the only two pinned by a test rather than at compile
+time (E1902). *Would fix it:* allow `example` on a `>->` composition, supplying the stages' dependencies
+with the same `fake` tables an example already accepts.
 
 ### Working as designed, recorded so the next reader does not file it
 
@@ -223,10 +216,12 @@ exhaustive, and `closeLost`'s eight arms are safer for it.
 contact is an order question, so one is a `Set` and the other a `List`. Worth writing down because the
 temptation to reuse the set is strong.
 
-**F4 — a composition cannot carry an `example`.** `disqualifyAndNurture` and `closeAndSummarize` are the
-two most business-meaningful units in the model and the only two pinned by a test rather than at compile
-time (E1902). *Would fix it:* allow `example` on a `>->` composition, supplying the stages' dependencies
-with the same `fake` tables an example already accepts.
+**F18 — a behavior and a data cannot share a word.** A behavior generates a class from its name
+capitalized, so `open` and `Open` are one name on the JVM. This domain has words that are both noun and
+verb — you *open* an opportunity and you report on *open* opportunities; a *win rate* is a number and
+*working it out* is an operation; a *day load* is a report and *computing* one is a behavior. Three
+collisions, three renames (`openFromLead`, `winRateOf`, `dayLoadOf`). The vocabulary is worse in three
+places, and it is the price of a generated class being named after what declared it.
 
 ## Running
 
@@ -489,146 +484,6 @@ outcome and arrives as a returned case (400 `no_labels`), an empty `label` is an
 the decoder rejects before any behavior runs (400, with `/label` as the issue's path), and a dropped
 table is no case at all — it passes through Souther as an exception and becomes 503.
 
-### Dogfooding findings
-
-The `crm` example was written to put the language under a domain that fights back, and what it produced
-besides a model is this list. Every entry is a rule a real CRM enforces, what had to be written instead,
-and what would let it be written directly. Each one is also recorded in the `.sou` file at the
-declaration that hit it, the way `ordering/src/main/souther/returns.sou` records the construction-authority
-trap it ran into.
-
-### The rule could not be stated where it belongs
-
-**F1 — an aggregate that spans two contexts cannot be one operation.** Lead conversion produces an
-Account, a Contact *and* an Opportunity together; a conversion that made two of the three is a
-data-integrity bug. Account, Contact and Lead have to be one module, because a behavior constructs only
-what its own module declares; the Opportunity is built in `example.pipeline`; and the two are joined in
-Java, because a cross-module `>->` would put `crm`'s departed cases into a union `pipeline` declares
-(E1606). *Would fix it:* a translating composition — `crm.convertLead >-> openFromLead translating
-(crm.ConversionBlocked -> ConversionRefused)` — naming the local case each imported departure lands on.
-The compiler already computes the departed set; what is missing is the syntax to land it.
-
-**F23 — an imported behavior cannot be called at all.** `example.forecasting` needs each stage's
-probability, which `example.pipeline` owns and publishes as a behavior. Calling it is E1401, "neither a
-behavior nor a builtin", hinting at declaring an injected behavior instead. So the ten-arm mapping is
-copied into the consumer, and nothing but a comment keeps the two in step: a stage added to `pipeline`
-breaks three matches there and silently leaves `forecasting` weighing it at whatever its own copy says.
-The other route — re-declare it here as injected and bind `pipeline`'s implementation at the boundary —
-trades the compile-time checking for the single source. Neither keeps both. *Would fix it:* let a `let`
-call an imported behavior that has an implementation, which is what `>->` already does one stage at a
-time.
-
-**F3 — a sum cannot be a boundary map key, so a picklist is written twice.** `Map<Stage, Amount>` is the
-shape a pipeline report wants. What is written is `StageName`, a String-backed newtype, plus a total match
-turning each case into its own name — so ten stage names exist twice in `pipeline.sou` and five category
-names twice across `pipeline` and `forecasting`. *Would fix it:* admit a unit-only sum as a boundary map
-key, encoded as the case name. That is byte-for-byte what the `"type"` discriminator already does for the
-same type.
-
-**F6 — accumulating business failures has no form.** A CRM reports every reason a conversion is blocked;
-`require` returns one departure and stops. The reasons are built as a value instead — a list, wrapped in a
-non-empty newtype after the `require` that discharges it — which works and is the shape `businesstrip`
-established, but costs a named list type and an invariant per behavior that needs it, and cannot be
-composed across modules because each declares its own reason sum. *Would fix it:* the decode side already
-accumulates applicatively; a `require all` collecting several guards into one case carrying a list would
-give the behavior side the same shape.
-
-**F7 — a division cannot appear in an invariant.** A quote line's effective discount is
-`1 − net ÷ (quantity × list)`. `Decimal.divide` answers with a union and a union is not a `Bool`; the `/`
-operator aborts on a zero denominator, and a zero list price is representable, so the abort would happen
-inside an invariant check. Every ratio rule in `quoting.sou` is therefore written as the multiplication it
-implies. *Would fix it:* a total division that names its behaviour on zero — `Decimal.divideOr(fallback,
-a, b, scale, mode)` — which would be invariant-legal because it is total and answers with a `Decimal`.
-
-**F8 — sum-shaped absence cannot reach `List.filterMap`.** An activity about a Lead contributes no key to
-an account rollup. `filterMap` is the function for that shape, but its step must answer an optional and no
-user code can build one, so the projection answers with a list of nought or one and `concatMap` does the
-work. *Would fix it:* let `filterMap`'s step answer a 0-or-1 list as well as an optional, or let a `let`
-return `'b?` when its body is a total match whose arms are a value or nothing.
-
-**F13 — an `example` cannot name a case of a behavior's named-sum output.** `tierOf : (a: Account) ->
-AccountTier` with a row expecting `-> Enterprise` is E1904, hinting at `AccountTier` — but no value of type
-`AccountTier` can be written, and a case upcasts to its sum everywhere else. The output has to be spelled
-as the case list, which cost the tier vocabulary its name; `categoryOf` is written the same way for the
-same reason. This one reads as a defect rather than a design.
-
-**F15 — a behavior cannot decide that an optional is absent.** An optional field must be given a value
-explicitly (a spread does not supply it, E1005) and `None` is not a value a behavior body can write. So an
-absent optional can only be *passed on* from something that already holds one. `convertLead` carries the
-lead's title to the contact, which is also what Salesforce does — but the model had no other option, and a
-fixture can write `title = None` while the behavior beside it cannot.
-
-**F19 — a unit sum has no order, so the stages sort alphabetically.** The ten stages have a natural order:
-the order they are declared in, which is the order a deal moves through them. Nothing carries it, and
-`StageName` is a String, so `pipelineByStage` returns "Closed Lost" first. *Would fix it:* order a
-unit-only sum by its declaration order.
-
-### It could be stated, at several times the length
-
-**F2 — one concept, five money types.** `crm.Amount` for what a record states, plus `pipeline.StageTotal`,
-`quoting.LineTotal`, `quoting.QuoteTotal` and `forecasting.ForecastAmount` for what each context computes:
-five newtypes with the same invariant, because construction authority is per module. *Would fix it:* a
-construction grant on the owning declaration — `data Amount = Decimal invariant value >= 0.0m constructible
-by example.pipeline` — keeping the guarantee one-directional and explicit.
-
-**F16 — reading a field every case has costs an arm per case.** All ten states spread
-`OpportunityCommon`, so all ten have an id, an amount and a close date; a sum has no fields, so `idOf`,
-`amountOf` and `closeDateOf` are ten arms each, and `forecasting` writes four more of them. *Would fix it:*
-let a sum whose cases all spread a common type expose that type's fields.
-
-**F17 — a behavior cannot call another behavior in its own module.** Only the behaviors it `requires`.
-So anything two behaviors share is a helper, and a behavior that is also a building block needs a helper
-twin: `probabilityFor`/`probabilityOf`, `categoryFor`/`categoryOf`, `roleFor`/`approvalNeeded`.
-
-**F18 — a behavior and a data cannot share a word.** A behavior generates a class from its name
-capitalized. This domain has words that are both noun and verb — you *open* an opportunity and you report
-on *open* opportunities; a *win rate* is a number and *working it out* is an operation; a *day load* is a
-report and *computing* one is a behavior. Three collisions, three renames (`openFromLead`, `winRateOf`,
-`dayLoadOf`), and the vocabulary is worse in three places for a reason no reader of the model can see.
-
-**F20 — a fixture cannot be named.** "`quoteAt10` is not a value a fixture can name" is the compiler's own
-wording. Every `example` row restates its whole input, so four rows checking a four-band approval matrix
-are four twenty-line quotes differing in one number, and `crm.examples.sou` exists at all because a
-`QualifiedLead` fixture is twelve fields. *Would fix it:* a named fixture and a spread over one —
-`fixture acme = QualifiedLead { … }`, then `QualifiedLead { ...acme, budgetConfirmed = false }`. This is
-the single biggest length reduction available to this example.
-
-**F21 — fixtures drag in imports the module does not use.** `nextStepFor` takes an `OpenOpportunity` and
-reads nothing from it but the stage; writing its `example` rows means importing the ten newtypes that
-appear anywhere inside a `NegotiationReview`. Ten of `activity.sou`'s imports exist for fixtures alone, and
-the import list stops describing what the module does.
-
-**F22 — a call's result cannot be reached into.** `amountOf(opp).value` does not parse, so opening a
-newtype is its own helper or its own binding. In `buildQuote` this nearly cost the `ValidityDays` newtype
-its only use: without a binding the range would have lived only in the `require`, and the type that exists
-to hold the rule would have stopped appearing in the code that applies it.
-
-**F10 — a regex cannot be named.** `String.matches` takes a string literal, which is right, but a
-module-level constant would be equally checkable and cannot be written. Six near-identical Salesforce id
-patterns, and `DomainName`'s pattern appears a second time as a guard, because there is no way to attempt a
-construction and be told it failed — the invariant that makes the type worth having is the invariant the
-caller has to restate to stay off the aborting path.
-
-### Working as designed, recorded so the next reader does not file it
-
-**F5 — no case for a division by zero.** Every division here is preceded by the `require` that makes zero
-unreachable, so no outcome union carries a `DivisionByZero` it could never return. The model not stating a
-case it cannot reach is the right answer; what is missing is the spec showing how to `match` the primitive
-arm of `Int | DivisionByZero` for the times a guard is not available.
-
-**F11 — an input union needs a name.** `OpenLead`, `Committed`, `OpenOpportunity`, `ClosedOpportunity` and
-`Decided` exist only to be input types. Naming them makes each sealed and every match over them
-exhaustive, and `closeLost`'s eight arms are safer for it.
-
-**F12 — a `Set` has no order.** Multi-threading a deal is a membership question and the next person to
-contact is an order question, so one is a `Set` and the other a `List`. Worth writing down because the
-temptation to reuse the set is strong.
-
-**F4 — a composition cannot carry an `example`.** `disqualifyAndNurture` and `closeAndSummarize` are the
-two most business-meaningful units in the model and the only two pinned by a test rather than at compile
-time (E1902). *Would fix it:* allow `example` on a `>->` composition, supplying the stages' dependencies
-with the same `fake` tables an example already accepts.
-
 ## Running
 
 Both from the `issuetracker` directory — it is its own Gradle build, not a Maven module.
@@ -713,146 +568,6 @@ atomicity — so a concurrent withdrawal cannot interleave and double-spend. A p
 exception) is not a case: it passes through `withdraw` untouched, `with-transaction` auto-rolls-back,
 and it propagates to the framework. The full platform-failure → 503 + rollback treatment against a
 real DB is shown by `ordering`, so account does not repeat it.
-
-### Dogfooding findings
-
-The `crm` example was written to put the language under a domain that fights back, and what it produced
-besides a model is this list. Every entry is a rule a real CRM enforces, what had to be written instead,
-and what would let it be written directly. Each one is also recorded in the `.sou` file at the
-declaration that hit it, the way `ordering/src/main/souther/returns.sou` records the construction-authority
-trap it ran into.
-
-### The rule could not be stated where it belongs
-
-**F1 — an aggregate that spans two contexts cannot be one operation.** Lead conversion produces an
-Account, a Contact *and* an Opportunity together; a conversion that made two of the three is a
-data-integrity bug. Account, Contact and Lead have to be one module, because a behavior constructs only
-what its own module declares; the Opportunity is built in `example.pipeline`; and the two are joined in
-Java, because a cross-module `>->` would put `crm`'s departed cases into a union `pipeline` declares
-(E1606). *Would fix it:* a translating composition — `crm.convertLead >-> openFromLead translating
-(crm.ConversionBlocked -> ConversionRefused)` — naming the local case each imported departure lands on.
-The compiler already computes the departed set; what is missing is the syntax to land it.
-
-**F23 — an imported behavior cannot be called at all.** `example.forecasting` needs each stage's
-probability, which `example.pipeline` owns and publishes as a behavior. Calling it is E1401, "neither a
-behavior nor a builtin", hinting at declaring an injected behavior instead. So the ten-arm mapping is
-copied into the consumer, and nothing but a comment keeps the two in step: a stage added to `pipeline`
-breaks three matches there and silently leaves `forecasting` weighing it at whatever its own copy says.
-The other route — re-declare it here as injected and bind `pipeline`'s implementation at the boundary —
-trades the compile-time checking for the single source. Neither keeps both. *Would fix it:* let a `let`
-call an imported behavior that has an implementation, which is what `>->` already does one stage at a
-time.
-
-**F3 — a sum cannot be a boundary map key, so a picklist is written twice.** `Map<Stage, Amount>` is the
-shape a pipeline report wants. What is written is `StageName`, a String-backed newtype, plus a total match
-turning each case into its own name — so ten stage names exist twice in `pipeline.sou` and five category
-names twice across `pipeline` and `forecasting`. *Would fix it:* admit a unit-only sum as a boundary map
-key, encoded as the case name. That is byte-for-byte what the `"type"` discriminator already does for the
-same type.
-
-**F6 — accumulating business failures has no form.** A CRM reports every reason a conversion is blocked;
-`require` returns one departure and stops. The reasons are built as a value instead — a list, wrapped in a
-non-empty newtype after the `require` that discharges it — which works and is the shape `businesstrip`
-established, but costs a named list type and an invariant per behavior that needs it, and cannot be
-composed across modules because each declares its own reason sum. *Would fix it:* the decode side already
-accumulates applicatively; a `require all` collecting several guards into one case carrying a list would
-give the behavior side the same shape.
-
-**F7 — a division cannot appear in an invariant.** A quote line's effective discount is
-`1 − net ÷ (quantity × list)`. `Decimal.divide` answers with a union and a union is not a `Bool`; the `/`
-operator aborts on a zero denominator, and a zero list price is representable, so the abort would happen
-inside an invariant check. Every ratio rule in `quoting.sou` is therefore written as the multiplication it
-implies. *Would fix it:* a total division that names its behaviour on zero — `Decimal.divideOr(fallback,
-a, b, scale, mode)` — which would be invariant-legal because it is total and answers with a `Decimal`.
-
-**F8 — sum-shaped absence cannot reach `List.filterMap`.** An activity about a Lead contributes no key to
-an account rollup. `filterMap` is the function for that shape, but its step must answer an optional and no
-user code can build one, so the projection answers with a list of nought or one and `concatMap` does the
-work. *Would fix it:* let `filterMap`'s step answer a 0-or-1 list as well as an optional, or let a `let`
-return `'b?` when its body is a total match whose arms are a value or nothing.
-
-**F13 — an `example` cannot name a case of a behavior's named-sum output.** `tierOf : (a: Account) ->
-AccountTier` with a row expecting `-> Enterprise` is E1904, hinting at `AccountTier` — but no value of type
-`AccountTier` can be written, and a case upcasts to its sum everywhere else. The output has to be spelled
-as the case list, which cost the tier vocabulary its name; `categoryOf` is written the same way for the
-same reason. This one reads as a defect rather than a design.
-
-**F15 — a behavior cannot decide that an optional is absent.** An optional field must be given a value
-explicitly (a spread does not supply it, E1005) and `None` is not a value a behavior body can write. So an
-absent optional can only be *passed on* from something that already holds one. `convertLead` carries the
-lead's title to the contact, which is also what Salesforce does — but the model had no other option, and a
-fixture can write `title = None` while the behavior beside it cannot.
-
-**F19 — a unit sum has no order, so the stages sort alphabetically.** The ten stages have a natural order:
-the order they are declared in, which is the order a deal moves through them. Nothing carries it, and
-`StageName` is a String, so `pipelineByStage` returns "Closed Lost" first. *Would fix it:* order a
-unit-only sum by its declaration order.
-
-### It could be stated, at several times the length
-
-**F2 — one concept, five money types.** `crm.Amount` for what a record states, plus `pipeline.StageTotal`,
-`quoting.LineTotal`, `quoting.QuoteTotal` and `forecasting.ForecastAmount` for what each context computes:
-five newtypes with the same invariant, because construction authority is per module. *Would fix it:* a
-construction grant on the owning declaration — `data Amount = Decimal invariant value >= 0.0m constructible
-by example.pipeline` — keeping the guarantee one-directional and explicit.
-
-**F16 — reading a field every case has costs an arm per case.** All ten states spread
-`OpportunityCommon`, so all ten have an id, an amount and a close date; a sum has no fields, so `idOf`,
-`amountOf` and `closeDateOf` are ten arms each, and `forecasting` writes four more of them. *Would fix it:*
-let a sum whose cases all spread a common type expose that type's fields.
-
-**F17 — a behavior cannot call another behavior in its own module.** Only the behaviors it `requires`.
-So anything two behaviors share is a helper, and a behavior that is also a building block needs a helper
-twin: `probabilityFor`/`probabilityOf`, `categoryFor`/`categoryOf`, `roleFor`/`approvalNeeded`.
-
-**F18 — a behavior and a data cannot share a word.** A behavior generates a class from its name
-capitalized. This domain has words that are both noun and verb — you *open* an opportunity and you report
-on *open* opportunities; a *win rate* is a number and *working it out* is an operation; a *day load* is a
-report and *computing* one is a behavior. Three collisions, three renames (`openFromLead`, `winRateOf`,
-`dayLoadOf`), and the vocabulary is worse in three places for a reason no reader of the model can see.
-
-**F20 — a fixture cannot be named.** "`quoteAt10` is not a value a fixture can name" is the compiler's own
-wording. Every `example` row restates its whole input, so four rows checking a four-band approval matrix
-are four twenty-line quotes differing in one number, and `crm.examples.sou` exists at all because a
-`QualifiedLead` fixture is twelve fields. *Would fix it:* a named fixture and a spread over one —
-`fixture acme = QualifiedLead { … }`, then `QualifiedLead { ...acme, budgetConfirmed = false }`. This is
-the single biggest length reduction available to this example.
-
-**F21 — fixtures drag in imports the module does not use.** `nextStepFor` takes an `OpenOpportunity` and
-reads nothing from it but the stage; writing its `example` rows means importing the ten newtypes that
-appear anywhere inside a `NegotiationReview`. Ten of `activity.sou`'s imports exist for fixtures alone, and
-the import list stops describing what the module does.
-
-**F22 — a call's result cannot be reached into.** `amountOf(opp).value` does not parse, so opening a
-newtype is its own helper or its own binding. In `buildQuote` this nearly cost the `ValidityDays` newtype
-its only use: without a binding the range would have lived only in the `require`, and the type that exists
-to hold the rule would have stopped appearing in the code that applies it.
-
-**F10 — a regex cannot be named.** `String.matches` takes a string literal, which is right, but a
-module-level constant would be equally checkable and cannot be written. Six near-identical Salesforce id
-patterns, and `DomainName`'s pattern appears a second time as a guard, because there is no way to attempt a
-construction and be told it failed — the invariant that makes the type worth having is the invariant the
-caller has to restate to stay off the aborting path.
-
-### Working as designed, recorded so the next reader does not file it
-
-**F5 — no case for a division by zero.** Every division here is preceded by the `require` that makes zero
-unreachable, so no outcome union carries a `DivisionByZero` it could never return. The model not stating a
-case it cannot reach is the right answer; what is missing is the spec showing how to `match` the primitive
-arm of `Int | DivisionByZero` for the times a guard is not available.
-
-**F11 — an input union needs a name.** `OpenLead`, `Committed`, `OpenOpportunity`, `ClosedOpportunity` and
-`Decided` exist only to be input types. Naming them makes each sealed and every match over them
-exhaustive, and `closeLost`'s eight arms are safer for it.
-
-**F12 — a `Set` has no order.** Multi-threading a deal is a membership question and the next person to
-contact is an order question, so one is a `Set` and the other a `List`. Worth writing down because the
-temptation to reuse the set is strong.
-
-**F4 — a composition cannot carry an `example`.** `disqualifyAndNurture` and `closeAndSummarize` are the
-two most business-meaningful units in the model and the only two pinned by a test rather than at compile
-time (E1902). *Would fix it:* allow `example` on a `>->` composition, supplying the stages' dependencies
-with the same `fake` tables an example already accepts.
 
 ## Running
 
