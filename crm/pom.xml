@@ -1,0 +1,40 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>example.souther</groupId>
+        <artifactId>souther-examples</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>crm</artifactId>
+
+    <description>
+        A CRM and sales-force-automation domain, and the largest example here: five Souther modules
+        under src/main/souther, compiled together in one build. example.crm holds the shared party
+        vocabulary, the Account, the Contact and the Lead lifecycle including conversion;
+        example.pipeline holds the ten-stage opportunity machine; example.activity the activity log,
+        recency and the next-step playbook; example.quoting the quote lines, the CPQ discount caps and
+        approval; example.forecasting the weighted forecast, fiscal periods and quota attainment. They
+        import in that order — crm is the vocabulary everyone speaks, forecasting sits under a diamond
+        and reaches it three ways. The domain rules are the ones a real CRM enforces: the ten
+        Salesforce stages with their probabilities, conversion reporting every blocking reason rather
+        than the first, duplicate screening that matches accounts on the email domain and contacts on
+        the exact address, and CPQ checking the blended discount as well as each line's.
+
+        The boundary is one JUnit smoke test per module and nothing else: no Spring, no jOOQ, no
+        database, no REST. Two of the four injected behaviors are bound from plain Java in the test
+        that needs them, which is all an injected behavior needs to be exercised; the other two are
+        pinned at compile time with `fake` and `example`. Where the language could not state a rule
+        directly, the file's header comment records what had to be written instead and what would let
+        it be written directly — dogfooding the language is why this example is this large.
+    </description>
+
+    <dependencies>
+        <!-- Souther 生成物のランタイムと、decoder/encoder の Result / Issues -->
+        <dependency><groupId>org.souther-lang</groupId><artifactId>souther-runtime</artifactId></dependency>
+        <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh</artifactId></dependency>
+    </dependencies>
+</project>

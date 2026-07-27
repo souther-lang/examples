@@ -1,0 +1,326 @@
+// Fixtures can live in a companion file when they outgrow the model. `examples for` names the module
+// and the compiler merges these rows with the ones written beside the behaviors in crm.sou. No import is
+// needed: the same module's data and behaviors are in scope bare.
+//
+// Conversion is what earns the companion. A QualifiedLead is WorkedLeadCommon over LeadCommon — twelve
+// fields — and every row also states a ConversionRequest and the two books the duplicate rules are
+// checked against. Four accounts and two contacts of fixture per row is the account book's whole shape,
+// which is the point: the rule reads a set, so the row has to show the set.
+//
+// crm.sou keeps the examples for the small transitions, because there the row is shorter than the
+// behavior and belongs next to it. One companion file, for the one behavior whose fixtures are bigger
+// than what they check.
+examples for example.crm
+
+// The books. Written once per row because a fixture is a value and there is nowhere to name one — every
+// row that needs the same book writes it again, which is the cost of examples being pure data.
+//
+// beta.example.com is the domain a duplicate row will hit; gamma has no domain on file at all, which is
+// what makes it the account a domain rule can never match.
+
+example convertLead
+    | "a clean conversion carries the lead's address to the contact and derives the account's domain" :
+        (QualifiedLead
+            { id = LeadId("00Q000000000001")
+            , person = PersonName("Aoyagi")
+            , company = CompanyName("Acme Corp")
+            , title = JobTitle("CTO")
+            , reach = EmailAndPhone { email = EmailAddress("cto@acme.example.com")
+                                    , phone = PhoneNumber("+81-3-1234-5678") }
+            , source = PartnerReferral { partner = AccountId("001000000000009") }
+            , campaigns = [ CampaignName("Q3 Expo") ]
+            , owner = UserId("u-001")
+            , createdOn = Date("2026-07-01")
+            , firstTouchedOn = Date("2026-07-03")
+            , touches = 3
+            , qualifiedOn = Date("2026-07-15")
+            , score = LeadScore(72)
+            , budgetConfirmed = true
+            },
+         ConversionRequest
+            { accountId = AccountId("001000000000100")
+            , contactId = ContactId("003000000000100")
+            , convertedOn = Date("2026-07-20")
+            , intent = OpportunityRequested { amount = Amount(4800000.00m), closeDate = Date("2026-09-30") }
+            , accountType = Prospect
+            , industry = Technology
+            , employees = EmployeeCount(420)
+            , currency = CurrencyCode("JPY")
+            },
+         AccountBook(
+            [ Account { id = AccountId("001000000000002"), name = CompanyName("Beta KK")
+                      , domain = DomainName("beta.example.com"), industry = Manufacturing
+                      , employees = EmployeeCount(999), type = Customer { since = Date("2024-04-01") }
+                      , owner = UserId("u-001"), currency = CurrencyCode("JPY") } ]),
+         ContactBook([ ]))
+        -> LeadConverted
+            { lead = ConvertedLead
+                { id = LeadId("00Q000000000001")
+                , person = PersonName("Aoyagi")
+                , company = CompanyName("Acme Corp")
+                , title = JobTitle("CTO")
+                , reach = EmailAndPhone { email = EmailAddress("cto@acme.example.com")
+                                        , phone = PhoneNumber("+81-3-1234-5678") }
+                , source = PartnerReferral { partner = AccountId("001000000000009") }
+                , campaigns = [ CampaignName("Q3 Expo") ]
+                , owner = UserId("u-001")
+                , createdOn = Date("2026-07-01")
+                , firstTouchedOn = Date("2026-07-03")
+                , touches = 3
+                , convertedOn = Date("2026-07-20")
+                , accountId = AccountId("001000000000100")
+                , contactId = ContactId("003000000000100")
+                }
+            , account = Account
+                { id = AccountId("001000000000100")
+                , name = CompanyName("Acme Corp")
+                , domain = DomainName("acme.example.com")   // derived from the address, not asked for
+                , industry = Technology
+                , employees = EmployeeCount(420)
+                , type = Prospect
+                , owner = UserId("u-001")
+                , currency = CurrencyCode("JPY")
+                }
+            , contact = Contact
+                { id = ContactId("003000000000100")
+                , accountId = AccountId("001000000000100")
+                , name = PersonName("Aoyagi")
+                , title = JobTitle("CTO")
+                , reach = EmailAndPhone { email = EmailAddress("cto@acme.example.com")
+                                        , phone = PhoneNumber("+81-3-1234-5678") }
+                }
+            , intent = OpportunityRequested { amount = Amount(4800000.00m), closeDate = Date("2026-09-30") }
+            }
+    | "filing a lead with no opportunity asked for needs no budget and no close date" :
+        (QualifiedLead
+            { id = LeadId("00Q000000000002")
+            , person = PersonName("Kawakami")
+            , company = CompanyName("Delta Inc")
+            , title = None
+            , reach = PhoneOnly { phone = PhoneNumber("+81-3-9999-0000") }
+            , source = ColdOutreach
+            , campaigns = [ ]
+            , owner = UserId("u-002")
+            , createdOn = Date("2026-06-01")
+            , firstTouchedOn = Date("2026-06-02")
+            , touches = 1
+            , qualifiedOn = Date("2026-06-20")
+            , score = LeadScore(61)
+            , budgetConfirmed = false
+            },
+         ConversionRequest
+            { accountId = AccountId("001000000000101")
+            , contactId = ContactId("003000000000101")
+            , convertedOn = Date("2026-06-25")
+            , intent = NoOpportunity
+            , accountType = Prospect
+            , industry = Retail
+            , employees = EmployeeCount(30)
+            , currency = CurrencyCode("JPY")
+            },
+         AccountBook([ ]), ContactBook([ ]))
+        -> LeadConverted
+    | "an opportunity asked for on an unconfirmed budget is blocked" :
+        (QualifiedLead
+            { id = LeadId("00Q000000000003")
+            , person = PersonName("Sasaki")
+            , company = CompanyName("Epsilon Ltd")
+            , title = None
+            , reach = EmailOnly { email = EmailAddress("s@epsilon.example.com") }
+            , source = WebForm
+            , campaigns = [ ]
+            , owner = UserId("u-002")
+            , createdOn = Date("2026-06-01")
+            , firstTouchedOn = Date("2026-06-02")
+            , touches = 2
+            , qualifiedOn = Date("2026-06-20")
+            , score = LeadScore(65)
+            , budgetConfirmed = false
+            },
+         ConversionRequest
+            { accountId = AccountId("001000000000102")
+            , contactId = ContactId("003000000000102")
+            , convertedOn = Date("2026-06-25")
+            , intent = OpportunityRequested { amount = Amount(1200000.00m), closeDate = Date("2026-08-31") }
+            , accountType = Prospect
+            , industry = Financial
+            , employees = EmployeeCount(80)
+            , currency = CurrencyCode("JPY")
+            },
+         AccountBook([ ]), ContactBook([ ]))
+        -> ConversionBlocked { reasons = BlockReasons([ BudgetNotConfirmed ]) }
+    | "a close date before the conversion is blocked, and the date it objects to is in the reason" :
+        (QualifiedLead
+            { id = LeadId("00Q000000000004")
+            , person = PersonName("Mori")
+            , company = CompanyName("Zeta GK")
+            , title = None
+            , reach = EmailOnly { email = EmailAddress("m@zeta.example.com") }
+            , source = WebForm
+            , campaigns = [ ]
+            , owner = UserId("u-002")
+            , createdOn = Date("2026-06-01")
+            , firstTouchedOn = Date("2026-06-02")
+            , touches = 2
+            , qualifiedOn = Date("2026-06-20")
+            , score = LeadScore(70)
+            , budgetConfirmed = true
+            },
+         ConversionRequest
+            { accountId = AccountId("001000000000103")
+            , contactId = ContactId("003000000000103")
+            , convertedOn = Date("2026-06-25")
+            , intent = OpportunityRequested { amount = Amount(500000.00m), closeDate = Date("2026-06-01") }
+            , accountType = Prospect
+            , industry = Retail
+            , employees = EmployeeCount(12)
+            , currency = CurrencyCode("JPY")
+            },
+         AccountBook([ ]), ContactBook([ ]))
+        -> ConversionBlocked { reasons = BlockReasons([ CloseDateInPast { requested = Date("2026-06-01") } ]) }
+    | "both reasons are reported at once, which is the whole point of collecting them" :
+        (QualifiedLead
+            { id = LeadId("00Q000000000005")
+            , person = PersonName("Ueda")
+            , company = CompanyName("Eta Co")
+            , title = None
+            , reach = EmailOnly { email = EmailAddress("u@eta.example.com") }
+            , source = WebForm
+            , campaigns = [ ]
+            , owner = UserId("u-002")
+            , createdOn = Date("2026-06-01")
+            , firstTouchedOn = Date("2026-06-02")
+            , touches = 2
+            , qualifiedOn = Date("2026-06-20")
+            , score = LeadScore(70)
+            , budgetConfirmed = false
+            },
+         ConversionRequest
+            { accountId = AccountId("001000000000104")
+            , contactId = ContactId("003000000000104")
+            , convertedOn = Date("2026-06-25")
+            , intent = OpportunityRequested { amount = Amount(500000.00m), closeDate = Date("2026-06-01") }
+            , accountType = Prospect
+            , industry = Retail
+            , employees = EmployeeCount(12)
+            , currency = CurrencyCode("JPY")
+            },
+         AccountBook([ ]), ContactBook([ ]))
+        -> ConversionBlocked
+            { reasons = BlockReasons([ BudgetNotConfirmed
+                                     , CloseDateInPast { requested = Date("2026-06-01") } ]) }
+    | "an account already on this domain blocks the conversion and names the account" :
+        (QualifiedLead
+            { id = LeadId("00Q000000000006")
+            , person = PersonName("Hirano")
+            , company = CompanyName("Beta KK")
+            , title = None
+            , reach = EmailOnly { email = EmailAddress("h@beta.example.com") }
+            , source = WebForm
+            , campaigns = [ ]
+            , owner = UserId("u-001")
+            , createdOn = Date("2026-06-01")
+            , firstTouchedOn = Date("2026-06-02")
+            , touches = 2
+            , qualifiedOn = Date("2026-06-20")
+            , score = LeadScore(80)
+            , budgetConfirmed = true
+            },
+         ConversionRequest
+            { accountId = AccountId("001000000000105")
+            , contactId = ContactId("003000000000105")
+            , convertedOn = Date("2026-06-25")
+            , intent = NoOpportunity
+            , accountType = Prospect
+            , industry = Manufacturing
+            , employees = EmployeeCount(999)
+            , currency = CurrencyCode("JPY")
+            },
+         AccountBook(
+            [ Account { id = AccountId("001000000000002"), name = CompanyName("Beta KK")
+                      , domain = DomainName("beta.example.com"), industry = Manufacturing
+                      , employees = EmployeeCount(999), type = Customer { since = Date("2024-04-01") }
+                      , owner = UserId("u-001"), currency = CurrencyCode("JPY") }
+            , Account { id = AccountId("001000000000003"), name = CompanyName("Gamma LLC")
+                      , domain = None, industry = Retail
+                      , employees = EmployeeCount(99), type = Prospect
+                      , owner = UserId("u-002"), currency = CurrencyCode("USD") } ]),
+         ContactBook([ ]))
+        -> ConversionBlocked
+            { reasons = BlockReasons([ DuplicateAccount { existing = AccountId("001000000000002") } ]) }
+
+// Screening is the same two rules, asked before anybody has been qualified. The two keys are what make
+// them two rules: an account is a company, so its key is the domain; a contact is a person, so its key is
+// the address.
+example screenForDuplicates
+    | "an account on the same domain is a possible duplicate" :
+        (NewLead
+            { id = LeadId("00Q000000000010")
+            , person = PersonName("Hirano")
+            , company = CompanyName("Beta KK")
+            , title = None
+            , reach = EmailOnly { email = EmailAddress("h@beta.example.com") }
+            , source = WebForm
+            , campaigns = [ ]
+            , owner = UserId("u-001")
+            , createdOn = Date("2026-07-01")
+            },
+         AccountBook(
+            [ Account { id = AccountId("001000000000002"), name = CompanyName("Beta KK")
+                      , domain = DomainName("beta.example.com"), industry = Manufacturing
+                      , employees = EmployeeCount(999), type = Customer { since = Date("2024-04-01") }
+                      , owner = UserId("u-001"), currency = CurrencyCode("JPY") } ]),
+         ContactBook([ ]))
+        -> PossibleDuplicate { accounts = [ AccountId("001000000000002") ], contacts = [ ] }
+    | "a contact on the same address is a possible duplicate, on the other key" :
+        (NewLead
+            { id = LeadId("00Q000000000011")
+            , person = PersonName("Aoyagi")
+            , company = CompanyName("Acme Corp")
+            , title = None
+            , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
+            , source = WebForm
+            , campaigns = [ ]
+            , owner = UserId("u-001")
+            , createdOn = Date("2026-07-01")
+            },
+         AccountBook([ ]),
+         ContactBook(
+            [ Contact { id = ContactId("003000000000001"), accountId = AccountId("001000000000001")
+                      , name = PersonName("Aoyagi"), title = JobTitle("CTO")
+                      , reach = EmailAndPhone { email = EmailAddress("cto@acme.example.com")
+                                              , phone = PhoneNumber("+81-3-1234-5678") } } ]))
+        -> PossibleDuplicate { accounts = [ ], contacts = [ ContactId("003000000000001") ] }
+    | "a lead reachable only by phone matches neither rule, and that is an answer" :
+        (NewLead
+            { id = LeadId("00Q000000000012")
+            , person = PersonName("Kawakami")
+            , company = CompanyName("Delta Inc")
+            , title = None
+            , reach = PhoneOnly { phone = PhoneNumber("+81-3-9999-0000") }
+            , source = PhoneInquiry
+            , campaigns = [ ]
+            , owner = UserId("u-002")
+            , createdOn = Date("2026-07-01")
+            },
+         AccountBook([ ]), ContactBook([ ]))
+        -> NoEmailOnLead
+    | "nothing on either key is a clean lead" :
+        (NewLead
+            { id = LeadId("00Q000000000013")
+            , person = PersonName("Sasaki")
+            , company = CompanyName("Gamma LLC")
+            , title = None
+            , reach = EmailOnly { email = EmailAddress("s@gamma.example.com") }
+            , source = WebForm
+            , campaigns = [ ]
+            , owner = UserId("u-002")
+            , createdOn = Date("2026-07-01")
+            },
+         AccountBook(
+            [ Account { id = AccountId("001000000000003"), name = CompanyName("Gamma LLC")
+                      , domain = None, industry = Retail
+                      , employees = EmployeeCount(99), type = Prospect
+                      , owner = UserId("u-002"), currency = CurrencyCode("USD") } ]),
+         ContactBook([ ]))
+        -> NoDuplicate

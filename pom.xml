@@ -19,7 +19,7 @@
     <modules>
         <module>sharedmoney</module>
         <module>invoicing</module>
-        <module>contact</module>
+        <module>crm</module>
         <module>joboffer</module>
         <module>businesstrip</module>
         <module>member</module>
