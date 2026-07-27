@@ -59,6 +59,7 @@ module example.crm exposing (
     Customer,
     Partner,
     Competitor,
+    AccountTier,
     Enterprise,
     MidMarket,
     SmallBusiness,
@@ -204,14 +205,9 @@ data Customer = { since: Date }
 data AccountType = Prospect | Customer | Partner | Competitor
 
 // Derived from the employee count by tierOf, never stored. A segment is a reading of the account, and a
-// stored reading is a reading that goes stale.
-//
-// The three tiers are declared by tierOf's output list rather than by a `data AccountTier = ...` line,
-// and not by preference: an `example` row cannot name a case of a behavior's *named* sum output. Writing
-// `-> AccountTier` and expecting `-> Enterprise` is E1904 ("`Enterprise` is not a result case of
-// `tierOf`", hinting at `AccountTier`), even though a case upcasts to its sum everywhere else and no
-// value of type `AccountTier` can be written. That is finding F13; the workaround costs the tier
-// vocabulary its name.
+// stored reading is a reading that goes stale. The three tiers are named together, so "which tier" is a
+// question with a type rather than three cases that only tierOf's signature holds side by side.
+data AccountTier = Enterprise | MidMarket | SmallBusiness
 
 // === The records ===
 
@@ -247,7 +243,7 @@ data ContactBook = List<Contact>
 // The thresholds are the ones an enterprise sales org actually runs on. Both sides of both are pinned
 // below, because a threshold with only one side tested is a threshold nobody has checked.
 
-behavior tierOf : (a: Account) -> Enterprise | MidMarket | SmallBusiness
+behavior tierOf : (a: Account) -> AccountTier
     constructs Enterprise, MidMarket, SmallBusiness
 
 let tierOf (a) =

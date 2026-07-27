@@ -93,7 +93,9 @@ returns `Result<T>`, and `Ok`/`Err` are told apart by pattern match — no wildc
 The `crm` example was written to put the language under a domain that fights back, and what it produced
 besides a model is this list. Every entry is a rule a real CRM enforces, what had to be written instead,
 and what would let it be written directly. Each one is also recorded in the `.sou` file at the
-declaration that hit it, so a reader meets the finding where the model shows it rather than only here.
+declaration that hit it, so a reader meets the finding where the model shows it rather than only here. A
+finding the compiler then fixes leaves the list, and the model is rewritten to the form it was asking for;
+F13 was the first, and `tierOf` and `categoryOf` now name the sums they answer with.
 
 ### The rule could not be stated where it belongs
 
@@ -136,12 +138,6 @@ rollup. `filterMap` is the function for that shape, and it is unreachable from a
 that would serve as the step cannot state its own return type. The projection answers a list of nought or
 one instead and `concatMap` does the work. *Would fix it:* let `filterMap`'s step answer a 0-or-1 list as
 well as an optional.
-
-**F13 — an `example` cannot name a case of a behavior's named-sum output.** `tierOf : (a: Account) ->
-AccountTier` with a row expecting `-> Enterprise` is E1904, hinting at `AccountTier` — but no value of type
-`AccountTier` can be written, and a case upcasts to its sum everywhere else. The output has to be spelled
-as the case list, which cost the tier vocabulary its name; `categoryOf` is written the same way for the
-same reason. This one reads as a defect rather than a design.
 
 **F15 — an absent optional has no name, only a trick.** An optional field must be given a value explicitly
 (a spread does not supply it, E1005) and `None` is not a value a behavior body can write. What is left is

@@ -422,10 +422,7 @@ let categoryFor (opp: Opportunity): ForecastCategory =
         | ClosedWon          -> Closed
         | ClosedLost         -> Omitted
 
-// The output is written as the case list rather than as `ForecastCategory`, because an `example` row cannot
-// name a case of a behavior's named-sum output (finding F13). The type still exists and
-// example.forecasting still imports it.
-behavior categoryOf : (opp: Opportunity) -> Pipeline | BestCase | Commit | Closed | Omitted
+behavior categoryOf : (opp: Opportunity) -> ForecastCategory
     constructs Pipeline, BestCase, Commit, Closed, Omitted
 
 let categoryOf (opp) = categoryFor(opp)
