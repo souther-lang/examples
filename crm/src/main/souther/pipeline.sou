@@ -93,7 +93,42 @@ module example.pipeline exposing (
     NoOpportunityRequested,
     probabilityOf,
     categoryOf,
-    profileOf
+    profileOf,
+    // The transitions are the module's interface: a boundary drives a deal through them and a downstream
+    // context takes a state type as an input. Listing a behavior only settles its visibility on the JVM,
+    // though — another Souther module can import the name and still not call it (F23), so `exposing` a
+    // behavior is a statement about the Java side and nothing else.
+    qualifyOpportunity,
+    AmountNotStated,
+    recordNeeds,
+    NoNeedsRecorded,
+    proposeValue,
+    BusinessCaseMissesNeeds,
+    identifyDecisionMakers,
+    NoDecisionMakers,
+    assessPerception,
+    ChampionNotADecisionMaker,
+    sendProposal,
+    ProposalAfterCloseDate,
+    withdrawProposal,
+    openNegotiation,
+    FloorAboveAsk,
+    closeWon,
+    BelowFloor,
+    closeLost,
+    lossFollowUp,
+    CompetitiveIntel,
+    Renurture,
+    PriceReview,
+    NoFollowUp,
+    slipCloseDate,
+    NotASlip,
+    summarizeWin,
+    pipelineByStage,
+    topDeals,
+    winRateOf,
+    NoClosedDeals,
+    closeAndSummarize : WinSummary | BelowFloor
 )
 import example.crm ( AccountId, ContactId, UserId, CompanyName, Amount, CurrencyCode
                    , LeadConverted, OpportunityIntent, NoOpportunity, OpportunityRequested )
