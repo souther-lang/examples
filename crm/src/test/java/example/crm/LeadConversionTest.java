@@ -1,5 +1,11 @@
 package example.crm;
 
+import example.pipeline.NextOpportunityId;
+import example.pipeline.NoOpportunityRequested;
+import example.pipeline.OpenFromLead;
+import example.pipeline.OpportunityId;
+import example.pipeline.Prospecting;
+
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Path;
@@ -101,6 +107,47 @@ class LeadConversionTest {
         assertInstanceOf(NoEmailOnLead.class, link.apply(phoneOnlyLead()));
     }
 
+    @Test
+    void theThirdLegOfConversionIsBuiltByTheContextThatOwnsIt() {
+        // This is the CRM-to-SFA seam, and it is two calls with a Java line between them rather than one
+        // composition: a cross-module `>->` would put crm's departed cases into a union example.pipeline
+        // declares, which the compiler refuses. So the account and the contact are built here, the
+        // opportunity is built there, and the boundary is what joins them.
+        LeadConverted converted = assertInstanceOf(LeadConverted.class, ConvertLead.of().apply(
+                qualifiedLead(true), request("2026-07-20", "2026-09-30"), emptyAccounts(), emptyContacts()));
+
+        OpenFromLead open = OpenFromLead.bind(new SequentialOpportunityIds());
+        Prospecting opened = assertInstanceOf(Prospecting.class, open.apply(converted));
+
+        assertEquals("006000000000001", opened.id().value());
+        assertEquals("Acme Corp — New Business", opened.name().value(),
+                "the name is built from the account's, not typed in");
+        assertEquals("001000000000100", opened.accountId().value());
+
+        // A conversion that asked for no opportunity gets pipeline's own case back. crm's NoOpportunity
+        // went in; NoOpportunityRequested came out, because a context that declines states its own
+        // declining.
+        LeadConverted filedOnly = assertInstanceOf(LeadConverted.class, ConvertLead.of().apply(
+                qualifiedLead(true), requestWithoutOpportunity(), emptyAccounts(), emptyContacts()));
+        assertInstanceOf(NoOpportunityRequested.class, open.apply(filedOnly));
+    }
+
+    /**
+     * The zero-argument injected behavior — the one shape that produces rather than transforms, so its
+     * generated base declares {@code apply()} with no input at all. The id comes from the protected factory
+     * the base inherits, which is the only way a non-public constructor is reachable.
+     */
+    static final class SequentialOpportunityIds extends NextOpportunityId {
+
+        private int minted = 0;
+
+        @Override
+        public OpportunityId apply() {
+            minted = minted + 1;
+            return OpportunityId(String.format("006%012d", minted));
+        }
+    }
+
     /**
      * The injected lookup, implemented over a map. The success value comes back through the generated
      * decoder because an implementation is not granted the constructor; the failure comes from the
@@ -157,6 +204,18 @@ class LeadConversionTest {
                 "convertedOn", LocalDate.parse(convertedOn),
                 "intent", Map.of("type", "OpportunityRequested",
                         "amount", new java.math.BigDecimal("4800000.00"), "closeDate", LocalDate.parse(closeDate)),
+                "accountType", Map.of("type", "Prospect"),
+                "industry", Map.of("type", "Technology"),
+                "employees", 420,
+                "currency", "JPY"), Path.ROOT));
+    }
+
+    private static ConversionRequest requestWithoutOpportunity() {
+        return ok(ConversionRequest.decoder().decode(Map.of(
+                "accountId", "001000000000101",
+                "contactId", "003000000000101",
+                "convertedOn", LocalDate.parse("2026-07-20"),
+                "intent", Map.of("type", "NoOpportunity"),
                 "accountType", Map.of("type", "Prospect"),
                 "industry", Map.of("type", "Technology"),
                 "employees", 420,
