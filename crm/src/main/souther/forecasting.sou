@@ -50,9 +50,6 @@ data FiscalPeriod = String
 data CategoryName = String
     invariant String.length(value) >= 1
 
-data ForecastAmount = Decimal
-    invariant value >= 0.0m
-
 // A zero quota is not a target, so it is not a quota.
 data Quota = Decimal
     invariant value > 0.0m
@@ -67,26 +64,26 @@ data Attainment = Int
 data Forecast =
     { owner: UserId
     , periods: List<FiscalPeriod>
-    , byPeriod: Map<FiscalPeriod, ForecastAmount>
-    , total: ForecastAmount
+    , byPeriod: Map<FiscalPeriod, Amount>
+    , total: Amount
     , dealCount: Int
     }
 
 data CategoryRollup =
-    { byCategory: Map<CategoryName, ForecastAmount>
+    { byCategory: Map<CategoryName, Amount>
     , countByCategory: Map<CategoryName, Int>
     }
 
 data RiskReport =
     { atRisk: List<OpportunityId>
-    , atRiskAmount: ForecastAmount
+    , atRiskAmount: Amount
     , healthy: Int
     }
 
 data Leaderboard = { owners: List<UserId> }
 
 data OnTrack      = { attainment: Attainment }
-data ShortOfQuota = { gap: ForecastAmount, attainment: Attainment }
+data ShortOfQuota = { gap: Amount, attainment: Attainment }
 
 // === periodOf: the key the domain builds ===
 // Salesforce's fiscal year starts in a month the org chooses, so the month is a parameter rather than a
@@ -210,7 +207,7 @@ let addToPeriod (acc: Map<FiscalPeriod, Decimal>, opp: OpenOpportunity, fyStart:
 
 behavior weightedForecast : (owner: UserId, opps: List<OpenOpportunity>, fiscalYearStartMonth: Int)
         -> Forecast | InvalidFiscalYearStart
-    constructs Forecast, FiscalPeriod, ForecastAmount, InvalidFiscalYearStart
+    constructs Forecast, FiscalPeriod, Amount, InvalidFiscalYearStart
 
 let weightedForecast (owner, opps, fiscalYearStartMonth) = {
     require fiscalYearStartMonth >= 1 && fiscalYearStartMonth <= 12 else InvalidFiscalYearStart
@@ -218,8 +215,8 @@ let weightedForecast (owner, opps, fiscalYearStartMonth) = {
         List.fold((acc, opp) -> addToPeriod(acc, opp, fiscalYearStartMonth), Map.empty(), opps)
     Forecast { owner = owner
              , periods = List.sort(Map.keys(byPeriod))
-             , byPeriod = Map.map((period, weighted) -> ForecastAmount(weighted), byPeriod)
-             , total = ForecastAmount(List.fold((acc, w) -> Decimal.add(acc, w), 0.0m,
+             , byPeriod = Map.map((period, weighted) -> Amount(weighted), byPeriod)
+             , total = Amount(List.fold((acc, w) -> Decimal.add(acc, w), 0.0m,
                                                 Map.values(byPeriod)))
              , dealCount = List.length(opps)
              }
@@ -242,8 +239,8 @@ example weightedForecast
         -> Forecast
             { owner = UserId("u-001")
             , periods = [ FiscalPeriod("FY26-Q3") ]
-            , byPeriod = [ (FiscalPeriod("FY26-Q3"), ForecastAmount(100000.00m)) ]
-            , total = ForecastAmount(100000.00m)
+            , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(100000.00m)) ]
+            , total = Amount(100000.00m)
             , dealCount = 1
             }
     | "two deals in one quarter add up rather than replacing each other" :
@@ -272,8 +269,8 @@ example weightedForecast
         -> Forecast
             { owner = UserId("u-001")
             , periods = [ FiscalPeriod("FY26-Q3") ]
-            , byPeriod = [ (FiscalPeriod("FY26-Q3"), ForecastAmount(150000.00m)) ]
-            , total = ForecastAmount(150000.00m)
+            , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ]
+            , total = Amount(150000.00m)
             , dealCount = 2
             }
     | "an empty pipeline is a forecast of nothing, not a missing forecast" :
@@ -282,7 +279,7 @@ example weightedForecast
             { owner = UserId("u-001")
             , periods = [ ]
             , byPeriod = [ ]
-            , total = ForecastAmount(0.0m)
+            , total = Amount(0.0m)
             , dealCount = 0
             }
     | "there is still no thirteenth month" :
@@ -320,7 +317,7 @@ let amountOfAny (opp: Opportunity): Decimal =
         | ClosedLost { amount }         -> amount.value
 
 behavior categoryRollupOf : (opps: List<Opportunity>) -> CategoryRollup
-    constructs CategoryRollup, CategoryName, ForecastAmount
+    constructs CategoryRollup, CategoryName, Amount
 
 let categoryRollupOf (opps) = {
     let money: Map<CategoryName, Decimal> =
@@ -328,7 +325,7 @@ let categoryRollupOf (opps) = {
                                            running -> Decimal.add(running, amountOfAny(opp)), acc),
                   Map.empty(), opps)
     CategoryRollup
-        { byCategory = Map.map((name, total) -> ForecastAmount(total), money)
+        { byCategory = Map.map((name, total) -> Amount(total), money)
         , countByCategory = List.fold((acc, opp) -> Map.upsert(categoryNameOf(opp), 1, n -> n + 1, acc),
                                       Map.empty(), opps)
         }
@@ -348,11 +345,11 @@ let isCommit (opp: OpenOpportunity): Bool =
         | PerceptionAnalysis -> false
         | ProposalPriceQuote -> false
 
-behavior commitNumber : (opps: List<OpenOpportunity>) -> ForecastAmount
-    constructs ForecastAmount
+behavior commitNumber : (opps: List<OpenOpportunity>) -> Amount
+    constructs Amount
 
 let commitNumber (opps) =
-    ForecastAmount(List.fold((acc, opp) -> Decimal.add(acc, amountOfOpen(opp)), 0.0m,
+    Amount(List.fold((acc, opp) -> Decimal.add(acc, amountOfOpen(opp)), 0.0m,
                              List.filter(opp -> isCommit(opp), opps)))
 
 // === quotaFor and attainment ===
@@ -374,7 +371,7 @@ let attainmentOf (forecast: Decimal, quota: Decimal): Attainment =
 
 behavior quotaGap : (forecast: Forecast, quota: Quota, period: FiscalPeriod)
         -> OnTrack | ShortOfQuota | NoForecastForPeriod
-    constructs OnTrack, ShortOfQuota, NoForecastForPeriod, ForecastAmount, Attainment
+    constructs OnTrack, ShortOfQuota, NoForecastForPeriod, Amount, Attainment
 
 let quotaGap (forecast, quota, period) =
     match Map.get(period, forecast.byPeriod) with
@@ -382,7 +379,7 @@ let quotaGap (forecast, quota, period) =
         | Some got ->
             if Decimal.compare(got.value, quota.value) >= 0
             then OnTrack { attainment = attainmentOf(got.value, quota.value) }
-            else ShortOfQuota { gap = ForecastAmount(Decimal.subtract(quota.value, got.value))
+            else ShortOfQuota { gap = Amount(Decimal.subtract(quota.value, got.value))
                               , attainment = attainmentOf(got.value, quota.value)
                               }
 
@@ -391,8 +388,8 @@ example quotaGap
         (Forecast
             { owner = UserId("u-001")
             , periods = [ FiscalPeriod("FY26-Q3") ]
-            , byPeriod = [ (FiscalPeriod("FY26-Q3"), ForecastAmount(150000.00m)) ]
-            , total = ForecastAmount(150000.00m)
+            , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ]
+            , total = Amount(150000.00m)
             , dealCount = 1
             },
          Quota(100000.00m), FiscalPeriod("FY26-Q3"))
@@ -401,18 +398,18 @@ example quotaGap
         (Forecast
             { owner = UserId("u-001")
             , periods = [ FiscalPeriod("FY26-Q3") ]
-            , byPeriod = [ (FiscalPeriod("FY26-Q3"), ForecastAmount(150000.00m)) ]
-            , total = ForecastAmount(150000.00m)
+            , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ]
+            , total = Amount(150000.00m)
             , dealCount = 1
             },
          Quota(200000.00m), FiscalPeriod("FY26-Q3"))
-        -> ShortOfQuota { gap = ForecastAmount(50000.00m), attainment = Attainment(75) }
+        -> ShortOfQuota { gap = Amount(50000.00m), attainment = Attainment(75) }
     | "a quarter with no deals in it has no forecast, which is not a forecast of nothing" :
         (Forecast
             { owner = UserId("u-001")
             , periods = [ FiscalPeriod("FY26-Q3") ]
-            , byPeriod = [ (FiscalPeriod("FY26-Q3"), ForecastAmount(150000.00m)) ]
-            , total = ForecastAmount(150000.00m)
+            , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ]
+            , total = Amount(150000.00m)
             , dealCount = 1
             },
          Quota(100000.00m), FiscalPeriod("FY26-Q4"))
@@ -424,7 +421,7 @@ example quotaGap
 behavior attainmentFor : (owner: UserId, forecast: Forecast, period: FiscalPeriod)
         -> OnTrack | ShortOfQuota | NoForecastForPeriod
     requires quotaFor
-    constructs OnTrack, ShortOfQuota, NoForecastForPeriod, ForecastAmount, Attainment
+    constructs OnTrack, ShortOfQuota, NoForecastForPeriod, Amount, Attainment
 
 let attainmentFor (owner, forecast, period, quotaFor) =
     match Map.get(period, forecast.byPeriod) with
@@ -433,7 +430,7 @@ let attainmentFor (owner, forecast, period, quotaFor) =
             let quota = quotaFor(owner, period)
             if Decimal.compare(got.value, quota.value) >= 0
             then OnTrack { attainment = attainmentOf(got.value, quota.value) }
-            else ShortOfQuota { gap = ForecastAmount(Decimal.subtract(quota.value, got.value))
+            else ShortOfQuota { gap = Amount(Decimal.subtract(quota.value, got.value))
                               , attainment = attainmentOf(got.value, quota.value)
                               }
         }
@@ -450,8 +447,8 @@ example attainmentFor
          Forecast
             { owner = UserId("u-001")
             , periods = [ FiscalPeriod("FY26-Q3") ]
-            , byPeriod = [ (FiscalPeriod("FY26-Q3"), ForecastAmount(150000.00m)) ]
-            , total = ForecastAmount(150000.00m)
+            , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ]
+            , total = Amount(150000.00m)
             , dealCount = 1
             },
          FiscalPeriod("FY26-Q3"))
@@ -461,12 +458,12 @@ example attainmentFor
          Forecast
             { owner = UserId("u-002")
             , periods = [ FiscalPeriod("FY26-Q3") ]
-            , byPeriod = [ (FiscalPeriod("FY26-Q3"), ForecastAmount(150000.00m)) ]
-            , total = ForecastAmount(150000.00m)
+            , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ]
+            , total = Amount(150000.00m)
             , dealCount = 1
             },
          FiscalPeriod("FY26-Q3"))
-        -> ShortOfQuota { gap = ForecastAmount(350000.00m), attainment = Attainment(30) }
+        -> ShortOfQuota { gap = Amount(350000.00m), attainment = Attainment(30) }
 
 // === dealsAtRisk ===
 // A commit-category deal with no activity inside the cadence is the deal inspection question. It reads
@@ -488,14 +485,14 @@ let accountOfOpen (opp: OpenOpportunity): AccountId =
 
 behavior dealsAtRisk : (opps: List<OpenOpportunity>, stale: StaleReport, staleAfter: Int)
         -> RiskReport | NoActivityRecorded
-    constructs RiskReport, ForecastAmount, NoActivityRecorded
+    constructs RiskReport, Amount, NoActivityRecorded
 
 let dealsAtRisk (opps, stale, staleAfter) = {
     require Map.size(stale.daysSince) >= 1 else NoActivityRecorded
     let (risky, healthy) =
         List.partition(opp -> isCommit(opp) && staleDaysOf(opp, stale) >= staleAfter, opps)
     RiskReport { atRisk = List.map(opp -> idOfOpen(opp), risky)
-               , atRiskAmount = ForecastAmount(List.fold((acc, opp) -> Decimal.add(acc, amountOfOpen(opp)),
+               , atRiskAmount = Amount(List.fold((acc, opp) -> Decimal.add(acc, amountOfOpen(opp)),
                                                          0.0m, risky))
                , healthy = List.length(healthy)
                }
@@ -509,22 +506,22 @@ let dealsAtRisk (opps, stale, staleAfter) = {
 let mergeForecast (acc: Map<FiscalPeriod, Decimal>, one: Forecast): Map<FiscalPeriod, Decimal> =
     List.fold((inner, entry) -> mergeEntry(inner, entry), acc, Map.toList(one.byPeriod))
 
-let mergeEntry (acc: Map<FiscalPeriod, Decimal>, entry: (FiscalPeriod, ForecastAmount))
+let mergeEntry (acc: Map<FiscalPeriod, Decimal>, entry: (FiscalPeriod, Amount))
         : Map<FiscalPeriod, Decimal> = {
     let (period, amount) = entry
     Map.upsert(period, amount.value, running -> Decimal.add(running, amount.value), acc)
 }
 
 behavior rollupTeam : (manager: UserId, forecasts: List<Forecast>) -> Forecast
-    constructs Forecast, ForecastAmount
+    constructs Forecast, Amount
 
 let rollupTeam (manager, forecasts) = {
     let byPeriod: Map<FiscalPeriod, Decimal> =
         List.fold((acc, one) -> mergeForecast(acc, one), Map.empty(), forecasts)
     Forecast { owner = manager
              , periods = List.sort(Map.keys(byPeriod))
-             , byPeriod = Map.map((period, total) -> ForecastAmount(total), byPeriod)
-             , total = ForecastAmount(List.fold((acc, w) -> Decimal.add(acc, w), 0.0m,
+             , byPeriod = Map.map((period, total) -> Amount(total), byPeriod)
+             , total = Amount(List.fold((acc, w) -> Decimal.add(acc, w), 0.0m,
                                                 Map.values(byPeriod)))
              , dealCount = List.fold((acc, one) -> acc + one.dealCount, 0, forecasts)
              }
