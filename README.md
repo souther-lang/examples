@@ -675,6 +675,12 @@ so it carries a single minimal `package-info.java` to trigger the processor. **T
 that generated output (`target/classes`) straight on its classpath** (`target/classes` is in
 `:paths` in `deps.edn`).
 
+The `:gen` alias is the one place that must not see it, which is what its `:replace-paths` says. A
+module the compiler is compiling may not also be on its path — one name cannot mean two modules — and
+`target/classes` holds `example.account` from the run before, so generating a second time without
+this fails on the module the first run wrote. The alias keeps `souther-clj/src`, where
+`souther.build` lives, and nothing else.
+
 ### Implementing an injected behavior from Clojure — `proxy` + `decoder()`
 
 The generated injected behaviors are **abstract base classes** (`CurrentBalance` implements
