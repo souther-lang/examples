@@ -301,10 +301,10 @@ let lastActivityOn (activities, today) = {
 // closest touch, not the total of them. The absent branch inserts this activity's own figure, which is what
 // makes the first activity of every account count.
 //
-// The projection to a key is where absence is sum-shaped: an activity about a lead has no account to roll
-// up to. List.filterMap is the function for this, but its step has to answer an optional and no user code
-// can build one, so the projection answers with a list of nought or one and concatMap does the work.
-// Finding F8.
+// The projection to a key is where absence is the model's own: an activity about a lead has no account to
+// roll up to. List.filterMap serves absence the model reads — a `?` field, a lookup that misses — and this
+// absence is a case of RelatedTo, which nothing can turn into an optional. So the projection answers with a
+// list of nought or one and concatMap does the work. Finding F8.
 let accountKeyOf (a: Activity): List<AccountId> =
     match relatedOf(a) with
         | RelatedToAccount { accountId }     -> [ accountId ]

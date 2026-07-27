@@ -132,19 +132,6 @@ composed across modules because each declares its own reason sum. *Would fix it:
 accumulates applicatively; a `require all` collecting several guards into one case carrying a list would
 give the behavior side the same shape.
 
-**F8 — `List.filterMap` cannot be given a step.** An activity about a Lead contributes no key to an account
-rollup. `filterMap` is the function for that shape, and it is unreachable from a model: its step answers
-`'b?`, and an optional type may be written on a data field or in the core and nowhere else, so a helper
-that would serve as the step cannot state its own return type. The projection answers a list of nought or
-one instead and `concatMap` does the work. *Would fix it:* let `filterMap`'s step answer a 0-or-1 list as
-well as an optional.
-
-**F15 — an absent optional has no name, only a trick.** An optional field must be given a value explicitly
-(a spread does not supply it, E1005) and `None` is not a value a behavior body can write. What is left is
-`List.get(0, [])` — asking an empty list for an element — which compiles, encodes to a field that is simply
-not there, and says nothing about intent. A fixture writes `title = None`; the behavior beside it writes an
-empty-list lookup for the same value.
-
 **F19 — a unit sum has no order, so the stages sort alphabetically.** The ten stages have a natural order:
 the order they are declared in, which is the order a deal moves through them. Nothing carries it, and
 `StageName` is a String, so `pipelineByStage` returns "Closed Lost" first. *Would fix it:* order a
@@ -203,6 +190,16 @@ with the same `fake` tables an example already accepts.
 unreachable, so no outcome union carries a `DivisionByZero` it could never return. The model not stating a
 case it cannot reach is the right answer; what is missing is the spec showing how to `match` the primitive
 arm of `Int | DivisionByZero` for the times a guard is not available.
+
+**F8 — `List.filterMap` serves only the absence a model reads.** An activity about a Lead contributes no key
+to an account rollup, and `filterMap` is the function for that shape. Its step has to answer an optional,
+and the only optionals a model has are ones it read — a `?` field, `Map.get`, `List.find` — or one it made
+by giving a `?` field a value. Absence that is a case of the model's own sum is neither, so the projection
+answers a list of nought or one and `concatMap` does the work. That is the decision, not a gap: absence a
+model owns is a case of its sum, and a `filterMap` step that took a plain value would stop dropping
+anything. The step needs no annotation to be named — a helper that leaves its result type off has the
+optional inferred, so `filterMap(assigneeOf, issues)` is writable; writing `Name?` is what the rule
+refuses.
 
 **F11 — an input union needs a name.** `OpenLead`, `Committed`, `OpenOpportunity`, `ClosedOpportunity` and
 `Decided` exist only to be input types. Naming them makes each sealed and every match over them

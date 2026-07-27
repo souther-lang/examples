@@ -733,9 +733,9 @@ behavior disqualifyAndNurture = disqualifyLead >-> nurturePlan
 // on the *exact* address. They are different rules and they stay two rules here, over two books handed
 // in as data. A phone-only lead matches neither, and that is a third answer rather than an empty result.
 
-// Absence is a sum here (PhoneOnly has no address), and List.filterMap cannot be reached from
-// sum-shaped absence because its step has to answer an optional and no user function can build one. So
-// the projection is a 0-or-1-element list and the combinator is concatMap. Finding F8.
+// Absence is the model's own here (PhoneOnly has no address). List.filterMap serves absence the model
+// reads — a `?` field, a lookup that misses — and a case of ContactPoint is not that: nothing turns it
+// into an optional. So the projection is a 0-or-1-element list and the combinator is concatMap. Finding F8.
 let emailOf (reach: ContactPoint): List<EmailAddress> =
     match reach with
         | EmailOnly { email }     -> [ email ]
@@ -993,11 +993,9 @@ let convertLead (lead, request, accounts, contacts) = {
         // The reach is carried, not rebuilt. A converted lead's address IS the contact's address, and
         // passing a value through is not construction, so ContactPoint is not in `constructs`.
         //
-        // The title is carried from the lead, which is what Salesforce's conversion does. Writing it absent
-        // instead is possible but has no name: an optional field must be given a value explicitly (a spread
-        // does not supply it, E1005), `None` is not a value a behavior body can write (Option is
-        // non-surface), and what is left is `List.get(0, [])` — an absence obtained by asking an empty list
-        // for an element. Finding F15.
+        // The title is carried from the lead, which is what Salesforce's conversion does. Dropping it
+        // instead would be `title = None`: an optional field has to be given a value explicitly, since a
+        // spread does not supply it (E1005), and `None` is the empty one to give it.
         , contact = Contact { id = request.contactId
                             , accountId = request.accountId
                             , name = lead.person
