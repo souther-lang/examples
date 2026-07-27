@@ -1,5 +1,12 @@
 # Souther examples
 
+Examples for [Souther](https://github.com/souther-lang/souther), kept in their own repository
+because they move on the compiler's schedule for the language and on Spring / jOOQ / Kotlin's
+schedule for the boundary code, and those two are not the same.
+
+They are MIT-licensed, rather than EPL-2.0 like the compiler, so that a project can copy what it
+needs from here without taking anything on.
+
 These examples exercise the whole Souther development lifecycle — write `.sou`, generate, use the
 generated types from typed code, compile and test. Each business unit is an independent Maven
 module: it generates types from its `.sou`, uses them from typed code, and runs a smoke test over
@@ -19,7 +26,7 @@ types into `target/classes`. Because `target/classes` is on javac's compile clas
 hand-written code (and the smoke tests) **compile directly against those generated types**. No exec
 step, no separate module, no Souther-specific plugin.
 
-The whole Maven wiring is just this (set once for all modules in `examples/pom.xml`):
+The whole Maven wiring is just this (set once for all modules in the root `pom.xml`):
 
 ```xml
 <plugin>
@@ -77,13 +84,21 @@ returns `Result<T>`, and `Ok`/`Err` are told apart by pattern match — no wildc
 
 ## Running
 
+The examples track the compiler's `develop`, so they build against `souther.version` in the root
+`pom.xml` — currently a `-SNAPSHOT`, which is not published anywhere. Install it from the compiler
+repository first:
+
 ```sh
-mvn -o install -DskipTests              # core (souther-runtime / souther-compiler) into ~/.m2
-mvn -o -f examples/pom.xml verify       # generate → compile → smoke-test every example (except account, which is Clojure — below)
+git clone https://github.com/souther-lang/souther.git
+mvn -f souther/pom.xml install -DskipTests   # souther-runtime / souther-compiler into ~/.m2
+mvn verify                                   # generate → compile → smoke-test every example
 ```
 
-This is kept independent of the core reactor (the root `mvn test`) so the Spring/jOOQ dependencies
-do not weigh the core build down.
+`account` is Clojure and is not a Maven module, so `verify` does not build it — see below.
+
+CI does the same two steps: it checks out `souther-lang/souther` at `develop`, installs it, and then
+runs `mvn verify` here. A change in the compiler that breaks an example turns this build red on the
+next run.
 
 `ordering` and `issuetracker` actually start Spring Boot, and `issuetracker` also needs the Kotlin
 compiler, so **the first build needs network to fetch the starters and kotlin-maven-plugin** (run it
@@ -276,8 +291,8 @@ table is no case at all — it passes through Souther as an exception and become
 ### Running
 
 ```sh
-mvn -o -f examples/pom.xml -pl issuetracker verify   # generate → kotlinc → boot → real HTTP over H2
-mvn -f examples/issuetracker/pom.xml spring-boot:run # starts on localhost:8080
+mvn -o -pl issuetracker verify                 # generate → kotlinc → boot → real HTTP over H2
+mvn -f issuetracker/pom.xml spring-boot:run    # starts on localhost:8080
 ```
 
 ```sh
@@ -363,7 +378,7 @@ Generate the types first, then run Clojure (Clojure lives outside the Maven reac
 JDK compiler API (`souther.build/generate!`), with `souther-compiler` on the alias classpath only:
 
 ```sh
-cd examples/account
+cd account
 clojure -X:gen                                   # .sou → target/classes (the .sou examples are checked here too)
 clojure -X:test                                  # the souther-clj library, behavior+DB, and Pedestal boundary tests (20 of them)
 clojure -M:run                                   # starts on localhost:8890
@@ -382,6 +397,6 @@ curl -X POST localhost:8890/withdrawals \
 ```
 
 > Clojure / Pedestal / next.jdbc are fetched from clojars / Central on the first run, so **it needs
-> network** (once they are in `~/.m2` and gitlibs, no more). `mvn -o -f examples/pom.xml verify` does
+> network** (once they are in `~/.m2` and gitlibs, no more). `mvn -o verify` does
 > not include this Clojure app (a separate toolchain). The account module itself is generated and
 > checked offline, like the others.

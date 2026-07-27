@@ -11,8 +11,9 @@
     <description>
         Souther の開発ライフサイクルを検証する例。各モジュールは .sou を持ち、javac の
         アノテーションプロセッサ SoutherProcessor が生成した型を、型付きの Java から使う。
-        コア reactor とは独立していて、`mvn -o -f examples/pom.xml verify` でまとめて検証する。
-        （先に `mvn -o install` でコア成果物を ~/.m2 に入れておくこと。）
+        souther-lang/souther とは別リポジトリで、`mvn verify` でまとめて検証する。
+        （souther.version は SNAPSHOT なので、先に souther-lang/souther を
+        `mvn install` して ~/.m2 に入れておくこと。）
     </description>
 
     <modules>
