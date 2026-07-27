@@ -29,8 +29,8 @@ class PureBehaviorTest {
     fun `a JSON array of labels decodes into a deduplicated Set`() {
         val issue = issue("i-1", "crash on save", listOf("bug", "ui", "bug"))
 
-        assertEquals(setOf("bug", "ui"), issue.labels().map { it.value() }.toSet())
-        assertEquals(2, issue.labels().size, "the repeated label collapsed on decode")
+        assertEquals(setOf("bug", "ui"), issue.labels.map { it.value }.toSet())
+        assertEquals(2, issue.labels.size, "the repeated label collapsed on decode")
     }
 
     @Test
