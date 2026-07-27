@@ -21,7 +21,6 @@
         <module>invoicing</module>
         <module>contact</module>
         <module>joboffer</module>
-        <module>issuetracker</module>
         <module>businesstrip</module>
         <module>member</module>
         <module>ordering</module>

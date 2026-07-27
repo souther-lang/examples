@@ -69,7 +69,7 @@ processor follows `SOUTHER_LANG` and then the JVM's default locale, as `souther 
 | `cart` | List combinators `map`/`filter`/`all`/`any` (`souther.list` derives them from `fold`) + the empty list `[]`. Actually runs the behavior `quote` and checks its result cases |
 | `businesstrip` | include (field composition) + a nested newtype invariant + multi-stage approval, where the amount threshold and the reason count each decide a level on their own and `Int.max` takes the stricter of the two |
 | `joboffer` | A crowdsourcing job offer: **a sum of sums of sums** (依頼 → プロジェクト依頼 → 精算方式 → 固定精算 → 予算 → 範囲予算), with the value-less cases of an enum written as unit data. Ported from [kawasima/validation-modeling](https://github.com/kawasima/validation-modeling)'s `raoh` version, where the same model is a hand-built decoder carrying the constraints; here the constraints are the newtypes' invariants and the decoder is derived from them. It is the one example that reads a Jackson `JsonNode` through the generated `jsonDecoder()` (which is also how a date arrives as JSON text), and it runs Spring Boot for real — with no database, since both behaviors are pure |
-| `issuetracker` | A small issue tracker, and the **Kotlin** case: the boundary around the domain — REST and the H2 connection — is Spring Boot + Kotlin (below). Showcases the `Set` module (an issue's `labels` are a `Set<Label>` — the derived codec dedups a JSON array — and `openIssue` cleans the raw label text with `Set.map` + `Set.filter` without leaving the set for a list first), the `Map` module (`countByLabel` builds a `Map<String, Int>` with `Map.upsert`; `topLabels` ranks those counts and splits the ranked pairs with `List.unzip`; `busyLabels` keeps the entries a threshold holds for with `Map.filter`; `groupByAssignee` buckets the issues themselves into a `Map<String, List<IssueId>>` with `List.filterMap` + `List.groupBy`, the optional assignee dropping out without a stand-in value), `List.concatMap` to gather every label occurrence across the board, `Some(Assignee(name))` destructuring of an optional assignee, and three injected database behaviors whose read → transform → write sequencing is checked with `fake` + `example`. Like ordering it actually starts Boot and connects to H2 |
+| `issuetracker` | A small issue tracker, and the **Kotlin** case: the boundary around the domain — REST and the H2 connection — is Spring Boot + Kotlin (below). Showcases the `Set` module (an issue's `labels` are a `Set<Label>` — the derived codec dedups a JSON array — and `openIssue` cleans the raw label text with `Set.map` + `Set.filter` without leaving the set for a list first), the `Map` module (`countByLabel` builds a `Map<String, Int>` with `Map.upsert`; `topLabels` ranks those counts and splits the ranked pairs with `List.unzip`; `busyLabels` keeps the entries a threshold holds for with `Map.filter`; `groupByAssignee` buckets the issues themselves into a `Map<String, List<IssueId>>` with `List.filterMap` + `List.groupBy`, the optional assignee dropping out without a stand-in value), `List.concatMap` to gather every label occurrence across the board, `Some(Assignee(name))` destructuring of an optional assignee, and three injected database behaviors whose read → transform → write sequencing is checked with `fake` + `example`. Like ordering it actually starts Boot and connects to H2, and — being the Kotlin case — it is built with Gradle rather than Maven |
 | `member` | Member lookup. A `required behavior findMember` (outside-world dependency) + type routing `>->`. Actually compiles the Spring MVC + jOOQ boundary code (below) |
 | `account` | Account withdrawal, "read → check → write". Binds `withdraw` (which has two injected behaviors) from **Clojure + Pedestal rather than Java**, connected to H2 inside a transaction (below). It shows that the generated types are used the same way even when the boundary language changes |
 | `ordering` | Ordering + stock reservation. Two injected behaviors joined with `>->`, and it **actually starts Spring Boot, connects to H2, and shows transaction control**: if the second stage returns the `OutOfStock` case, the first stage's INSERT is rolled back too (below). Also a pure `report` over a recorded order — a sales summary showcasing `distinct` (the old standalone `sales` example, folded in here) |
@@ -94,15 +94,24 @@ mvn -f souther/pom.xml install -DskipTests   # souther-runtime / souther-compile
 mvn verify                                   # generate → compile → smoke-test every example
 ```
 
-`account` is Clojure and is not a Maven module, so `verify` does not build it — see below.
+Two examples are not Maven modules, so `verify` does not reach them — each is built with the tool its
+boundary language is actually used with, and each has its own section below:
 
-CI does the same two steps: it checks out `souther-lang/souther` at `develop`, installs it, and then
-runs `mvn verify` here. A change in the compiler that breaks an example turns this build red on the
-next run.
+```sh
+cd account       && clojure -X:gen && clojure -X:test   # Clojure
+cd issuetracker  && ./gradlew build                     # Kotlin
+```
+
+Both still resolve `souther-compiler` from `~/.m2`, so the `mvn install` above is what they need too.
+
+CI runs all three: it checks out `souther-lang/souther` at `develop`, installs it, and then runs
+`mvn verify`, the account job, and the issuetracker job. A change in the compiler that breaks an
+example turns this build red on the next run.
 
 `ordering` and `issuetracker` actually start Spring Boot, and `issuetracker` also needs the Kotlin
-compiler, so **the first build needs network to fetch the starters and kotlin-maven-plugin** (run it
-once without `-o` and it lands in `~/.m2`; after that `-o` works). The other examples run offline.
+compiler, so **their first build needs network to fetch the starters, and issuetracker's also fetches
+the Gradle distribution and the Kotlin plugin**. After that both build offline (`mvn -o` /
+`./gradlew --offline`). The other examples run offline from the start.
 
 ## Java interop (Spring MVC + jOOQ) — member
 
@@ -197,7 +206,8 @@ evidence of transaction control. As with member, the generated-path containment 
 across the Java boundary, and reading values out goes through the encoder (spec 8.5).
 
 > This example and `issuetracker` fetch the Spring Boot starters on the first build, so **they need
-> network** (the others run offline). Once they are in `~/.m2`, `-o` works after that. The DB
+> network** (the others run offline). Once they are cached, `mvn -o` — and, for issuetracker,
+> `./gradlew --offline` — works after that. The DB
 > connection info is in `src/main/resources/application.properties` (in-memory H2), and the schema and
 > stock seed are in `schema.sql` / `data.sql`, both loaded at startup by Boot's autoconfig.
 
@@ -224,19 +234,55 @@ behavior detachLabel : (request: LabelRequest) -> Issue | IssueNotFound  require
 `IssueNotFound` through without writing. The remaining behaviors (`assigneeOf`, `sharedLabels`,
 `countByLabel`, `topLabels`, `busyLabels`) are pure, so they need no injection, and each one has a route.
 
-### Making a javac annotation processor work in a Kotlin module
+### Making a javac annotation processor work in a Kotlin Gradle build
 
-Souther generates through a javac annotation processor, and kotlinc is not javac — so the module needs
-an order: javac (with `SoutherProcessor`, over the one `package-info.java`) emits the generated classes
-into `target/classes`, and only then does kotlinc run, with `target/classes` on its compile classpath.
-Both plugins bind to the `compile` phase, and the parent pom declares maven-compiler-plugin while the
-module declares kotlin-maven-plugin, so the effective order is javac first. This is the reverse of the
-usual mixed Kotlin/Java setup, where kotlinc is pulled forward to `process-sources`; here nothing on
-the Java side depends on Kotlin, and everything on the Kotlin side depends on generated bytecode.
+Souther generates through a javac annotation processor, and kotlinc is not javac — so the build needs
+an order: javac (with `SoutherProcessor`, over the one `package-info.java`) emits the generated
+classes, and only then does kotlinc run, with those classes on its compile classpath. Nothing on the
+Java side depends on Kotlin here, and everything on the Kotlin side depends on generated bytecode.
 
-Two details the module pins down: `kotlin.version` is declared as a property rather than taken from
-the imported `spring-boot-dependencies` BOM (a BOM property does not reach a plugin version), and
-`jvmTarget` is set, because kotlinc still defaults to a 1.8 target.
+That is the reverse of what Gradle's Kotlin plugin does. Within a source set it compiles Kotlin
+first and Java second, with the Kotlin output on javac's classpath — so a processor running in
+`compileJava` would produce its classes after kotlinc had already needed them.
+
+The build does not fight that ordering; it steps out of it. The processor gets a source set of its
+own, `souther`, holding the single `package-info.java`:
+
+```kotlin
+val souther by sourceSets.creating {
+    java.setSrcDirs(listOf("src/main/java"))
+    resources.setSrcDirs(emptyList<String>())
+}
+
+tasks.named<JavaCompile>(souther.compileJavaTaskName) {
+    options.compilerArgs.add("-Asouther.source=${southerSource.asFile.absolutePath}")
+    inputs.dir(southerSource)
+        .withPropertyName("southerSource")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
+dependencies {
+    implementation(souther.output)
+    "southerAnnotationProcessor"("org.souther-lang:souther-compiler:$southerVersion")
+    "southerAnnotationProcessor"("org.souther-lang:souther-runtime:$southerVersion")
+}
+```
+
+`implementation(souther.output)` is what does the sequencing: a source set's output carries the task
+that builds it, so declaring it as a dependency puts `compileSoutherJava` before `compileKotlin`
+without either task naming the other. It reaches the test source set too, since `testImplementation`
+extends `implementation`.
+
+The `inputs.dir` line is not optional. A `.sou` is not a javac source, so nothing else tells Gradle
+this compilation reads it — without it, editing `issues.sou` leaves the task `UP-TO-DATE` and the
+previously generated classes in place. The jar has to be told as well (`tasks.jar { from(souther.output) }`),
+because the generated classes live in another source set's output.
+
+Three smaller things the build pins down: `jvmTarget` is `21`, because kotlinc still defaults to 1.8
+and 21 is Souther's runtime floor, so the boundary asks no more of a JVM than the generated code it
+drives; `bootJar` is disabled so the artifact stays a plain jar, as the Maven examples' are; and
+`settings.gradle.kts` lists `mavenLocal()` first, since `souther.version` is a `-SNAPSHOT` published
+nowhere but `~/.m2`.
 
 ### What Kotlin brings to the boundary
 
@@ -262,6 +308,7 @@ same way `souther-clj` was.
 
 | Kotlin file | Role |
 | --- | --- |
+| `build.gradle.kts` | The build. The `souther` source set that runs the annotation processor, and `implementation(souther.output)` ordering it before kotlinc (above) |
 | `souther/Souther.kt` | The boundary glue, naming no domain type: `DecodeFailed`, `decodeOrFail` (decode or fail the request), `Option.orNull()`, and `operator invoke` for `Behavior` |
 | `IssueRows.kt` | The one place that knows the issue tables. An issue spans `issues` and its `issue_labels` rows, so reading one produces the Map `Issue.decoder()` takes (labels as a list → a `Set` on decode; an absent assignee left out of the Map → `None`). Reading values out of a domain value is plain typed accessor access — construction is the guarded direction, not reading |
 | `JooqIssueStore.kt` | The three injected implementations, each **extending** the generated abstract base. A Kotlin subclass reaches the base's `protected` factories, so the unit case is built with the inherited `IssueNotFound()`; values read out of storage go through the public `decoder()`, which re-checks their invariants. SQL exceptions are not caught |
@@ -290,9 +337,11 @@ table is no case at all — it passes through Souther as an exception and become
 
 ### Running
 
+Both from the `issuetracker` directory — it is its own Gradle build, not a Maven module.
+
 ```sh
-mvn -o -pl issuetracker verify                 # generate → kotlinc → boot → real HTTP over H2
-mvn -f issuetracker/pom.xml spring-boot:run    # starts on localhost:8080
+./gradlew build      # generate → kotlinc → boot → real HTTP over H2
+./gradlew bootRun    # starts on localhost:8080
 ```
 
 ```sh

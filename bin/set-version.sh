@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Point every example at a Souther version. The version is declared in three places here: the
-# souther.version property of the root pom, the Clojure account example's deps.edn, and the
-# annotation-processor snippet in the README. A bump has to touch all of them; doing it by hand is
+# Point every example at a Souther version. The version is declared in four places here: the
+# souther.version property of the root pom, the Clojure account example's deps.edn, the Kotlin
+# issuetracker example's build.gradle.kts, and the annotation-processor snippet in the README. A
+# bump has to touch all of them; doing it by hand is
 # how the rc3 bump first missed this build back when it lived inside the compiler repository.
 # Run from anywhere:
 #
@@ -27,9 +28,14 @@ mvn -q versions:set-property -Dproperty=souther.version -DnewVersion="$version" 
 perl -pi -e "s{(org\.souther-lang/souther-(?:runtime|compiler) \{:mvn/version )\"[^\"]*\"}{\${1}\"$version\"}g" \
     account/deps.edn
 
-# 3. The annotation-processor snippet in the README (${1} delimits the backreference so a version
+# 3. Kotlin issuetracker example (build.gradle.kts, its own Gradle build outside Maven): the one
+#    property both the processor path and the runtime dependency read.
+perl -pi -e "s{(val southerVersion = )\"[^\"]*\"}{\${1}\"$version\"}" \
+    issuetracker/build.gradle.kts
+
+# 4. The annotation-processor snippet in the README (${1} delimits the backreference so a version
 #    starting with a digit is not read as $1<digit>).
 perl -pi -e "s{(org\.souther-lang:souther-compiler:)[^<\s\"]*}{\${1}$version}g" \
     README.md
 
-echo "Set Souther version to $version (pom, account, README)."
+echo "Set Souther version to $version (pom, account, issuetracker, README)."

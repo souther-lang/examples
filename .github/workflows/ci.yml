@@ -89,3 +89,37 @@ jobs:
         run: |
           clojure -X:gen
           clojure -X:test
+
+  issuetracker:
+    # The Kotlin example is built with Gradle, so `mvn verify` does not reach it either. `build`
+    # generates from its .sou, compiles the Kotlin boundary against the generated types, and runs the
+    # tests — which start Boot and drive every route over HTTP against H2.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out the compiler
+        uses: actions/checkout@v7
+        with:
+          repository: souther-lang/souther
+          ref: ${{ env.SOUTHER_REF }}
+          path: souther
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      # souther-compiler is resolved from ~/.m2 (settings.gradle.kts lists mavenLocal first), so it is
+      # installed the same way the Maven examples get it.
+      - name: Install the compiler
+        run: mvn -B --no-transfer-progress -f souther/pom.xml install -DskipTests
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Build and test
+        working-directory: issuetracker
+        run: ./gradlew build --no-daemon
