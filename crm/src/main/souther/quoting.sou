@@ -22,15 +22,13 @@
 //   - An expiry window and an approval read as one expression, because both are cases and neither is a
 //     boolean anybody can misread.
 //
-// Findings recorded here: F7 at QuoteLine, F2 at LineTotal, F17 at roleFor, F18 at discountExposureOf.
+// Findings recorded here: F17 at roleFor, F18 at discountExposureOf.
 module example.quoting exposing (
     ProductCode,
     ProductName,
     Quantity,
     UnitPrice,
     DiscountRate,
-    LineTotal,
-    QuoteTotal,
     ValidityDays,
     RejectionNote,
     QuoteLine,
@@ -65,7 +63,7 @@ module example.quoting exposing (
     renewQuote,
     discountExposureOf
 )
-import example.crm ( AccountId, UserId )
+import example.crm ( AccountId, UserId, Amount )
 import example.pipeline ( OpportunityId, QuoteNumber, PerceptionAnalysis )
 
 // === Values ===
@@ -88,11 +86,6 @@ data UnitPrice = Decimal
 data DiscountRate = Decimal
     invariant value >= 0.0m && value <= 0.5m
 
-// This module's own money, for the same reason example.pipeline has StageTotal: a behavior constructs only
-// what its own module declares, so the figures this context computes are its own types. Finding F2.
-data LineTotal  = Decimal   invariant value >= 0.0m
-data QuoteTotal = Decimal   invariant value >= 0.0m
-
 // A quote is good for a window. Ninety days is the longest any list price is honoured for, because past a
 // quarter the price list itself has moved.
 data ValidityDays = Int
@@ -109,16 +102,16 @@ data QuoteLine =
     , quantity: Quantity
     , listPrice: UnitPrice
     , discount: DiscountRate
-    , net: LineTotal
+    , net: Amount
     }
     // The rule is net = quantity × list × (1 − discount), rounded to two places. It is written as that
-    // multiplication and not as "the effective discount is at most 50%", because a division cannot appear in
-    // an invariant at all: Decimal.divide answers with a union and a union is not a Bool, while the `/`
-    // operator aborts when the denominator is zero — and a zero list price is representable, so the abort
-    // would happen inside an invariant check, which is the one place an abort is least acceptable.
+    // multiplication rather than as a ratio, and the reason is not that a ratio cannot be written: the bare
+    // `/` aborts on a zero denominator and a zero list price is representable, but a guarded helper —
+    // `if b == 0.0m then fallback else a / b` — is total, invariant-legal, and answers with a Decimal.
     //
-    // Stating it as a product costs nothing here and it is worth noticing why: every ratio rule in this file
-    // is written as the multiplication it implies. Finding F7.
+    // What the product form saves is the fallback. A ratio needs a value to stand for "no list price to take
+    // a fraction of", and every candidate lies about something; the multiplication needs none, because the
+    // case it would have covered makes both sides zero. Every ratio rule in this file is written that way.
     invariant Decimal.compare(net.value,
                   Decimal.round(Decimal.fromInt(quantity.value) * listPrice.value
                                 * (1.0m - discount.value), 2, HALF_UP)) == 0
@@ -162,8 +155,8 @@ data Quote =
     , opportunityId: OpportunityId
     , accountId: AccountId
     , lines: QuoteLines
-    , subtotal: QuoteTotal           // at list
-    , total: QuoteTotal              // after the line discounts
+    , subtotal: Amount           // at list
+    , total: Amount              // after the line discounts
     , issuedOn: Date
     , expiresOn: Date
     , approval: ApprovalState
@@ -171,7 +164,7 @@ data Quote =
     invariant Date.daysBetween(issuedOn, expiresOn) >= 1
            && Decimal.compare(total.value, subtotal.value) <= 0
 
-data AcceptedQuote = { number: QuoteNumber, acceptedOn: Date, total: QuoteTotal }
+data AcceptedQuote = { number: QuoteNumber, acceptedOn: Date, total: Amount }
 
 data Verdict = Approve | Reject
 
@@ -179,7 +172,7 @@ data NeedsApproval = { role: ApproverRole, worstDiscount: DiscountRate }
 data QuoteExpired  = { expiredOn: Date, daysLate: Int }
 
 data DiscountExposure =
-    { byRole: Map<String, QuoteTotal>
+    { byRole: Map<String, Amount>
     , worst: DiscountRate
     }
 
@@ -218,14 +211,14 @@ let toLine (r: LineRequest): QuoteLine =
               , quantity = Quantity(r.quantity)
               , listPrice = UnitPrice(r.listPrice)
               , discount = DiscountRate(r.discount)
-              , net = LineTotal(lineNet(r))
+              , net = Amount(lineNet(r))
               }
 
 behavior buildQuote : (number: QuoteNumber, opp: PerceptionAnalysis, lines: List<LineRequest>,
                        issuedOn: Date, validity: Int)
         -> Quote | NoLines | DuplicateProduct | ValidityOutOfRange
          | LineDiscountOverCap | BlendedDiscountOverCap
-    constructs Quote, QuoteLine, QuoteLines, Quantity, UnitPrice, DiscountRate, LineTotal, QuoteTotal,
+    constructs Quote, QuoteLine, QuoteLines, Quantity, UnitPrice, DiscountRate, Amount,
                ValidityDays, NotSubmitted, NoLines, DuplicateProduct, ValidityOutOfRange,
                LineDiscountOverCap, BlendedDiscountOverCap
 
@@ -247,8 +240,8 @@ let buildQuote (number, opp, lines, issuedOn, validity) = {
           , opportunityId = opp.id
           , accountId = opp.accountId
           , lines = QuoteLines(List.map(r -> toLine(r), lines))
-          , subtotal = QuoteTotal(sumOf(List.map(r -> lineList(r), lines)))
-          , total = QuoteTotal(sumOf(List.map(r -> lineNet(r), lines)))
+          , subtotal = Amount(sumOf(List.map(r -> lineList(r), lines)))
+          , total = Amount(sumOf(List.map(r -> lineNet(r), lines)))
           , issuedOn = issuedOn
           , expiresOn = Date.addDays(days.value, issuedOn)
           , approval = NotSubmitted
@@ -292,9 +285,9 @@ example approvalNeeded
             , lines = QuoteLines(
                 [ QuoteLine { product = ProductCode("SW-1001"), name = ProductName("Platform licence")
                             , quantity = Quantity(10), listPrice = UnitPrice(1000.00m)
-                            , discount = DiscountRate(0.10m), net = LineTotal(9000.00m) } ])
-            , subtotal = QuoteTotal(10000.00m)
-            , total = QuoteTotal(9000.00m)
+                            , discount = DiscountRate(0.10m), net = Amount(9000.00m) } ])
+            , subtotal = Amount(10000.00m)
+            , total = Amount(9000.00m)
             , issuedOn = Date("2026-08-10")
             , expiresOn = Date("2026-09-09")
             , approval = NotSubmitted
@@ -308,9 +301,9 @@ example approvalNeeded
             , lines = QuoteLines(
                 [ QuoteLine { product = ProductCode("SW-1001"), name = ProductName("Platform licence")
                             , quantity = Quantity(10), listPrice = UnitPrice(1000.00m)
-                            , discount = DiscountRate(0.11m), net = LineTotal(8900.00m) } ])
-            , subtotal = QuoteTotal(10000.00m)
-            , total = QuoteTotal(8900.00m)
+                            , discount = DiscountRate(0.11m), net = Amount(8900.00m) } ])
+            , subtotal = Amount(10000.00m)
+            , total = Amount(8900.00m)
             , issuedOn = Date("2026-08-10")
             , expiresOn = Date("2026-09-09")
             , approval = NotSubmitted
@@ -324,9 +317,9 @@ example approvalNeeded
             , lines = QuoteLines(
                 [ QuoteLine { product = ProductCode("SW-1001"), name = ProductName("Platform licence")
                             , quantity = Quantity(10), listPrice = UnitPrice(1000.00m)
-                            , discount = DiscountRate(0.21m), net = LineTotal(7900.00m) } ])
-            , subtotal = QuoteTotal(10000.00m)
-            , total = QuoteTotal(7900.00m)
+                            , discount = DiscountRate(0.21m), net = Amount(7900.00m) } ])
+            , subtotal = Amount(10000.00m)
+            , total = Amount(7900.00m)
             , issuedOn = Date("2026-08-10")
             , expiresOn = Date("2026-09-09")
             , approval = NotSubmitted
@@ -340,9 +333,9 @@ example approvalNeeded
             , lines = QuoteLines(
                 [ QuoteLine { product = ProductCode("SW-1001"), name = ProductName("Platform licence")
                             , quantity = Quantity(10), listPrice = UnitPrice(1000.00m)
-                            , discount = DiscountRate(0.40m), net = LineTotal(6000.00m) } ])
-            , subtotal = QuoteTotal(10000.00m)
-            , total = QuoteTotal(6000.00m)
+                            , discount = DiscountRate(0.40m), net = Amount(6000.00m) } ])
+            , subtotal = Amount(10000.00m)
+            , total = Amount(6000.00m)
             , issuedOn = Date("2026-08-10")
             , expiresOn = Date("2026-09-09")
             , approval = NotSubmitted
@@ -351,9 +344,9 @@ example approvalNeeded
 
 // === approverFor: who holds that authority ===
 // An org's approval matrix is administered outside the model — it changes when somebody is promoted, not when
-// the rules change — so resolving a role to a person is injected. Its success value is crm's UserId, which
-// this module cannot construct, so the implementation builds it through crm's decoder. That is the ordinary
-// shape for an injected behavior returning another context's type.
+// the rules change — so resolving a role to a person is injected. Its success value is crm's UserId, which the
+// implementation builds through crm's public decoder — the path a value arriving from outside takes, invariant
+// and all. That is the ordinary shape for an injected behavior returning another context's type.
 behavior approverFor : (role: ApproverRole) -> UserId
 
 // === submitForApproval ===
@@ -392,9 +385,9 @@ example submitForApproval
             , lines = QuoteLines(
                 [ QuoteLine { product = ProductCode("SW-1001"), name = ProductName("Platform licence")
                             , quantity = Quantity(10), listPrice = UnitPrice(1000.00m)
-                            , discount = DiscountRate(0.21m), net = LineTotal(7900.00m) } ])
-            , subtotal = QuoteTotal(10000.00m)
-            , total = QuoteTotal(7900.00m)
+                            , discount = DiscountRate(0.21m), net = Amount(7900.00m) } ])
+            , subtotal = Amount(10000.00m)
+            , total = Amount(7900.00m)
             , issuedOn = Date("2026-08-10")
             , expiresOn = Date("2026-09-09")
             , approval = NotSubmitted
@@ -409,9 +402,9 @@ example submitForApproval
             , lines = QuoteLines(
                 [ QuoteLine { product = ProductCode("SW-1001"), name = ProductName("Platform licence")
                             , quantity = Quantity(10), listPrice = UnitPrice(1000.00m)
-                            , discount = DiscountRate(0.21m), net = LineTotal(7900.00m) } ])
-            , subtotal = QuoteTotal(10000.00m)
-            , total = QuoteTotal(7900.00m)
+                            , discount = DiscountRate(0.21m), net = Amount(7900.00m) } ])
+            , subtotal = Amount(10000.00m)
+            , total = Amount(7900.00m)
             , issuedOn = Date("2026-08-10")
             , expiresOn = Date("2026-09-09")
             , approval = PendingApproval { submittedOn = Date("2026-08-11"), role = RegionalVp, approver = UserId("u-vp") }
@@ -426,9 +419,9 @@ example submitForApproval
             , lines = QuoteLines(
                 [ QuoteLine { product = ProductCode("SW-1001"), name = ProductName("Platform licence")
                             , quantity = Quantity(10), listPrice = UnitPrice(1000.00m)
-                            , discount = DiscountRate(0.10m), net = LineTotal(9000.00m) } ])
-            , subtotal = QuoteTotal(10000.00m)
-            , total = QuoteTotal(9000.00m)
+                            , discount = DiscountRate(0.10m), net = Amount(9000.00m) } ])
+            , subtotal = Amount(10000.00m)
+            , total = Amount(9000.00m)
             , issuedOn = Date("2026-08-10")
             , expiresOn = Date("2026-09-09")
             , approval = AutoApproved
@@ -491,16 +484,16 @@ example acceptQuote
             , lines = QuoteLines(
                 [ QuoteLine { product = ProductCode("SW-1001"), name = ProductName("Platform licence")
                             , quantity = Quantity(10), listPrice = UnitPrice(1000.00m)
-                            , discount = DiscountRate(0.21m), net = LineTotal(7900.00m) } ])
-            , subtotal = QuoteTotal(10000.00m)
-            , total = QuoteTotal(7900.00m)
+                            , discount = DiscountRate(0.21m), net = Amount(7900.00m) } ])
+            , subtotal = Amount(10000.00m)
+            , total = Amount(7900.00m)
             , issuedOn = Date("2026-08-10")
             , expiresOn = Date("2026-09-09")
             , approval = ApprovedQuote { approvedOn = Date("2026-08-12"), approver = UserId("u-vp") }
             }),
          Date("2026-09-01"))
         -> AcceptedQuote { number = QuoteNumber("0Q0000000000001"), acceptedOn = Date("2026-09-01")
-                         , total = QuoteTotal(7900.00m) }
+                         , total = Amount(7900.00m) }
     | "the last day of the window still counts" :
         ((Quote
             { number = QuoteNumber("0Q0000000000001")
@@ -509,16 +502,16 @@ example acceptQuote
             , lines = QuoteLines(
                 [ QuoteLine { product = ProductCode("SW-1001"), name = ProductName("Platform licence")
                             , quantity = Quantity(10), listPrice = UnitPrice(1000.00m)
-                            , discount = DiscountRate(0.21m), net = LineTotal(7900.00m) } ])
-            , subtotal = QuoteTotal(10000.00m)
-            , total = QuoteTotal(7900.00m)
+                            , discount = DiscountRate(0.21m), net = Amount(7900.00m) } ])
+            , subtotal = Amount(10000.00m)
+            , total = Amount(7900.00m)
             , issuedOn = Date("2026-08-10")
             , expiresOn = Date("2026-09-09")
             , approval = ApprovedQuote { approvedOn = Date("2026-08-12"), approver = UserId("u-vp") }
             }),
          Date("2026-09-09"))
         -> AcceptedQuote { number = QuoteNumber("0Q0000000000001"), acceptedOn = Date("2026-09-09")
-                         , total = QuoteTotal(7900.00m) }
+                         , total = Amount(7900.00m) }
     | "the day after it does not, and the answer says how late" :
         ((Quote
             { number = QuoteNumber("0Q0000000000001")
@@ -527,9 +520,9 @@ example acceptQuote
             , lines = QuoteLines(
                 [ QuoteLine { product = ProductCode("SW-1001"), name = ProductName("Platform licence")
                             , quantity = Quantity(10), listPrice = UnitPrice(1000.00m)
-                            , discount = DiscountRate(0.21m), net = LineTotal(7900.00m) } ])
-            , subtotal = QuoteTotal(10000.00m)
-            , total = QuoteTotal(7900.00m)
+                            , discount = DiscountRate(0.21m), net = Amount(7900.00m) } ])
+            , subtotal = Amount(10000.00m)
+            , total = Amount(7900.00m)
             , issuedOn = Date("2026-08-10")
             , expiresOn = Date("2026-09-09")
             , approval = ApprovedQuote { approvedOn = Date("2026-08-12"), approver = UserId("u-vp") }
@@ -544,9 +537,9 @@ example acceptQuote
             , lines = QuoteLines(
                 [ QuoteLine { product = ProductCode("SW-1001"), name = ProductName("Platform licence")
                             , quantity = Quantity(10), listPrice = UnitPrice(1000.00m)
-                            , discount = DiscountRate(0.21m), net = LineTotal(7900.00m) } ])
-            , subtotal = QuoteTotal(10000.00m)
-            , total = QuoteTotal(7900.00m)
+                            , discount = DiscountRate(0.21m), net = Amount(7900.00m) } ])
+            , subtotal = Amount(10000.00m)
+            , total = Amount(7900.00m)
             , issuedOn = Date("2026-08-10")
             , expiresOn = Date("2026-09-09")
             , approval = RejectedQuote { rejectedOn = Date("2026-08-12"), approver = UserId("u-vp"), note = RejectionNote("margin too thin") }
@@ -561,9 +554,9 @@ example acceptQuote
             , lines = QuoteLines(
                 [ QuoteLine { product = ProductCode("SW-1001"), name = ProductName("Platform licence")
                             , quantity = Quantity(10), listPrice = UnitPrice(1000.00m)
-                            , discount = DiscountRate(0.21m), net = LineTotal(7900.00m) } ])
-            , subtotal = QuoteTotal(10000.00m)
-            , total = QuoteTotal(7900.00m)
+                            , discount = DiscountRate(0.21m), net = Amount(7900.00m) } ])
+            , subtotal = Amount(10000.00m)
+            , total = Amount(7900.00m)
             , issuedOn = Date("2026-08-10")
             , expiresOn = Date("2026-09-09")
             , approval = NotSubmitted
@@ -607,17 +600,17 @@ let pendingRoleOf (quote: Quote): List<String> =
         | AutoApproved             -> [ ]
         | Decided                  -> [ ]
 
-let roleTotalsOf (quotes: List<Quote>): Map<String, QuoteTotal> =
+let roleTotalsOf (quotes: List<Quote>): Map<String, Amount> =
     List.fold((acc, quote) -> addQuoteToRole(acc, quote), Map.empty(), quotes)
 
-let addQuoteToRole (acc: Map<String, QuoteTotal>, quote: Quote): Map<String, QuoteTotal> =
+let addQuoteToRole (acc: Map<String, Amount>, quote: Quote): Map<String, Amount> =
     List.fold((inner, role) ->
                   Map.upsert(role, quote.total,
-                             sofar -> QuoteTotal(Decimal.add(sofar.value, quote.total.value)), inner),
+                             sofar -> Amount(Decimal.add(sofar.value, quote.total.value)), inner),
               acc, pendingRoleOf(quote))
 
 behavior discountExposureOf : (quotes: List<Quote>) -> DiscountExposure
-    constructs DiscountExposure, QuoteTotal, DiscountRate
+    constructs DiscountExposure, Amount, DiscountRate
 
 let discountExposureOf (quotes) =
     DiscountExposure

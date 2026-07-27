@@ -103,10 +103,10 @@ module example.crm exposing (
 // carries its own, and a contact id handed to something expecting an account is a decode failure at the
 // boundary rather than a lookup that finds nothing.
 //
-// The pattern is written out per type because String.matches takes a string literal (it is compiled
-// once, at build time) and there is no way to name a shared one — a zero-argument `let` returning the
-// string is not a literal at the call site. That is finding F10, and it costs this section six
-// near-identical regexes.
+// The pattern is written out per type. Naming one works — a zero-argument `let` whose body is a literal
+// is accepted by String.matches and validated at that `let` — but the twelve-character tail these three
+// share cannot be factored out of them, because `prefix ++ "…"` is no longer a literal and the check
+// refuses it. That is finding F10. Naming pays where a pattern is used twice, which is DomainName below.
 
 data AccountId = String
     invariant String.matches("001[0-9A-Za-z]{12}([0-9A-Z]{3})?", value)
@@ -136,9 +136,12 @@ data PhoneNumber = String
 
 // The account's web domain, lowercase and dotted. This is the key Salesforce's Lead-to-Account
 // duplicate rule matches on, so its shape is an invariant rather than a convention living inside
-// whatever code last split an email address.
+// whatever code last split an email address. The pattern carries a name because domainOf checks it a
+// second time, and one name is what keeps the two readings the same rule.
+let domainPattern (): String = "[a-z0-9]([a-z0-9\\-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9\\-]*[a-z0-9])?)+"
+
 data DomainName = String
-    invariant String.matches("[a-z0-9]([a-z0-9\\-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9\\-]*[a-z0-9])?)+", value)
+    invariant String.matches(domainPattern(), value)
 
 // Salesforce's Contact carries a nullable Email and a nullable Phone. That is four states, and the one
 // that matters — a contact reachable by nothing — is representable, which is why every campaign, every
@@ -162,14 +165,15 @@ data PersonName   = String   invariant String.length(value) >= 1
 data JobTitle     = String   invariant String.length(value) >= 1
 data CampaignName = String   invariant String.length(value) >= 1
 
-// Money as a record *states* it. Declared once for the whole project: four other contexts here state
-// money and only one module may own the word, because two modules exposing the same name cannot both be
+// Money, as a record states it and as the four contexts downstream compute it. Declared once for the whole
+// project: only one module may own the word, because two modules exposing the same name cannot both be
 // imported by a third. Negative money is not an amount — a shortfall or a refund is a direction, and a
 // direction is carried by the case that means it, never by a sign.
 //
-// What the downstream contexts cannot do is *build* one: a behavior constructs only what its own module
-// declares, so example.pipeline computes a StageTotal and example.forecasting a ForecastAmount, each
-// with this same invariant. That is finding F2 — one concept, five newtypes.
+// The downstream contexts build one as well as read one. A behavior constructs what its `constructs` names
+// wherever that type was declared, so a stage total in example.pipeline and a weighted number in
+// example.forecasting are this Amount rather than a parallel newtype apiece — each origination still
+// written in the signature that performs it, and each running this invariant.
 data Amount = Decimal
     invariant value >= 0.0m
 
@@ -742,15 +746,15 @@ let emailOf (reach: ContactPoint): List<EmailAddress> =
         | EmailAndPhone { email } -> [ email ]
         | PhoneOnly               -> []
 
-// The domain part of an address, lowercased. The guard restates DomainName's pattern, and it has to:
-// there is no way to attempt a construction and be told it failed, so the only way to keep an
-// out-of-range value off the constructor is to check the same rule again first — the invariant that
-// makes the type worth having is the invariant this function has to duplicate. Finding F14, and F10
-// again for the literal.
+// The domain part of an address, lowercased. The guard restates DomainName's rule, and it has to: there
+// is no way to attempt a construction and be told it failed, so the only way to keep an out-of-range
+// value off the constructor is to check the same rule again first — the invariant that makes the type
+// worth having is the invariant this function has to duplicate. Naming the pattern at least keeps the two
+// checks one rule. Finding F14.
 let domainOf (email: EmailAddress): List<DomainName> =
     match List.get(1, String.split("@", String.lowercase(email.value))) with
         | Some d ->
-            if String.matches("[a-z0-9]([a-z0-9\\-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9\\-]*[a-z0-9])?)+", d)
+            if String.matches(domainPattern(), d)
             then [ DomainName(d) ]
             else []
         | None -> []
@@ -957,9 +961,10 @@ let blockingReasons (lead: QualifiedLead, request: ConversionRequest,
 // QualifiedLead and produces a ConvertedLead. There is no guard, no `alreadyConverted` case and no flag —
 // the second call does not typecheck.
 //
-// The account and the contact are built here, which is why Lead lives in the same module as Account and
-// Contact: a behavior constructs only what its own module declares. The opportunity is the one leg of
-// conversion this module cannot build, and that is where the context line falls. Finding F1.
+// The account and the contact are built here. The opportunity is the leg this module cannot reach:
+// example.pipeline imports this one, so this one cannot import it back (E1501), and a cross-module `>->`
+// would put this behavior's departed cases into a union pipeline declares (E1606). Conversion is therefore
+// two calls with a Java line between them, which is where the context boundary falls. Finding F1.
 behavior convertLead : (lead: QualifiedLead, request: ConversionRequest,
                         accounts: AccountBook, contacts: ContactBook)
         -> LeadConverted | ConversionBlocked
@@ -992,12 +997,11 @@ let convertLead (lead, request, accounts, contacts) = {
         // The reach is carried, not rebuilt. A converted lead's address IS the contact's address, and
         // passing a value through is not construction, so ContactPoint is not in `constructs`.
         //
-        // The title is carried from the lead, which is what Salesforce's conversion does — and it is also
-        // the only way this construction can compile. An optional field must be given a value explicitly
-        // (a spread does not supply it, E1005), and `None` is not a value a behavior body can write
-        // (Option is non-surface), so an absent optional can only arrive from somewhere that already
-        // holds one. A behavior cannot decide that a field is absent; it can only pass on an absence
-        // somebody else recorded. Finding F15.
+        // The title is carried from the lead, which is what Salesforce's conversion does. Writing it absent
+        // instead is possible but has no name: an optional field must be given a value explicitly (a spread
+        // does not supply it, E1005), `None` is not a value a behavior body can write (Option is
+        // non-surface), and what is left is `List.get(0, [])` — an absence obtained by asking an empty list
+        // for an element. Finding F15.
         , contact = Contact { id = request.contactId
                             , accountId = request.accountId
                             , name = lead.person

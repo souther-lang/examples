@@ -23,9 +23,9 @@
 //   - A zero-argument injected behavior. `nextOpportunityId` produces rather than transforms, so its
 //     generated base declares `apply()` with no input at all.
 //
-// The findings this module hit are recorded where they bite: F1 at openFromLead, F2 at StageTotal, F3 at
-// StageName, F4 at closeAndSummarize, F5 at winRateOf, F16 at idOf, F17 at probabilityFor, F18 at the two
-// names this file had to change.
+// The findings this module hit are recorded where they bite: F1 at openFromLead, F3 at StageName, F4 at
+// closeAndSummarize, F5 at winRateOf, F16 at idOf, F17 at probabilityFor, F18 at the two names this file
+// had to change.
 //
 // F18 is worth reading before the model: a behavior generates a class from its name with the first letter
 // capitalized, so a behavior and a data cannot share a word. This domain has two words that are both a
@@ -40,7 +40,6 @@ module example.pipeline exposing (
     StageName,
     Probability,
     QuoteNumber,
-    StageTotal,
     PainPoint,
     BusinessCase,
     DecisionCriterion,
@@ -160,12 +159,6 @@ data StageName = String
 data Probability = Int
     invariant value >= 0 && value <= 100
 
-// The money this context *computes*, as against crm's Amount, which is the money a record *states*. They
-// have the same invariant and they are two types, because a behavior constructs only what its own module
-// declares: this module can carry an Amount through from a state field but cannot build one. Finding F2.
-data StageTotal = Decimal
-    invariant value >= 0.0m
-
 data PainPoint         = String   invariant String.length(value) >= 1
 data BusinessCase      = String   invariant String.length(value) >= 1
 data DecisionCriterion = String   invariant String.length(value) >= 1
@@ -203,7 +196,7 @@ data OpportunityCommon =
     , accountId: AccountId
     , name: OpportunityName
     , owner: UserId
-    , amount: Amount              // crm's, read and carried, never built here
+    , amount: Amount              // crm's word, imported rather than re-declared
     , currency: CurrencyCode
     , closeDate: Date
     , openedOn: Date
@@ -305,7 +298,7 @@ data LossReason = DisplacedLoss | AbandonedLoss | PriceLoss
 data StageBreakdown =
     { stages: List<StageName>
     , count: Map<StageName, Int>
-    , total: Map<StageName, StageTotal>
+    , total: Map<StageName, Amount>
     , openCount: Int
     }
 
@@ -682,8 +675,8 @@ let assessPerception (opp, champion, risks) = {
 }
 
 // A proposal dated after the close date is a deal that has already missed. The amount the quote states
-// arrives as an Amount: this module cannot build one, so the figure is constructed by whoever states it
-// and carried from there.
+// arrives as an Amount and is carried from there: this behavior originates no figure, so it names none in
+// its `constructs`.
 behavior sendProposal : (opp: PerceptionAnalysis, number: QuoteNumber, on: Date, proposed: Amount)
         -> ProposalPriceQuote | ProposalAfterCloseDate
     constructs ProposalPriceQuote, ProposalAfterCloseDate
@@ -960,21 +953,19 @@ let openAmount (Amount(v)): Decimal = v
 
 let amountValueOf (opp: Opportunity): Decimal = openAmount(amountOf(opp))
 
-let openStageTotal (StageTotal(v)): Decimal = v
-
 let countByStage (opps: List<Opportunity>): Map<StageName, Int> =
     List.fold((acc, opp) -> Map.upsert(stageNameOf(opp), 1, n -> n + 1, acc), Map.empty(), opps)
 
-let totalByStage (opps: List<Opportunity>): Map<StageName, StageTotal> =
+let totalByStage (opps: List<Opportunity>): Map<StageName, Amount> =
     List.fold((acc, opp) ->
                   Map.upsert(stageNameOf(opp),
-                             StageTotal(amountValueOf(opp)),
-                             running -> StageTotal(Decimal.add(openStageTotal(running), amountValueOf(opp))),
+                             Amount(amountValueOf(opp)),
+                             running -> Amount(Decimal.add(openAmount(running), amountValueOf(opp))),
                              acc),
               Map.empty(), opps)
 
 behavior pipelineByStage : (opps: List<Opportunity>) -> StageBreakdown
-    constructs StageBreakdown, StageName, StageTotal
+    constructs StageBreakdown, StageName, Amount
 
 let pipelineByStage (opps) = {
     let counts = countByStage(opps)
