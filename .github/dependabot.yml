@@ -1,0 +1,29 @@
+version: 2
+updates:
+  # The Spring / jOOQ / Kotlin / JUnit versions the examples pin were watched by the compiler
+  # repository's dependabot while they lived there. They are here now, so this is where they are
+  # watched. souther-* is deliberately not excluded: souther.version is a -SNAPSHOT, so there is
+  # nothing for dependabot to bump until a release is pinned.
+  - package-ecosystem: maven
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      maven-plugins:
+        patterns:
+          - "org.apache.maven.plugins:*"
+      maven-dependencies:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "org.apache.maven.plugins:*"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
