@@ -25,7 +25,7 @@
              what Boot 4.0.7 pins, and setting it also overrides the BOM, so the compiler, the stdlib
              and the compiler plugins stay on one version (this is what a start.spring.io Kotlin pom
              does). -->
-        <kotlin.version>2.2.21</kotlin.version>
+        <kotlin.version>2.4.10</kotlin.version>
         <kotlin.code.style>official</kotlin.code.style>
     </properties>
 
@@ -34,7 +34,7 @@
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
-                <version>4.0.7</version>
+                <version>4.1.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -68,7 +68,7 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <version>4.0.7</version>
+                <version>4.1.0</version>
             </plugin>
 
             <!-- The build order is what makes a Kotlin module work with a javac annotation processor.
