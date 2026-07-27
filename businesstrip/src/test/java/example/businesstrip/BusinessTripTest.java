@@ -39,7 +39,9 @@ class BusinessTripTest {
     private static Map<String, Object> 申請(Object... 明細) {
         return Map.of(
                 "申請者", 一般社員,
-                "予定費用", Map.of("明細", List.of(明細)),
+                // 予定費用 は List<費用明細> を包む newtype なので、境界ではリストそのまま
+                // （`{"明細": [...]}` ではない）。
+                "予定費用", List.of(明細),
                 "出張先", "福岡",
                 "出張目的", "顧客訪問",
                 // Object 版の decoder は日付を LocalDate で受ける（JSON から読むなら
