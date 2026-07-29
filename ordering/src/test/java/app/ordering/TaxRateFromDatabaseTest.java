@@ -56,9 +56,10 @@ class TaxRateFromDatabaseTest {
                 .execute();
     }
 
-    /** A category is decoded, not constructed: nothing outside the generated code can build one. */
-    private TaxCategory category(String tag) {
-        return ok(TaxCategory.decoder().decode(Map.of("type", tag), Path.ROOT));
+    /** A category is decoded, not constructed: nothing outside the generated code can build one.
+     *  Every case is a unit data, so it decodes from the case's name. */
+    private TaxCategory category(String name) {
+        return ok(TaxCategory.decoder().decode(name, Path.ROOT));
     }
 
     private <T> T ok(Result<T> r) {

@@ -205,7 +205,7 @@ class LeadConversionTest {
                 "intent", Map.of("type", "OpportunityRequested",
                         "amount", new java.math.BigDecimal("4800000.00"), "closeDate", LocalDate.parse(closeDate)),
                 "accountType", Map.of("type", "Prospect"),
-                "industry", Map.of("type", "Technology"),
+                "industry", "Technology",
                 "employees", 420,
                 "currency", "JPY"), Path.ROOT));
     }
@@ -217,7 +217,7 @@ class LeadConversionTest {
                 "convertedOn", LocalDate.parse("2026-07-20"),
                 "intent", Map.of("type", "NoOpportunity"),
                 "accountType", Map.of("type", "Prospect"),
-                "industry", Map.of("type", "Technology"),
+                "industry", "Technology",
                 "employees", 420,
                 "currency", "JPY"), Path.ROOT));
     }
@@ -251,7 +251,7 @@ class LeadConversionTest {
                 "id", "001000000000002",
                 "name", "Beta KK",
                 "domain", domain,
-                "industry", Map.of("type", "Manufacturing"),
+                "industry", "Manufacturing",
                 "employees", 999,
                 "type", Map.of("type", "Customer", "since", LocalDate.parse("2024-04-01")),
                 "owner", "u-001",
