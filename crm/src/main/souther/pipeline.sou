@@ -10,7 +10,8 @@
 //     quote it was won on. The exit criterion of each stage is the field the next state adds.
 //   - The stage's probability and forecast category are the real Salesforce mappings, written as
 //     ten-arm matches. Adding a stage is a non-exhaustive-match error in three places rather than a deal
-//     that quietly weighs nothing.
+//     that quietly weighs nothing. What every stage *has* needs no match at all: the ten states all spread
+//     OpportunityCommon, so `opp.id` is read off the sum.
 //   - A nested sum where the domain nests: a lost deal was either taken by somebody else or bought by
 //     nobody, and only the first kind names a rival. `match` opens one level at a time, so the rule reads
 //     as that sentence — while the codec folds to the leaf, so the JSON stays one flat tag.
@@ -18,14 +19,16 @@
 //     is its own NoOpportunityRequested, because an output union is built from the cases the module
 //     declares (E1606). A context that declines states its own declining.
 //   - Aggregation with `Map.upsert`: the pipeline by stage, counted and totalled in two folds, keyed by a
-//     String-backed StageName rather than by the stage sum — a sum cannot be a boundary map key, which is
-//     finding F3 and the reason the ten stage names exist twice in this file.
+//     String-backed StageName rather than by the stage sum — a stage carries fields, so it is not the
+//     enumeration a boundary map keys by, which is what is left of finding F3 and the reason the ten stage
+//     names exist twice in this file.
 //   - A zero-argument injected behavior. `nextOpportunityId` produces rather than transforms, so its
 //     generated base declares `apply()` with no input at all.
 //
 // The findings this module hit are recorded where they bite: F1 at openFromLead, F3 at StageName, F4 at
-// closeAndSummarize, F5 at winRateOf, F16 at idOf, F17 at probabilityFor, F18 at the two names this file
-// had to change.
+// closeAndSummarize, F5 at winRateOf, F17 at probabilityFor, F18 at the two names this file had to change,
+// F19 at pipelineByStage.
+// F16 was recorded at idOf and is gone: a field every case spreads is read on the sum itself.
 //
 // F18 is worth reading before the model: a behavior generates a class from its name with the first letter
 // capitalized, so a behavior and a data cannot share a word. This domain has two words that are both a
@@ -148,11 +151,11 @@ data OpportunityName = String
 data QuoteNumber = String
     invariant String.matches("0Q0[0-9A-Za-z]{12}([0-9A-Z]{3})?", value)
 
-// Salesforce's stage really is a string picklist column called StageName, which is what makes it a legal
-// boundary map key. A sum is not one — a JSON object's keys are strings — so the ten stage names live
-// twice in this file: once as the case names above, once as the strings profileOf produces. Nothing keeps
-// the two in step but that match, and the match being exhaustive is the only reason that is safe.
-// Finding F3.
+// Salesforce's stage really is a string picklist column called StageName. A sum every one of whose cases
+// is a unit data keys a boundary map directly, but a stage is not one of those: it is a state carrying the
+// fields that stage has. So the ten stage names live twice in this file — once as the case names above,
+// once as the strings profileOf produces — and nothing keeps the two in step but that match being
+// exhaustive. What is left of finding F3.
 data StageName = String
     invariant String.length(value) >= 1
 
@@ -322,48 +325,19 @@ data SlipReport =
 
 // === Reading what every stage has ===
 // Every one of the ten states spreads OpportunityCommon, so every one of them has an id, an amount and a
-// close date. The sum does not: a sum has no fields, so reading a field common to all its cases costs one
-// arm per case. The spread already says these fields are there and the accessor cannot use that, which is
-// why three ten-arm helpers follow instead of three field reads. Finding F16.
-
-let idOf (opp: Opportunity): OpportunityId =
-    match opp with
-        | Prospecting { id }        -> id
-        | Qualification { id }      -> id
-        | NeedsAnalysis { id }      -> id
-        | ValueProposition { id }   -> id
-        | IdDecisionMakers { id }   -> id
-        | PerceptionAnalysis { id } -> id
-        | ProposalPriceQuote { id } -> id
-        | NegotiationReview { id }  -> id
-        | ClosedWon { id }          -> id
-        | ClosedLost { id }         -> id
+// close date — and the sum has them too, because what holds of every case is a property of the sum. So
+// `opp.id` and `opp.closeDate` are read straight off Opportunity and no helper stands between. This used
+// to be three ten-arm matches; finding F16 was that they had to be written.
+//
+// Only the amount still opens the value, and for a reason the spread does not carry: a won deal weighs
+// what it was won at, not what it was asked at. The nine stages that do weigh the ask share one arm, and
+// naming them keeps what the ten-arm version was worth — adding a stage is still a compile error here.
 
 let amountOf (opp: Opportunity): Amount =
     match opp with
-        | Prospecting { amount }        -> amount
-        | Qualification { amount }      -> amount
-        | NeedsAnalysis { amount }      -> amount
-        | ValueProposition { amount }   -> amount
-        | IdDecisionMakers { amount }   -> amount
-        | PerceptionAnalysis { amount } -> amount
-        | ProposalPriceQuote { amount } -> amount
-        | NegotiationReview { amount }  -> amount
-        | ClosedWon { wonAmount }       -> wonAmount   // a won deal weighs what it was won at
-        | ClosedLost { amount }         -> amount
-
-let closeDateOf (opp: Opportunity): Date =
-    match opp with
-        | Prospecting { closeDate }        -> closeDate
-        | Qualification { closeDate }      -> closeDate
-        | NeedsAnalysis { closeDate }      -> closeDate
-        | ValueProposition { closeDate }   -> closeDate
-        | IdDecisionMakers { closeDate }   -> closeDate
-        | PerceptionAnalysis { closeDate } -> closeDate
-        | ProposalPriceQuote { closeDate } -> closeDate
-        | NegotiationReview { closeDate }  -> closeDate
-        | ClosedWon { closeDate }          -> closeDate
-        | ClosedLost { closeDate }         -> closeDate
+        | ClosedWon { wonAmount } -> wonAmount
+        | Prospecting | Qualification | NeedsAnalysis | ValueProposition | IdDecisionMakers
+        | PerceptionAnalysis | ProposalPriceQuote | NegotiationReview | ClosedLost -> opp.amount
 
 // === The stage's name, probability and forecast category ===
 // Salesforce's standard numbers, exactly. They are a ten-arm match rather than a field on the state
@@ -873,10 +847,10 @@ behavior slipCloseDate : (opp: OpenOpportunity, newDate: Date) -> SlipReport | N
     constructs SlipReport, NotASlip
 
 let slipCloseDate (opp, newDate) = {
-    let was = closeDateOf(opp)
+    let was = opp.closeDate
     let days = Date.daysBetween(was, newDate)
     require days >= 1 else NotASlip
-    SlipReport { id = idOf(opp), from = was, to = newDate, slippedDays = days }
+    SlipReport { id = opp.id, from = was, to = newDate, slippedDays = days }
 }
 
 example slipCloseDate
@@ -940,9 +914,9 @@ behavior closeAndSummarize = closeWon >-> summarizeWin
 // present branch adds to it — writing a zero into the absent branch and adding afterwards would lose the
 // first deal of every stage, which is the mistake this shape exists to prevent.
 //
-// The keys are StageName, not the stage sum: a boundary map key has to be a string or a String-backed
-// newtype. So the picklist vocabulary is written twice in this file and kept in step by one exhaustive
-// match. Finding F3.
+// The keys are StageName, not the stage sum: the stages carry fields, so they are not the enumeration a
+// boundary map keys by. The picklist vocabulary is written twice in this file and kept in step by one
+// exhaustive match. What is left of finding F3.
 
 // A call's result cannot be reached into — `amountOf(opp).value` does not parse — so opening the newtype
 // is its own helper, and the parameter position is where it comes apart.
@@ -988,7 +962,7 @@ behavior topDeals : (opps: List<Opportunity>, n: Int) -> DealRanking
 
 let topDeals (opps, n) =
     DealRanking
-        { deals = List.map(opp -> idOf(opp),
+        { deals = List.map(opp -> opp.id,
                            List.take(n, List.reverse(List.sortBy(opp -> amountOf(opp), opps))))
         }
 

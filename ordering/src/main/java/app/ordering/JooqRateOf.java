@@ -7,7 +7,6 @@ import example.tax.TaxRate;
 import org.jooq.DSLContext;
 
 import java.math.BigDecimal;
-import java.util.Map;
 
 import static org.jooq.impl.DSL.field;
 import static org.jooq.impl.DSL.name;
@@ -18,8 +17,9 @@ import static org.jooq.impl.DSL.table;
  * place in the project where a NUMERIC column becomes a domain value — everything else in the schema
  * is INT (yen) or VARCHAR.
  *
- * <p>The category is turned into its stored key through its own encoder, so the tag written in the
- * table is the case name the discriminated codec uses, not a second spelling maintained by hand.
+ * <p>The category is turned into its stored key through its own encoder, so the name written in the
+ * table is the case name the derived codec uses, not a second spelling maintained by hand. Every case
+ * of {@code TaxCategory} is a unit data, so that encoder answers with the name itself.
  *
  * <p>The rate is built through the protected factory the behavior inherits (it declares
  * {@code constructs TaxRate}), which runs the newtype's invariant. A row outside 0..1 is not a
@@ -37,8 +37,7 @@ public final class JooqRateOf extends RateOf {
 
     @Override
     public TaxRate apply(TaxCategory category) {
-        Map<String, Object> encoded = TaxCategory.encoder().encode(category);
-        String key = (String) encoded.get("type");
+        String key = (String) TaxCategory.encoder().encode(category);
 
         BigDecimal rate = dsl.select(field(name("rate"), BigDecimal.class))
                 .from(table(name("tax_rates")))

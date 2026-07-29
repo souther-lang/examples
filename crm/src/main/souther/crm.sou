@@ -9,8 +9,10 @@
 //     admits — reachable by nothing — has no name here because it is not a contact anyone can work.
 //     Beside it sits `title: JobTitle?`, an optional that IS right, because no rule depends on it.
 //   - The derived discriminated codec, which is what the module this file replaces was for. A sum
-//     decodes and encodes through `{"type": "<CaseName>"}`, an unknown tag is a decode failure, and a
-//     newtype's format invariant is checked even when the value is reached through the discriminator.
+//     with a field-bearing case decodes and encodes through `{"type": "<CaseName>"}`, an unknown tag is a
+//     decode failure, and a newtype's format invariant is checked even when the value is reached through
+//     the discriminator. A sum every one of whose cases is a unit data — Industry, AccountTier — has
+//     nothing to put beside the tag, so it travels as the case's name alone.
 //     A nested sum folds to its leaf tag, so `LeadSource` crosses the boundary as one flat tag.
 //   - The lead's states are the sum, with the touch record spread onto the common items so that only
 //     the states past New carry it. A converted lead cannot be converted again and no guard says so:
@@ -71,7 +73,33 @@ module example.crm exposing (
     Contact,
     AccountBook,
     ContactBook,
+    LeadSource,
+    Inbound,
+    WebForm,
+    PhoneInquiry,
+    ChatRequest,
+    Referral,
+    PartnerReferral,
+    EmployeeReferral,
+    Outbound,
+    PurchasedList,
+    TradeShow,
+    ColdOutreach,
+    NewLead,
+    WorkingLead,
+    QualifiedLead,
+    DisqualifiedLead,
     ConvertedLead,
+    DisqualifyReason,
+    BantFailure,
+    NoBudget,
+    NoAuthority,
+    NoNeed,
+    BadTiming,
+    DuplicateOf,
+    Unreachable,
+    RevisitOn,
+    NoRevisit,
     LeadConverted,
     ConversionRequest,
     OpportunityIntent,

@@ -171,8 +171,10 @@ data Verdict = Approve | Reject
 data NeedsApproval = { role: ApproverRole, worstDiscount: DiscountRate }
 data QuoteExpired  = { expiredOn: Date, daysLate: Int }
 
+// Keyed by the role itself: every case of ApproverRole is a unit data, so it crosses the boundary as the
+// case's name and keys the map directly. It used to be keyed by a hand-written display string.
 data DiscountExposure =
-    { byRole: Map<String, Amount>
+    { byRole: Map<ApproverRole, Amount>
     , worst: DiscountRate
     }
 
@@ -583,27 +585,20 @@ let renewQuote (quote, on, validity) = {
 }
 
 // === discountExposureOf ===
-// What finance asks for at quarter end: how much revenue is sitting behind each approver's signature. The key
-// is the role's name as a string, because a sum cannot be a boundary map key — the same reason
-// example.pipeline keeps a StageName beside its stages. Finding F3 again, and F18 is why this behavior is not
-// called `discountExposure`.
-let roleNameOf (role: ApproverRole): String =
-    match role with
-        | SalesManager -> "Sales Manager"
-        | RegionalVp   -> "Regional VP"
-        | Cfo          -> "CFO"
-
-let pendingRoleOf (quote: Quote): List<String> =
+// What finance asks for at quarter end: how much revenue is sitting behind each approver's signature. The
+// three roles are unit data, so the role keys the map and no display string is written down beside them.
+// F18 is why this behavior is not called `discountExposure`.
+let pendingRoleOf (quote: Quote): List<ApproverRole> =
     match quote.approval with
-        | PendingApproval { role } -> [ roleNameOf(role) ]
+        | PendingApproval { role } -> [ role ]
         | NotSubmitted             -> [ ]
         | AutoApproved             -> [ ]
         | Decided                  -> [ ]
 
-let roleTotalsOf (quotes: List<Quote>): Map<String, Amount> =
+let roleTotalsOf (quotes: List<Quote>): Map<ApproverRole, Amount> =
     List.fold((acc, quote) -> addQuoteToRole(acc, quote), Map.empty(), quotes)
 
-let addQuoteToRole (acc: Map<String, Amount>, quote: Quote): Map<String, Amount> =
+let addQuoteToRole (acc: Map<ApproverRole, Amount>, quote: Quote): Map<ApproverRole, Amount> =
     List.fold((inner, role) ->
                   Map.upsert(role, quote.total,
                              sofar -> Amount(Decimal.add(sofar.value, quote.total.value)), inner),

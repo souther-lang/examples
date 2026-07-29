@@ -28,12 +28,13 @@ class BusinessTripTest {
 
     /**
      * 交通費の1明細。費用負担区分 は 自社負担 という直和をケースに持つ入れ子だが、導出 decoder は
-     * 葉まで畳んで判別するので、境界の JSON は 立替 / 会社カード という一段のタグで済む。
+     * 葉まで畳んで判別するので、境界の JSON は 立替 / 会社カード という一段の名前で済む。全ケースが
+     * 単位データなので、その名前はタグを載せたオブジェクトではなく裸の文字列で渡る。
      */
     private static Map<String, Object> 交通費明細(long 金額, String 負担) {
         return Map.of(
                 "費目", Map.of("type", "交通費", "金額", 金額, "出発地", "東京", "到着地", "福岡"),
-                "負担", Map.of("type", 負担));
+                "負担", 負担);
     }
 
     private static Map<String, Object> 申請(Object... 明細) {
@@ -73,7 +74,7 @@ class BusinessTripTest {
         // インボイス登録番号は T + 13桁。直和を2段降りた先の newtype の invariant も decode で効く。
         Map<String, Object> 不正な宿泊費 = Map.of(
                 "費目", Map.of("type", "宿泊費", "金額", 12000L, "インボイス登録番号", "X999"),
-                "負担", Map.of("type", "先方負担"));
+                "負担", "先方負担");
 
         Result<申請準備中> 結果 = 申請準備中.decoder().decode(申請(不正な宿泊費), Path.ROOT);
 

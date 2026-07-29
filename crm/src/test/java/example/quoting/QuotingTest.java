@@ -224,11 +224,11 @@ class QuotingTest {
     }
 
     private static Verdict approve() {
-        return ok(Verdict.decoder().decode(Map.of("type", "Approve"), Path.ROOT));
+        return ok(Verdict.decoder().decode("Approve", Path.ROOT));
     }
 
     private static Verdict reject() {
-        return ok(Verdict.decoder().decode(Map.of("type", "Reject"), Path.ROOT));
+        return ok(Verdict.decoder().decode("Reject", Path.ROOT));
     }
 
     private static <T> T ok(Result<T> result) {

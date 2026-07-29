@@ -95,7 +95,8 @@ besides a model is this list. Every entry is a rule a real CRM enforces, what ha
 and what would let it be written directly. Each one is also recorded in the `.sou` file at the
 declaration that hit it, so a reader meets the finding where the model shows it rather than only here. A
 finding the compiler then fixes leaves the list, and the model is rewritten to the form it was asking for;
-F13 was the first, and `tierOf` and `categoryOf` now name the sums they answer with.
+F13 was the first, and `tierOf` and `categoryOf` now name the sums they answer with. F16 left next: a field
+every case spreads is read on the sum, so six helpers that were an arm per case are field reads.
 
 ### The rule could not be stated where it belongs
 
@@ -107,22 +108,21 @@ departed cases into a union `pipeline` declares (E1606). *Would fix it:* a trans
 (crm.ConversionBlocked -> ConversionRefused)` — naming the local case each imported departure lands on.
 The compiler already computes the departed set; what is missing is the syntax to land it.
 
-**F23 — an imported behavior cannot be called at all.** `example.forecasting` needs each stage's
-probability, which `example.pipeline` owns and publishes as a behavior. Calling it is E1401, "neither a
-behavior nor a builtin", hinting at declaring an injected behavior instead. So the ten-arm mapping is
-copied into the consumer, and nothing but a comment keeps the two in step: a stage added to `pipeline`
-breaks three matches there and silently leaves `forecasting` weighing it at whatever its own copy says.
-The other route — re-declare it here as injected and bind `pipeline`'s implementation at the boundary —
-trades the compile-time checking for the single source. Neither keeps both. *Would fix it:* let a `let`
-call an imported behavior that has an implementation, which is what `>->` already does one stage at a
-time.
+**F23 — an imported behavior is reachable from a behavior's body, not from a helper.** A behavior that
+requires nothing is called by name now, and `categoryRollupOf` calls `example.pipeline`'s `categoryOf`
+directly — which is what let the duplicated category mapping go. The probability mapping is still copied,
+because the caller that needs it is `weightedOf`, an ordinary helper `let`, and a helper does not reach a
+behavior (E1401). So a stage added to `pipeline` breaks three matches there and silently leaves
+`forecasting` weighing it at whatever its own copy says. *Would fix it:* let a helper `let` call an
+imported behavior on the same terms a behavior's own body does.
 
-**F3 — a sum cannot be a boundary map key, so a picklist is written twice.** `Map<Stage, Amount>` is the
-shape a pipeline report wants. What is written is `StageName`, a String-backed newtype, plus a total match
-turning each case into its own name — so ten stage names exist twice in `pipeline.sou` and five category
-names twice across `pipeline` and `forecasting`. *Would fix it:* admit a unit-only sum as a boundary map
-key, encoded as the case name. That is byte-for-byte what the `"type"` discriminator already does for the
-same type.
+**F3 — a picklist whose cases carry fields is still written twice.** A sum every one of whose cases is a
+unit data now keys a boundary map, travelling as the case's name, and `categoryRollupOf` keys by
+`ForecastCategory` itself — the five category names are written once, where they are declared, and the
+`CategoryName` newtype and the match that produced it are gone. The ten stage names are still written
+twice, and the reason is no longer the key rule: a stage is a state that carries fields, so there is no
+enumeration to key by. Keying the report by a separate stage enumeration is a modelling choice about
+whether the picklist label ("Needs Analysis") and the state (`NeedsAnalysis`) are one name or two.
 
 **F6 — accumulating business failures has no form.** A CRM reports every reason a conversion is blocked;
 `require` returns one departure and stops. The reasons are built as a value instead — a list, wrapped in a
@@ -132,17 +132,12 @@ composed across modules because each declares its own reason sum. *Would fix it:
 accumulates applicatively; a `require all` collecting several guards into one case carrying a list would
 give the behavior side the same shape.
 
-**F19 — a unit sum has no order, so the stages sort alphabetically.** The ten stages have a natural order:
-the order they are declared in, which is the order a deal moves through them. Nothing carries it, and
-`StageName` is a String, so `pipelineByStage` returns "Closed Lost" first. *Would fix it:* order a
-unit-only sum by its declaration order.
+**F19 — the stages sort alphabetically, for what is left of F3.** A sum every one of whose cases is a unit
+data is now ordered by the order its cases are declared in, which is the order a deal moves through them.
+`pipelineByStage` still returns "Closed Lost" first, because what it keys by is `StageName`, a String —
+the same residue F3 records.
 
 ### It could be stated, at several times the length
-
-**F16 — reading a field every case has costs an arm per case.** All ten states spread
-`OpportunityCommon`, so all ten have an id, an amount and a close date; a sum has no fields, so `idOf`,
-`amountOf` and `closeDateOf` are ten arms each, and `forecasting` writes four more of them. *Would fix it:*
-let a sum whose cases all spread a common type expose that type's fields.
 
 **F17 — a behavior cannot call another behavior in its own module.** Only the behaviors it `requires`.
 So anything two behaviors share is a helper, and a behavior that is also a building block needs a helper
