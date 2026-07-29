@@ -60,18 +60,14 @@ module example.activity exposing (
     dayLoadOf,
     scheduleMeeting
 )
-// The import list is longer than what this module names. nextStepFor takes an OpenOpportunity and reads
-// nothing out of it but the stage, yet its `example` rows have to write a whole NegotiationReview — and
-// writing one means naming every newtype that appears anywhere inside it: OpportunityName, Needs,
-// PainPoint, BusinessCase, DecisionCriterion, DecisionMakers, PerceivedRisk, QuoteNumber, Amount,
-// CurrencyCode. Ten imports exist for the fixtures alone, and a reader of the import list learns nothing
-// true about what this module does with them. Finding F21.
-import example.crm ( AccountId, ContactId, LeadId, UserId, Amount, CurrencyCode )
-import example.pipeline ( OpportunityId, OpportunityName, OpenOpportunity
+// The import list names what this module works with. The deal its `nextStepFor` rows are stated
+// against is `example.pipeline`'s own value, named here rather than restated, so the types inside it
+// stay that module's business.
+import example.crm ( AccountId, ContactId, LeadId, UserId )
+import example.pipeline ( OpportunityId, OpenOpportunity
                         , Prospecting, Qualification, NeedsAnalysis, ValueProposition
                         , IdDecisionMakers, PerceptionAnalysis, ProposalPriceQuote, NegotiationReview
-                        , Needs, PainPoint, BusinessCase, DecisionCriterion, DecisionMakers
-                        , PerceivedRisk, QuoteNumber )
+                        , acmeInNegotiation )
 
 // === Values ===
 
@@ -533,55 +529,11 @@ example staleAccounts
 
 example nextStepFor
     | "a deal in negotiation is worked every other day, and the step says what to do" :
-        (NegotiationReview
-            { id = OpportunityId("006000000000001")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — New Business")
-            , owner = UserId("u-001")
-            , amount = Amount(4800000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            , qualifiedOn = Date("2026-07-25")
-            , primaryContactId = ContactId("003000000000100")
-            , needs = Needs([ PainPoint("invoicing") ])
-            , businessCase = BusinessCase("Automating invoicing removes three days")
-            , criteria = [ DecisionCriterion("total cost") ]
-            , decisionMakers = DecisionMakers([ ContactId("003000000000200") ])
-            , champion = ContactId("003000000000200")
-            , risks = [ PerceivedRisk("migration risk") ]
-            , quoteNumber = QuoteNumber("0Q0000000000001")
-            , proposedOn = Date("2026-08-10")
-            , proposedAmount = Amount(4600000.00m)
-            , openedNegotiationOn = Date("2026-09-01")
-            , floorAmount = Amount(4200000.00m)
-            },
+        (acmeInNegotiation,
          Recency { lastOn = Date("2026-09-09"), daysSince = 1 }, Date("2026-09-10"))
         -> NextStep { description = Subject("Agree the last point and put a signature date on it")
                     , dueOn = Date("2026-09-11") }
     | "the same deal untouched for a week is overdue, not scheduled" :
-        (NegotiationReview
-            { id = OpportunityId("006000000000001")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — New Business")
-            , owner = UserId("u-001")
-            , amount = Amount(4800000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            , qualifiedOn = Date("2026-07-25")
-            , primaryContactId = ContactId("003000000000100")
-            , needs = Needs([ PainPoint("invoicing") ])
-            , businessCase = BusinessCase("Automating invoicing removes three days")
-            , criteria = [ DecisionCriterion("total cost") ]
-            , decisionMakers = DecisionMakers([ ContactId("003000000000200") ])
-            , champion = ContactId("003000000000200")
-            , risks = [ PerceivedRisk("migration risk") ]
-            , quoteNumber = QuoteNumber("0Q0000000000001")
-            , proposedOn = Date("2026-08-10")
-            , proposedAmount = Amount(4600000.00m)
-            , openedNegotiationOn = Date("2026-09-01")
-            , floorAmount = Amount(4200000.00m)
-            },
+        (acmeInNegotiation,
          Recency { lastOn = Date("2026-09-03"), daysSince = 7 }, Date("2026-09-10"))
         -> Overdue

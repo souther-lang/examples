@@ -38,6 +38,7 @@
 // `openFromLead` and `winRateOf`. Nothing was learned by renaming them; the vocabulary just got worse in
 // two places.
 module example.pipeline exposing (
+    acmeInNegotiation,
     OpportunityId,
     OpportunityName,
     StageName,
@@ -990,3 +991,29 @@ let winRateOf (closed) = {
             , lost = List.length(lost)
             }
 }
+
+// A worked deal in negotiation, for the rules stated against one. It lives here because this is
+// where its type does; a module reading it names this value rather than the twenty-two types inside.
+let acmeInNegotiation = NegotiationReview
+    { id = OpportunityId("006000000000001")
+    , accountId = AccountId("001000000000100")
+    , name = OpportunityName("Acme Corp — New Business")
+    , owner = UserId("u-001")
+    , amount = Amount(4800000.00m)
+    , currency = CurrencyCode("JPY")
+    , closeDate = Date("2026-09-30")
+    , openedOn = Date("2026-07-20")
+    , qualifiedOn = Date("2026-07-25")
+    , primaryContactId = ContactId("003000000000100")
+    , needs = Needs([ PainPoint("invoicing") ])
+    , businessCase = BusinessCase("Automating invoicing removes three days")
+    , criteria = [ DecisionCriterion("total cost") ]
+    , decisionMakers = DecisionMakers(Set.fromList([ ContactId("003000000000200") ]))
+    , champion = ContactId("003000000000200")
+    , risks = [ PerceivedRisk("migration risk") ]
+    , quoteNumber = QuoteNumber("0Q0000000000001")
+    , proposedOn = Date("2026-08-10")
+    , proposedAmount = Amount(4600000.00m)
+    , openedNegotiationOn = Date("2026-09-01")
+    , floorAmount = Amount(4200000.00m)
+    }
