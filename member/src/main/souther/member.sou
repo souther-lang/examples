@@ -64,10 +64,10 @@ data 送信済み = { 宛先: メールアドレス }
 behavior 通知メールを送る : (宛先: アクティベート済み, 件名: String) -> 送信済み
     constructs 送信済み
 
-// 会員へ通知する：メール状態を match し、アクティベート済みなら送る（通知メールを送る を requires）、
+// 会員へ通知する：メール状態を match し、アクティベート済みなら送る（通知メールを送る に depends on）、
 // 未アクティベートなら型どおり送信不可を返す。
 behavior 会員へ通知する : (会員: 会員, 件名: String) -> 送信済み | 未アクティベートのため送信不可
-    requires 通知メールを送る
+    depends on 通知メールを送る
 
 let 会員へ通知する (会員, 件名, 通知メールを送る) =
     match 会員.メール with
@@ -103,7 +103,7 @@ behavior saveMember : (会員: 会員) -> 登録済み
 // --- 登録：読む → 検査 → 書く ---
 // 新規会員のメールは未アクティベート（登録直後は確認前）。
 behavior 登録する : (要求: 登録要求) -> 登録済み | 重複メール
-    requires findByEmail, 発番する, saveMember
+    depends on findByEmail, 発番する, saveMember
 
 let 登録する (要求, findByEmail, 発番する, saveMember) =
     match findByEmail(要求.メール) with

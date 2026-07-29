@@ -1,6 +1,6 @@
 // The ordering half of the checkout example: the DB-backed, transactional side. It imports
 // example.cart's PricedCart — the multi-module case, two Souther modules compiled together in one
-// build with a value flowing from one to the other. place is a `let` that `requires` the two injected
+// build with a value flowing from one to the other. place is a `let` that `depends on` the two injected
 // DB behaviors, so it is also the showcase for `fake` + `example`: the record-then-reserve sequencing
 // is checked at compile time with the DB behaviors faked, no database involved. At run time the jOOQ
 // implementations are injected.
@@ -61,16 +61,16 @@ behavior reserveStock : (recorded: RecordedOrder) -> ConfirmedOrder | OutOfStock
     constructs ConfirmedOrder, OutOfStock
 
 // --- place: record then reserve, in one pipeline ---
-// A `let` that `requires` the two injected behaviors (they arrive as arguments after the business
+// A `let` that `depends on` the two injected behaviors (they arrive as arguments after the business
 // input, in declaration order). Its input is cart's PricedCart. Sequencing two DB writes is what a
-// service method does, and being a `let`-with-`requires` is exactly what makes it fakeable below.
+// service method does, and being a `let` with a `depends on` is exactly what makes it fakeable below.
 behavior place : (order: PricedCart) -> ConfirmedOrder | OutOfStock
-    requires recordOrder, reserveStock
+    depends on recordOrder, reserveStock
 
 let place (order, recordOrder, reserveStock) = reserveStock(recordOrder(order))
 
 // --- fake + example: the record-then-reserve sequencing, checked at compile time with no DB ---
-// place `requires` recordOrder and reserveStock, so an example of it supplies a fake for each: an
+// place `depends on` recordOrder and reserveStock, so an example of it supplies a fake for each: an
 // input->output table matched by value equality, with a `_` default. The input PricedCart is an
 // imported type; its fixture is decoded against example.cart. The happy row threads a real order id
 // through both fakes; the `_` rows drive the OutOfStock path.

@@ -1,7 +1,7 @@
 // Account withdrawal: read the current balance from the DB, check it, then write the new balance
 // ("read -> check -> write"). Same shape as member's uniqueness check, but here the check is an
 // aggregate invariant (a balance never goes below zero), and the non-negativity of the new balance
-// Balance(current - amount) is discharged at compile time by the require just above it (12.x
+// Balance(current - amount) is discharged at compile time by the guard just above it (12.x
 // invariant-discharge).
 module example.account
 
@@ -43,15 +43,15 @@ behavior updateBalance : (account: AccountNo, newBalance: Balance) -> Withdrawn
 // --- withdraw: read -> check -> write ---
 // Read the current balance; if there is no account, pass it through; otherwise check the balance.
 // If it is short, return InsufficientFunds; if it is enough, write Balance(current - amount). The
-// value >= 0 of that construction is guaranteed by the require just above it.
+// value >= 0 of that construction is guaranteed by the guard just above it.
 behavior withdraw : (request: WithdrawRequest) -> Withdrawn | InsufficientFunds | NoAccount
-    requires currentBalance, updateBalance
+    depends on currentBalance, updateBalance
 
 let withdraw (request, currentBalance, updateBalance) =
     match currentBalance(request.account) with
         | NoAccount          -> NoAccount
         | Balance as current -> {
-            require current.value >= request.amount.value
+            guard current.value >= request.amount.value
                 else InsufficientFunds { shortfall = request.amount.value - current.value }
             updateBalance(request.account, Balance(current.value - request.amount.value))
           }

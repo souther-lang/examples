@@ -90,9 +90,9 @@ let requestedSkus (request: ReturnRequest): Set<Sku> =
 let requestReturn (request, shipped, dispatchedOn, windowDays) = {
     let asked = requestedSkus(request)
     let neverShipped = Set.difference(asked, shipped)
-    require Set.isEmpty(neverShipped) else NotShipped { rma = request.rma, unknown = neverShipped }
+    guard Set.isEmpty(neverShipped) else NotShipped { rma = request.rma, unknown = neverShipped }
     let age = Date.daysBetween(dispatchedOn, request.requestedOn)
-    require age <= windowDays
+    guard age <= windowDays
         else OutsideWindow { rma = request.rma, daysSinceDispatch = age, windowDays = windowDays }
     Accepted { rma = request.rma, skus = Set.intersect(asked, shipped), daysSinceDispatch = age }
 }

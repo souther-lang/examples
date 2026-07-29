@@ -178,8 +178,8 @@ behavior scheduleMeeting : (draft: MeetingDraft, minutes: Int)
     constructs Meeting, DurationMinutes, Attendees, DurationOutOfRange, NoAttendees
 
 let scheduleMeeting (draft, minutes) = {
-    require DurationMinutes(minutes) as duration else DurationOutOfRange
-    require Attendees(Set.fromList(draft.attendees)) as attendees else NoAttendees
+    guard DurationMinutes(minutes) as duration else DurationOutOfRange
+    guard Attendees(Set.fromList(draft.attendees)) as attendees else NoAttendees
 
     Meeting { id = draft.id
             , subject = draft.subject
@@ -288,8 +288,8 @@ behavior lastActivityOn : (activities: List<Activity>, today: Date) -> Recency |
     constructs Recency, NeverTouched
 
 let lastActivityOn (activities, today) = {
-    require List.length(activities) >= 1 else NeverTouched
-    // The require has already made the empty case impossible, but List.max answers with an optional and the
+    guard List.length(activities) >= 1 else NeverTouched
+    // The guard has already made the empty case impossible, but List.max answers with an optional and the
     // match still has to state both arms: a guard cannot inform what an Option-returning call knows. The
     // None arm here is unreachable and has to be written anyway.
     match List.max(List.map(a -> dateOf(a), activities)) with
@@ -400,7 +400,7 @@ behavior nextStepFor : (opp: OpenOpportunity, recency: Recency, today: Date) -> 
 
 let nextStepFor (opp, recency, today) = {
     let cadence = cadenceFor(opp)
-    require recency.daysSince <= cadence.value else Overdue
+    guard recency.daysSince <= cadence.value else Overdue
     NextStep { description = actionFor(opp)
              , dueOn = Date.addDays(cadence.value - recency.daysSince, today)
              }

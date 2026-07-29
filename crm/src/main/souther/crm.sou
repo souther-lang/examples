@@ -18,9 +18,9 @@
 //     the states past New carry it. A converted lead cannot be converted again and no guard says so:
 //     `convertLead` takes a QualifiedLead and produces a ConvertedLead, so the second call does not
 //     typecheck.
-//   - Accumulating every reason a conversion is blocked. `require` returns one departure and stops, so
+//   - Accumulating every reason a conversion is blocked. `guard` returns one departure and stops, so
 //     the reasons are built as a value — the guard-comprehension `++` chain — and wrapped in a
-//     non-empty newtype after the `require` that discharges its invariant.
+//     non-empty newtype after the `guard` that discharges its invariant.
 //   - The set a rule is checked against is passed in. Duplicate screening takes the account book and
 //     the contact book as data rather than reading the world behind the model's back, and Salesforce's
 //     two standard rules stay two rules: accounts match on the email domain, contacts on the exact
@@ -212,7 +212,7 @@ data CurrencyCode = String
 data EmployeeCount = Int
     invariant value >= 1
 
-// The marketing-qualification score. Built after the require that discharges the range, so the newtype
+// The marketing-qualification score. Built after the guard that discharges the range, so the newtype
 // never aborts on a path a rule could have reported.
 data LeadScore = Int
     invariant value >= 0 && value <= 100
@@ -409,7 +409,7 @@ let campaignsOf (lead: OpenLead): Set<CampaignName> =
 // === recordTouch: New becomes Working, Working counts up ===
 // A touch dated before the lead existed is a data-entry error a CRM does report, so it is a case. It has
 // to be: WorkedLeadCommon's invariant would otherwise abort, and an abort is not something a boundary can
-// tell a user about. The require discharges the invariant the spread brought in.
+// tell a user about. The guard discharges the invariant the spread brought in.
 
 behavior recordTouch : (lead: OpenLead, on: Date) -> WorkingLead | TouchBeforeCreation
     constructs WorkingLead, TouchBeforeCreation
@@ -417,11 +417,11 @@ behavior recordTouch : (lead: OpenLead, on: Date) -> WorkingLead | TouchBeforeCr
 let recordTouch (lead, on) =
     match lead with
         | NewLead as n -> {
-            require Date.daysBetween(n.createdOn, on) >= 0 else TouchBeforeCreation
+            guard Date.daysBetween(n.createdOn, on) >= 0 else TouchBeforeCreation
             WorkingLead { ...n, firstTouchedOn = on, touches = 1 }
         }
         | WorkingLead as w -> {
-            require Date.daysBetween(w.createdOn, on) >= 0 else TouchBeforeCreation
+            guard Date.daysBetween(w.createdOn, on) >= 0 else TouchBeforeCreation
             WorkingLead { ...w, touches = w.touches + 1 }
         }
 
@@ -604,14 +604,14 @@ example attributionOf
 
 // === qualifyLead ===
 // Sixty is the MQL bar. The score arrives raw so that the threshold can be a business outcome: the
-// newtype is built after the require, on the path where its range already holds.
+// newtype is built after the guard, on the path where its range already holds.
 
 behavior qualifyLead : (lead: WorkingLead, on: Date, rawScore: Int, budgetConfirmed: Bool)
         -> QualifiedLead | ScoreBelowThreshold
     constructs QualifiedLead, LeadScore, ScoreBelowThreshold
 
 let qualifyLead (lead, on, rawScore, budgetConfirmed) = {
-    require rawScore >= 60 else ScoreBelowThreshold
+    guard rawScore >= 60 else ScoreBelowThreshold
     QualifiedLead { ...lead
                   , qualifiedOn = on
                   , score = LeadScore(Int.clamp(0, 100, rawScore))
@@ -814,14 +814,14 @@ behavior screenForDuplicates : (lead: NewLead, accounts: AccountBook, contacts: 
     constructs NoDuplicate, PossibleDuplicate, NoEmailOnLead, DomainName
 
 let screenForDuplicates (lead, accounts, contacts) = {
-    require List.length(emailOf(lead.reach)) >= 1 else NoEmailOnLead
+    guard List.length(emailOf(lead.reach)) >= 1 else NoEmailOnLead
 
     // Two accounts can sit on one domain, so the ids are made distinct: the rule is "which accounts",
     // not "how many rows matched".
     let matchedAccounts = List.distinct(List.map(a -> a.id, domainMatches(lead.reach, accounts)))
     let matchedContacts = List.distinct(List.map(c -> c.id, emailMatches(lead.reach, contacts)))
 
-    require List.length(matchedAccounts) + List.length(matchedContacts) >= 1 else NoDuplicate
+    guard List.length(matchedAccounts) + List.length(matchedContacts) >= 1 else NoDuplicate
     PossibleDuplicate { accounts = matchedAccounts, contacts = matchedContacts }
 }
 
@@ -845,7 +845,7 @@ data MatchedAccount = { leadId: LeadId, accountId: AccountId }
 // writing separately from screenForDuplicates is that the two answer different questions from different
 // sources: one reads a set it was given, one asks the database about a key.
 behavior linkLeadToAccount : (lead: NewLead) -> MatchedAccount | UnmatchedLead | NoEmailOnLead
-    requires findAccountByDomain
+    depends on findAccountByDomain
     constructs MatchedAccount, UnmatchedLead, NoEmailOnLead, DomainName
 
 let linkLeadToAccount (lead, findAccountByDomain) =
@@ -933,7 +933,7 @@ data LeadConverted =
     , intent: OpportunityIntent
     }
 
-// A real CRM reports every reason a conversion is blocked, not the first one it trips over. `require`
+// A real CRM reports every reason a conversion is blocked, not the first one it trips over. `guard`
 // returns one departure and stops, so the reasons are a list the behavior builds rather than a
 // sequence of guards — two of the four sources below produce one reason per matching record, so how
 // many there are is not known until they are collected.

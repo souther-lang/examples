@@ -80,7 +80,7 @@ let pickLineFor (i: LineItem, shelf: Map<Sku, Location>): Option<PickLine> =
 
 let planPicks (order, shelf) = {
     let pickable = filterMap(i -> pickLineFor(i, shelf), order.items)
-    require length(pickable) >= 1 else NothingToShip
+    guard length(pickable) >= 1 else NothingToShip
     PickList { lines = List.sortBy(.location, pickable) }
 }
 
@@ -179,7 +179,7 @@ let dispatchWindow (orderedAt, cutoff, transitDays) = {
     let left = DateTime.minutesBetween(orderedAt, cutoff)
     // The next day's run opens 24 hours after this one's cut-off; nothing later than that is a
     // window this behavior can plan.
-    require left > 0 - 1440 else PastCutoff { minutesPast = 0 - left }
+    guard left > 0 - 1440 else PastCutoff { minutesPast = 0 - left }
     let dispatchOn = if left > 0
         then DateTime.toDate(orderedAt)
         else DateTime.toDate(DateTime.addDays(1, orderedAt))

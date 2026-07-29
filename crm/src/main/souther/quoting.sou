@@ -183,7 +183,7 @@ data DiscountExposure =
 // PerceptionAnalysis, which is the stage at which the risks have been recorded and a price is the next thing
 // the customer is waiting for.
 //
-// Three require-then-wraps and two caps. The per-line cap is what an authority matrix is written against;
+// Three guard-then-wraps and two caps. The per-line cap is what an authority matrix is written against;
 // the blended cap is the one that actually holds, because a rep who needs thirty per cent off a deal takes
 // thirty per cent off one line and nothing off the others, and every per-line check passes. Both caps are
 // stated as multiplications for the same reason the line invariant is.
@@ -227,15 +227,15 @@ behavior buildQuote : (number: QuoteNumber, opp: PerceptionAnalysis, lines: List
 let buildQuote (number, opp, lines, issuedOn, validity) = {
     // QuoteLines' invariant has two clauses and they depart by different cases, so these two restate it
     // rather than attempting it — an attempt is all-or-nothing over the whole invariant. Finding F24.
-    require List.length(lines) >= 1 else NoLines
-    require List.allUniqueBy(.product, lines) else DuplicateProduct
-    require List.all(r -> r.quantity >= 1, lines) else NoLines
-    require withinLineCaps(lines) else LineDiscountOverCap
-    require withinBlendedCap(lines) else BlendedDiscountOverCap
+    guard List.length(lines) >= 1 else NoLines
+    guard List.allUniqueBy(.product, lines) else DuplicateProduct
+    guard List.all(r -> r.quantity >= 1, lines) else NoLines
+    guard withinLineCaps(lines) else LineDiscountOverCap
+    guard withinBlendedCap(lines) else BlendedDiscountOverCap
 
     // The range lives in ValidityDays and nowhere else: attempting the construction both applies it and
-    // names the value, where before the range was restated in a require and the newtype wrapped after it.
-    require ValidityDays(validity) as days else ValidityOutOfRange
+    // names the value, where before the range was restated in a guard and the newtype wrapped after it.
+    guard ValidityDays(validity) as days else ValidityOutOfRange
 
     Quote { number = number
           , opportunityId = opp.id
@@ -255,7 +255,7 @@ let buildQuote (number, opp, lines, issuedOn, validity) = {
 // being asked about.
 //
 // The matrix is a helper as well as a behavior, because submitForApproval needs it too and a behavior's body
-// may only call the behaviors it requires. Finding F17.
+// may only call the behaviors it depends on. Finding F17.
 let worstDiscountOf (QuoteLines(lines)): DiscountRate =
     Option.withDefault(DiscountRate(0.0m), List.max(List.map(l -> l.discount, lines)))
 
@@ -354,7 +354,7 @@ behavior approverFor : (role: ApproverRole) -> UserId
 // Every state says what submitting means from there, which is what an exhaustive match over an attribute
 // buys: there is no state in which submitting quietly does nothing.
 behavior submitForApproval : (quote: Quote, on: Date) -> Quote | AlreadySubmitted | NothingToApprove
-    requires approverFor
+    depends on approverFor
     constructs Quote, PendingApproval, AutoApproved, AlreadySubmitted, NothingToApprove, DiscountRate,
                SalesManager, RegionalVp, Cfo
 
@@ -447,7 +447,7 @@ let decideApproval (quote, approver, on, verdict, note) =
                 | Approve -> Quote { ...quote
                                    , approval = ApprovedQuote { approvedOn = on, approver = approver } }
                 | Reject  -> {
-                    require RejectionNote(String.trim(note)) as reason else RejectionNoteMissing
+                    guard RejectionNote(String.trim(note)) as reason else RejectionNoteMissing
 
                     Quote { ...quote
                           , approval = RejectedQuote { rejectedOn = on
@@ -463,7 +463,7 @@ behavior acceptQuote : (quote: Quote, on: Date) -> AcceptedQuote | QuoteExpired 
     constructs AcceptedQuote, QuoteExpired, ApprovalMissing
 
 let acceptQuote (quote, on) = {
-    require Date.daysBetween(on, quote.expiresOn) >= 0
+    guard Date.daysBetween(on, quote.expiresOn) >= 0
         else QuoteExpired { expiredOn = quote.expiresOn
                           , daysLate = Date.daysBetween(quote.expiresOn, on) }
     match quote.approval with
@@ -574,8 +574,8 @@ behavior renewQuote : (quote: Quote, on: Date, validity: Int) -> Quote | StillVa
     constructs Quote, ValidityDays, NotSubmitted, StillValid, ValidityOutOfRange
 
 let renewQuote (quote, on, validity) = {
-    require Date.daysBetween(quote.expiresOn, on) >= 1 else StillValid
-    require ValidityDays(validity) as days else ValidityOutOfRange
+    guard Date.daysBetween(quote.expiresOn, on) >= 1 else StillValid
+    guard ValidityDays(validity) as days else ValidityOutOfRange
 
     Quote { ...quote
           , issuedOn = on

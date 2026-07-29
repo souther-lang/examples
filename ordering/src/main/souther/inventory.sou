@@ -72,11 +72,11 @@ let allocatable (i: LineItem, stock: Map<Sku, StockLine>): Bool =
 
 // read -> index -> aggregate check -> write. The lambda passed to all captures the local index.
 behavior allocate : (order: PricedCart) -> Allocated | InsufficientStock
-    requires readStock, commitStock
+    depends on readStock, commitStock
 
 let allocate (order, readStock, commitStock) = {
     let stock = onHand(readStock(order))
-    require all(i -> allocatable(i, stock), order.items)
+    guard all(i -> allocatable(i, stock), order.items)
         else InsufficientStock
     commitStock(order)
 }
@@ -121,7 +121,7 @@ let weightedSum (code: String) =
         |> List.sum
 
 let inspectBarcode (barcode) = {
-    require Int.modBy(10, weightedSum(barcode.value)) == 0 else ScanError
+    guard Int.modBy(10, weightedSum(barcode.value)) == 0 else ScanError
     InspectionPassed { code = barcode }
 }
 
@@ -145,7 +145,7 @@ behavior verifyShipment : (caseSize: CaseSize, requested: Int) -> Shippable | Pa
 
 let verifyShipment (caseSize, requested) = {
     let leftover = Int.modBy(caseSize.value, requested)
-    require leftover == 0 else PartialCase { leftover = leftover }
+    guard leftover == 0 else PartialCase { leftover = leftover }
     Shippable { cases = requested / caseSize.value }
 }
 
@@ -222,7 +222,7 @@ behavior checkExpiry : (lot: Lot, today: Date) -> Fresh | Expired
 
 let checkExpiry (lot, today) = {
     let past = Date.daysBetween(lot.bestBefore, today)
-    require past <= 0 else Expired { daysPast = past }
+    guard past <= 0 else Expired { daysPast = past }
     Fresh { sku = lot.sku }
 }
 

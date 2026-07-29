@@ -1,7 +1,7 @@
 // The pricing half of the checkout example, kept in its own module. `quote` is pure: it prices a
 // cart with the list combinators map / filter / fold / all / any and the empty list [] — none of
 // which is built in; souther.list derives them from fold (ADR-0028), fold being the one privileged
-// loop. This module has no injected behavior and no `let`-with-`requires`, so its `example`s need no
+// loop. This module has no injected behavior and no `let` with a `depends on`, so its `example`s need no
 // `fake` — a pure behavior is examined directly.
 //
 // example.ordering imports this module (`import example.cart (...)`) and composes `quote >-> place`
@@ -55,8 +55,8 @@ behavior quote : (c: Cart) -> PricedCart | EmptyCart | InvalidQuantity
     constructs PricedCart, EmptyCart, InvalidQuantity
 
 let quote (c) = {
-    require length(activeItems(c)) >= 1 else EmptyCart
-    require all(i -> i.quantity >= 1, activeItems(c))
+    guard length(activeItems(c)) >= 1 else EmptyCart
+    guard all(i -> i.quantity >= 1, activeItems(c))
         else InvalidQuantity { invalidCount = length(filter(i -> i.quantity < 1, activeItems(c))) }
     PricedCart {
         items = activeItems(c),

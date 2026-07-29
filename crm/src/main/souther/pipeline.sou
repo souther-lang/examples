@@ -361,7 +361,7 @@ let stageNameOf (opp: Opportunity): StageName =
         | ClosedLost         -> StageName("Closed Lost")
 
 // The mapping is a helper and the behavior is a one-line wrapper around it, and that shape is forced: a
-// behavior's body may only call the behaviors it `requires`, so nothing a behavior computes can be reused
+// behavior's body may only call the behaviors it `depends on`, so nothing a behavior computes can be reused
 // by another behavior in the same module. profileOf needs all four readings, so all four are helpers and
 // the two that are worth publishing get a behavior each. Anything shared between behaviors needs a helper
 // twin. Finding F17.
@@ -472,7 +472,7 @@ behavior nextOpportunityId : () -> OpportunityId
     constructs OpportunityId
 
 behavior openFromLead : (converted: LeadConverted) -> Prospecting | NoOpportunityRequested
-    requires nextOpportunityId
+    depends on nextOpportunityId
     constructs Prospecting, OpportunityName, NoOpportunityRequested
 
 let openFromLead (converted, nextOpportunityId) =
@@ -503,7 +503,7 @@ behavior qualifyOpportunity : (opp: Prospecting, on: Date, primaryContactId: Con
     constructs Qualification, AmountNotStated
 
 let qualifyOpportunity (opp, on, primaryContactId) = {
-    require Decimal.compare(opp.amount.value, 0.0m) > 0 else AmountNotStated
+    guard Decimal.compare(opp.amount.value, 0.0m) > 0 else AmountNotStated
     Qualification { ...opp, qualifiedOn = on, primaryContactId = primaryContactId }
 }
 
@@ -545,14 +545,14 @@ example qualifyOpportunity
         -> AmountNotStated
 
 // Discovery is over when at least one pain point is written down. The raw text is trimmed and the blanks
-// are dropped before the require, so PainPoint and Needs are both built on a path where their invariants
-// already hold — the require-then-wrap shape, twice in one behavior.
+// are dropped before the guard, so PainPoint and Needs are both built on a path where their invariants
+// already hold — the guard-then-wrap shape, twice in one behavior.
 behavior recordNeeds : (opp: Qualification, points: List<String>) -> NeedsAnalysis | NoNeedsRecorded
     constructs NeedsAnalysis, Needs, PainPoint, NoNeedsRecorded
 
 let recordNeeds (opp, points) = {
     let usable = List.filter(p -> String.length(String.trim(p)) >= 1, points)
-    require Needs(List.map(p -> PainPoint(String.trim(p)), usable)) as needs else NoNeedsRecorded
+    guard Needs(List.map(p -> PainPoint(String.trim(p)), usable)) as needs else NoNeedsRecorded
 
     NeedsAnalysis { ...opp, needs = needs }
 }
@@ -609,8 +609,8 @@ let answersANeed (businessCase: String, Needs(points)): Bool =
     List.any(p -> String.contains(String.lowercase(p.value), String.lowercase(businessCase)), points)
 
 let proposeValue (opp, businessCase, criteria) = {
-    require BusinessCase(String.trim(businessCase)) as stated else BusinessCaseMissesNeeds
-    require answersANeed(businessCase, opp.needs) else BusinessCaseMissesNeeds
+    guard BusinessCase(String.trim(businessCase)) as stated else BusinessCaseMissesNeeds
+    guard answersANeed(businessCase, opp.needs) else BusinessCaseMissesNeeds
 
     ValueProposition
         { ...opp
@@ -627,7 +627,7 @@ behavior identifyDecisionMakers : (opp: ValueProposition, ids: List<ContactId>)
     constructs IdDecisionMakers, DecisionMakers, NoDecisionMakers
 
 let identifyDecisionMakers (opp, ids) = {
-    require DecisionMakers(Set.fromList(ids)) as makers else NoDecisionMakers
+    guard DecisionMakers(Set.fromList(ids)) as makers else NoDecisionMakers
 
     IdDecisionMakers { ...opp, decisionMakers = makers }
 }
@@ -639,7 +639,7 @@ behavior assessPerception : (opp: IdDecisionMakers, champion: ContactId, risks: 
     constructs PerceptionAnalysis, PerceivedRisk, ChampionNotADecisionMaker
 
 let assessPerception (opp, champion, risks) = {
-    require Set.contains(champion, opp.decisionMakers.value) else ChampionNotADecisionMaker
+    guard Set.contains(champion, opp.decisionMakers.value) else ChampionNotADecisionMaker
     PerceptionAnalysis
         { ...opp
         , champion = champion
@@ -656,7 +656,7 @@ behavior sendProposal : (opp: PerceptionAnalysis, number: QuoteNumber, on: Date,
     constructs ProposalPriceQuote, ProposalAfterCloseDate
 
 let sendProposal (opp, number, on, proposed) = {
-    require Date.daysBetween(on, opp.closeDate) >= 0 else ProposalAfterCloseDate
+    guard Date.daysBetween(on, opp.closeDate) >= 0 else ProposalAfterCloseDate
     ProposalPriceQuote { ...opp, quoteNumber = number, proposedOn = on, proposedAmount = proposed }
 }
 
@@ -669,14 +669,14 @@ behavior withdrawProposal : (opp: ProposalPriceQuote) -> PerceptionAnalysis
 
 let withdrawProposal (opp) = PerceptionAnalysis { ...opp }
 
-// Opening a negotiation is stating a walk-away price. The require discharges NegotiationReview's
+// Opening a negotiation is stating a walk-away price. The guard discharges NegotiationReview's
 // cross-field invariant, so the state cannot exist with a floor above the ask.
 behavior openNegotiation : (opp: ProposalPriceQuote, on: Date, floor: Amount)
         -> NegotiationReview | FloorAboveAsk
     constructs NegotiationReview, FloorAboveAsk
 
 let openNegotiation (opp, on, floor) = {
-    require Decimal.compare(floor.value, opp.amount.value) <= 0 else FloorAboveAsk
+    guard Decimal.compare(floor.value, opp.amount.value) <= 0 else FloorAboveAsk
     NegotiationReview { ...opp, openedNegotiationOn = on, floorAmount = floor }
 }
 
@@ -693,7 +693,7 @@ let closeWon (opp, on, finalAmount) =
     match opp with
         | ProposalPriceQuote as p -> ClosedWon { ...p, closedOn = on, wonAmount = finalAmount }
         | NegotiationReview as n -> {
-            require Decimal.compare(finalAmount.value, n.floorAmount.value) >= 0
+            guard Decimal.compare(finalAmount.value, n.floorAmount.value) >= 0
                 else BelowFloor { floor = n.floorAmount, offered = finalAmount }
             ClosedWon { ...n, closedOn = on, wonAmount = finalAmount }
         }
@@ -852,7 +852,7 @@ behavior slipCloseDate : (opp: OpenOpportunity, newDate: Date) -> SlipReport | N
 let slipCloseDate (opp, newDate) = {
     let was = opp.closeDate
     let days = Date.daysBetween(was, newDate)
-    require days >= 1 else NotASlip
+    guard days >= 1 else NotASlip
     SlipReport { id = opp.id, from = was, to = newDate, slippedDays = days }
 }
 
@@ -970,7 +970,7 @@ let topDeals (opps, n) =
         }
 
 // === winRate ===
-// Wins over closed deals. The require makes the division by zero unreachable rather than reporting it: a
+// Wins over closed deals. The guard makes the division by zero unreachable rather than reporting it: a
 // period with no closed deals has no win rate, which is a different statement from a rate of zero. That is
 // also why no outcome here is a DivisionByZero — the model does not carry a case it can never return, and
 // the guard is what earns that. Finding F5.
@@ -983,7 +983,7 @@ let isWon (opp: ClosedOpportunity): Bool =
         | ClosedLost -> false
 
 let winRateOf (closed) = {
-    require List.length(closed) >= 1 else NoClosedDeals
+    guard List.length(closed) >= 1 else NoClosedDeals
     let (won, lost) = List.partition(opp -> isWon(opp), closed)
     WinRate { rate = Probability(List.length(won) * 100 / List.length(closed))
             , won = List.length(won)

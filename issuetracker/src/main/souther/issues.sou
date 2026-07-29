@@ -19,7 +19,7 @@
 //     match pattern (the outermost .value elided), with a None arm for the unassigned case.
 //   - Three injected behaviors (findIssue / createIssue / storeLabels) with no `let`: the database is
 //     outside, so the implementation comes from the boundary. The composed openIssue / attachLabel /
-//     detachLabel `require` them, which is what makes their sequencing checkable with `fake` +
+//     detachLabel `depends on` them, which is what makes their sequencing checkable with `fake` +
 //     `example` — no database involved at compile time.
 //
 // The label text editing this example grew out of survives as the `cleaned` helper (split / trim /
@@ -84,7 +84,7 @@ data NewIssue =
     }
 
 behavior openIssue : (draft: NewIssue) -> Issue | NoLabels
-    requires createIssue
+    depends on createIssue
 
 // One raw string to the cleaned, non-empty labels. The whole pipeline stays in Set land: nothing here
 // needs order or repeats, and the label set is what the issue carries.
@@ -98,7 +98,7 @@ let cleaned (text: String): Set<Label> =
 
 let openIssue (draft, createIssue) = {
     let labels = cleaned(draft.labels)
-    require Set.size(labels) >= 1 else NoLabels
+    guard Set.size(labels) >= 1 else NoLabels
     createIssue(Issue { id = draft.id, title = draft.title, labels = labels, assignee = draft.assignee })
 }
 
@@ -118,7 +118,7 @@ example openIssue
 
 // === attachLabel / detachLabel: read the issue, change its label set, write it back ===
 // Set insert / remove on the labels field, with constructor spread reusing every other field. Both
-// `require` the read and the write, so the whole sequence is checked below with the database faked.
+// `depends on` the read and the write, so the whole sequence is checked below with the database faked.
 // An unknown id passes IssueNotFound through, and nothing is written.
 data LabelRequest =
     { id: IssueId
@@ -126,10 +126,10 @@ data LabelRequest =
     }
 
 behavior attachLabel : (request: LabelRequest) -> Issue | IssueNotFound
-    requires findIssue, storeLabels
+    depends on findIssue, storeLabels
 
 behavior detachLabel : (request: LabelRequest) -> Issue | IssueNotFound
-    requires findIssue, storeLabels
+    depends on findIssue, storeLabels
 
 let withLabel (issue: Issue, label: Label): Issue =
     Issue { ...issue, labels = Set.insert(label, issue.labels) }

@@ -1,5 +1,5 @@
 // A `>->` pipeline run end to end. `run` drives a pipeline whose stages are all in-language
-// (each has a `let` and no `requires`): the pipeline compiles to a no-arg class that chains the
+// (each has a `let` and depends on nothing): the pipeline compiles to a no-arg class that chains the
 // stages, so it runs like any other behavior.
 //
 //   souther run pipeline.sou --behavior checkout --input '{"quantity": 3, "unitPrice": 400}'
