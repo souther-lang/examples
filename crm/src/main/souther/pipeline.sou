@@ -552,8 +552,9 @@ behavior recordNeeds : (opp: Qualification, points: List<String>) -> NeedsAnalys
 
 let recordNeeds (opp, points) = {
     let usable = List.filter(p -> String.length(String.trim(p)) >= 1, points)
-    require List.length(usable) >= 1 else NoNeedsRecorded
-    NeedsAnalysis { ...opp, needs = Needs(List.map(p -> PainPoint(String.trim(p)), usable)) }
+    require Needs(List.map(p -> PainPoint(String.trim(p)), usable)) as needs else NoNeedsRecorded
+
+    NeedsAnalysis { ...opp, needs = needs }
 }
 
 example recordNeeds
@@ -608,25 +609,27 @@ let answersANeed (businessCase: String, Needs(points)): Bool =
     List.any(p -> String.contains(String.lowercase(p.value), String.lowercase(businessCase)), points)
 
 let proposeValue (opp, businessCase, criteria) = {
-    require String.length(String.trim(businessCase)) >= 1 else BusinessCaseMissesNeeds
+    require BusinessCase(String.trim(businessCase)) as stated else BusinessCaseMissesNeeds
     require answersANeed(businessCase, opp.needs) else BusinessCaseMissesNeeds
+
     ValueProposition
         { ...opp
-        , businessCase = BusinessCase(String.trim(businessCase))
+        , businessCase = stated
         , criteria = List.map(c -> DecisionCriterion(String.trim(c)),
                               List.filter(c -> String.length(String.trim(c)) >= 1, criteria))
         }
 }
 
-// A deal nobody can say yes to cannot advance. The set is built after the require, so DecisionMakers'
-// non-empty invariant is discharged rather than risked.
+// A deal nobody can say yes to cannot advance. The set is attempted, so what answers "nobody" is
+// DecisionMakers' own non-empty invariant, asked of the set the ids actually make.
 behavior identifyDecisionMakers : (opp: ValueProposition, ids: List<ContactId>)
         -> IdDecisionMakers | NoDecisionMakers
     constructs IdDecisionMakers, DecisionMakers, NoDecisionMakers
 
 let identifyDecisionMakers (opp, ids) = {
-    require List.length(ids) >= 1 else NoDecisionMakers
-    IdDecisionMakers { ...opp, decisionMakers = DecisionMakers(Set.fromList(ids)) }
+    require DecisionMakers(Set.fromList(ids)) as makers else NoDecisionMakers
+
+    IdDecisionMakers { ...opp, decisionMakers = makers }
 }
 
 // The champion has to be one of the people who can say yes. A champion outside that set is the classic
