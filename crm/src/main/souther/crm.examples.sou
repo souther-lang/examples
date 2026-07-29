@@ -148,7 +148,7 @@ example convertLead
             , currency = CurrencyCode("JPY")
             },
          AccountBook([ ]), ContactBook([ ]))
-        -> ConversionBlocked { reasons = BlockReasons([ BudgetNotConfirmed ]) }
+        -> ConversionBlocked { reasons = [ BudgetNotConfirmed ] }
     | "a close date before the conversion is blocked, and the date it objects to is in the reason" :
         (QualifiedLead
             { id = LeadId("00Q000000000004")
@@ -177,7 +177,7 @@ example convertLead
             , currency = CurrencyCode("JPY")
             },
          AccountBook([ ]), ContactBook([ ]))
-        -> ConversionBlocked { reasons = BlockReasons([ CloseDateInPast { requested = Date("2026-06-01") } ]) }
+        -> ConversionBlocked { reasons = [ CloseDateInPast { requested = Date("2026-06-01") } ] }
     | "both reasons are reported at once, which is the whole point of collecting them" :
         (QualifiedLead
             { id = LeadId("00Q000000000005")
@@ -207,8 +207,8 @@ example convertLead
             },
          AccountBook([ ]), ContactBook([ ]))
         -> ConversionBlocked
-            { reasons = BlockReasons([ BudgetNotConfirmed
-                                     , CloseDateInPast { requested = Date("2026-06-01") } ]) }
+            { reasons = [ BudgetNotConfirmed
+                        , CloseDateInPast { requested = Date("2026-06-01") } ] }
     | "an account already on this domain blocks the conversion and names the account" :
         (QualifiedLead
             { id = LeadId("00Q000000000006")
@@ -247,7 +247,7 @@ example convertLead
                       , owner = UserId("u-002"), currency = CurrencyCode("USD") } ]),
          ContactBook([ ]))
         -> ConversionBlocked
-            { reasons = BlockReasons([ DuplicateAccount { existing = AccountId("001000000000002") } ]) }
+            { reasons = [ DuplicateAccount { existing = AccountId("001000000000002") } ] }
 
 // Screening is the same two rules, asked before anybody has been qualified. The two keys are what make
 // them two rules: an account is a company, so its key is the domain; a contact is a person, so its key is

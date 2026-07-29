@@ -99,7 +99,10 @@ F13 was the first, and `tierOf` and `categoryOf` now name the sums they answer w
 every case spreads is read on the sum, so six helpers that were an arm per case are field reads. F14 left
 after that: a construction can be attempted, so twelve guards that restated a type's invariant are gone,
 along with the helper that gave `DomainName`'s pattern a name and the two bindings that unwrapped
-`ValidityDays`. What it did not cover is F24.
+`ValidityDays`. What it did not cover is F24. F6 left with it rather than for a form of its own: what a
+blocked conversion is is that there is a reason it is, so the reasons are a list `ConversionBlocked`
+carries and "at least one" is its own invariant. `convertLead` attempts that construction, `BlockReasons`
+is gone and no guard restates the emptiness test.
 
 ### The rule could not be stated where it belongs
 
@@ -126,14 +129,6 @@ unit data now keys a boundary map, travelling as the case's name, and `categoryR
 twice, and the reason is no longer the key rule: a stage is a state that carries fields, so there is no
 enumeration to key by. Keying the report by a separate stage enumeration is a modelling choice about
 whether the picklist label ("Needs Analysis") and the state (`NeedsAnalysis`) are one name or two.
-
-**F6 — accumulating business failures has no form.** A CRM reports every reason a conversion is blocked;
-`require` returns one departure and stops. The reasons are built as a value instead — a list, wrapped in a
-non-empty newtype after the `require` that discharges it — which works and is the shape `businesstrip`
-established, but costs a named list type and an invariant per behavior that needs it, and cannot be
-composed across modules because each declares its own reason sum. *Would fix it:* the decode side already
-accumulates applicatively; a `require all` collecting several guards into one case carrying a list would
-give the behavior side the same shape.
 
 **F19 — the stages sort alphabetically, for what is left of F3.** A sum every one of whose cases is a unit
 data is now ordered by the order its cases are declared in, which is the order a deal moves through them.

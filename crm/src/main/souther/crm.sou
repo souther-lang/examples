@@ -31,7 +31,7 @@
 //
 // Where the language could not state a rule directly, this file says so at the declaration that hit it.
 // Those notes are the point of the example as much as the model is (see the README's dogfooding
-// findings): F6 at `convertLead`, F8 at `screenForDuplicates`, F10 at the id newtypes.
+// findings): F8 at `screenForDuplicates`, F10 at the id newtypes.
 module example.crm exposing (
     AccountId,
     ContactId,
@@ -107,7 +107,6 @@ module example.crm exposing (
     OpportunityRequested,
     ConversionBlocked,
     BlockReason,
-    BlockReasons,
     BudgetNotConfirmed,
     CloseDateInPast,
     DuplicateAccount,
@@ -935,20 +934,20 @@ data LeadConverted =
     }
 
 // A real CRM reports every reason a conversion is blocked, not the first one it trips over. `require`
-// returns one departure and stops, so the reasons are built as a value instead: a list, wrapped in a
-// non-empty newtype after the require that discharges its invariant. It works, and it is the shape
-// businesstrip's 事前承認理由リスト established — but it costs a named list type and a non-empty
-// invariant per behavior that needs it, and two behaviors' worth of reasons cannot be merged because
-// each module declares its own reason sum. Finding F6.
+// returns one departure and stops, so the reasons are a list the behavior builds rather than a
+// sequence of guards — two of the four sources below produce one reason per matching record, so how
+// many there are is not known until they are collected.
+//
+// What says a conversion was blocked is that there is a reason it was, and that is this case's own
+// invariant. `convertLead` attempts the construction, so the list is checked once, where the rule is
+// declared, and the behavior writes no emptiness test of its own.
 data CloseDateInPast  = { requested: Date }
 data DuplicateAccount = { existing: AccountId }
 data DuplicateContact = { existing: ContactId }
 data BlockReason = BudgetNotConfirmed | CloseDateInPast | DuplicateAccount | DuplicateContact
 
-data BlockReasons = List<BlockReason>
-    invariant List.length(value) >= 1
-
-data ConversionBlocked = { reasons: BlockReasons }
+data ConversionBlocked = { reasons: List<BlockReason> }
+    invariant List.length(reasons) >= 1
 
 // The requested close date as a 0-or-1-element list, so the rules that only apply when an opportunity
 // was asked for are asked of that list rather than through a nested if.
@@ -987,14 +986,13 @@ let blockingReasons (lead: QualifiedLead, request: ConversionRequest,
 behavior convertLead : (lead: QualifiedLead, request: ConversionRequest,
                         accounts: AccountBook, contacts: ContactBook)
         -> LeadConverted | ConversionBlocked
-    constructs LeadConverted, ConvertedLead, Account, Contact, ConversionBlocked, BlockReasons, DomainName,
+    constructs LeadConverted, ConvertedLead, Account, Contact, ConversionBlocked, DomainName,
                BudgetNotConfirmed, CloseDateInPast, DuplicateAccount, DuplicateContact
 
-let convertLead (lead, request, accounts, contacts) = {
-    let reasons = blockingReasons(lead, request, accounts, contacts)
-    require List.isEmpty(reasons) else ConversionBlocked { reasons = BlockReasons(reasons) }
-
-    LeadConverted
+let convertLead (lead, request, accounts, contacts) =
+    if ConversionBlocked { reasons = blockingReasons(lead, request, accounts, contacts) } as blocked
+    then blocked
+    else LeadConverted
         { lead = ConvertedLead { ...lead
                                , convertedOn = request.convertedOn
                                , accountId = request.accountId
@@ -1027,4 +1025,3 @@ let convertLead (lead, request, accounts, contacts) = {
                             }
         , intent = request.intent
         }
-}
