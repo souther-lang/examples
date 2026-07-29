@@ -225,18 +225,17 @@ behavior buildQuote : (number: QuoteNumber, opp: PerceptionAnalysis, lines: List
                LineDiscountOverCap, BlendedDiscountOverCap
 
 let buildQuote (number, opp, lines, issuedOn, validity) = {
+    // QuoteLines' invariant has two clauses and they depart by different cases, so these two restate it
+    // rather than attempting it — an attempt is all-or-nothing over the whole invariant. Finding F24.
     require List.length(lines) >= 1 else NoLines
     require List.allUniqueBy(.product, lines) else DuplicateProduct
-    require validity >= 1 && validity <= 90 else ValidityOutOfRange
     require List.all(r -> r.quantity >= 1, lines) else NoLines
     require withinLineCaps(lines) else LineDiscountOverCap
     require withinBlendedCap(lines) else BlendedDiscountOverCap
 
-    // The validity is wrapped and then read back through a binding, because a construction's result cannot be
-    // reached into: `ValidityDays(validity).value` does not parse. Without the binding the newtype would have
-    // to be skipped altogether and its range would live only in the require above — the type that exists to
-    // hold the rule would stop appearing in the code that applies it. Finding F22.
-    let days = ValidityDays(validity)
+    // The range lives in ValidityDays and nowhere else: attempting the construction both applies it and
+    // names the value, where before the range was restated in a require and the newtype wrapped after it.
+    require ValidityDays(validity) as days else ValidityOutOfRange
 
     Quote { number = number
           , opportunityId = opp.id
@@ -448,11 +447,12 @@ let decideApproval (quote, approver, on, verdict, note) =
                 | Approve -> Quote { ...quote
                                    , approval = ApprovedQuote { approvedOn = on, approver = approver } }
                 | Reject  -> {
-                    require String.length(String.trim(note)) >= 1 else RejectionNoteMissing
+                    require RejectionNote(String.trim(note)) as reason else RejectionNoteMissing
+
                     Quote { ...quote
                           , approval = RejectedQuote { rejectedOn = on
                                                      , approver = approver
-                                                     , note = RejectionNote(String.trim(note)) } }
+                                                     , note = reason } }
                 }
 
 // === acceptQuote ===
@@ -575,8 +575,8 @@ behavior renewQuote : (quote: Quote, on: Date, validity: Int) -> Quote | StillVa
 
 let renewQuote (quote, on, validity) = {
     require Date.daysBetween(quote.expiresOn, on) >= 1 else StillValid
-    require validity >= 1 && validity <= 90 else ValidityOutOfRange
-    let days = ValidityDays(validity)
+    require ValidityDays(validity) as days else ValidityOutOfRange
+
     Quote { ...quote
           , issuedOn = on
           , expiresOn = Date.addDays(days.value, on)

@@ -96,7 +96,10 @@ and what would let it be written directly. Each one is also recorded in the `.so
 declaration that hit it, so a reader meets the finding where the model shows it rather than only here. A
 finding the compiler then fixes leaves the list, and the model is rewritten to the form it was asking for;
 F13 was the first, and `tierOf` and `categoryOf` now name the sums they answer with. F16 left next: a field
-every case spreads is read on the sum, so six helpers that were an arm per case are field reads.
+every case spreads is read on the sum, so six helpers that were an arm per case are field reads. F14 left
+after that: a construction can be attempted, so twelve guards that restated a type's invariant are gone,
+along with the helper that gave `DomainName`'s pattern a name and the two bindings that unwrapped
+`ValidityDays`. What it did not cover is F24.
 
 ### The rule could not be stated where it belongs
 
@@ -156,23 +159,23 @@ appear anywhere inside a `NegotiationReview`. Ten of `activity.sou`'s imports ex
 the import list stops describing what the module does.
 
 **F22 — a call's result cannot be reached into.** `amountOf(opp).value` does not parse, so opening a
-newtype is its own helper or its own binding. In `buildQuote` this nearly cost the `ValidityDays` newtype
-its only use: without a binding the range would have lived only in the `require`, and the type that exists
-to hold the rule would have stopped appearing in the code that applies it.
+newtype is its own helper or its own binding. `buildQuote` and `renewQuote` used to need one for
+`ValidityDays` alone; attempting the construction names the value as it builds it, so the binding they
+needed is the binder. The finding stays for every other call.
 
 **F10 — a pattern can be named but not composed.** A regex does get a name: a zero-argument `let` whose
 body is a literal is accepted where `String.matches` wants a pattern, and the compiler still validates it,
-reporting an invalid one at the `let`. `DomainName`'s pattern is written that way, so its invariant and
-`domainOf`'s guard read the same name. What cannot be done is factoring the shared part out — the three
-Salesforce id patterns differ only in a three-character prefix, and `prefix ++ "[0-9A-Za-z]{12}…"` is no
-longer a literal, so the check refuses it. The tail is written three times.
+reporting an invalid one at the `let`. `DomainName`'s pattern used to be written that way so its invariant
+and `domainOf`'s guard read one name; the guard is gone and the pattern is a literal again. What still
+cannot be done is factoring the shared part out — the three Salesforce id patterns differ only in a
+three-character prefix, and `prefix ++ "[0-9A-Za-z]{12}…"` is no longer a literal, so the check refuses it.
+The tail is written three times.
 
-**F14 — a construction cannot be attempted.** Building a newtype either succeeds or aborts; there is no
-form that answers "it did not hold". `domainOf` therefore restates `DomainName`'s pattern as a guard before
-building one, and the invariant that makes the type worth having is the invariant the caller duplicates to
-stay off the aborting path. *Would fix it:* an attempted construction answering the decoder's `Result`,
-which is the same check the boundary already runs — the difference is only that inside the language it is
-unreachable.
+**F24 — an invariant is attempted whole or not at all.** `QuoteLines` says a quote has at least one line
+and no product twice, and `buildQuote` departs by `NoLines` for the first and `DuplicateProduct` for the
+second. An attempted construction answers one branch for the whole invariant, so those two guards restate
+it where every other guard in this model has stopped. *Would fix it:* letting a type declare more than one
+invariant under a name, so a departure can be chosen per rule.
 
 **F4 — a composition cannot carry an `example`.** `disqualifyAndNurture` and `closeAndSummarize` are the
 two most business-meaningful units in the model and the only two pinned by a test rather than at compile

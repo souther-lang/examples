@@ -165,12 +165,11 @@ data PhoneNumber = String
 
 // The account's web domain, lowercase and dotted. This is the key Salesforce's Lead-to-Account
 // duplicate rule matches on, so its shape is an invariant rather than a convention living inside
-// whatever code last split an email address. The pattern carries a name because domainOf checks it a
-// second time, and one name is what keeps the two readings the same rule.
-let domainPattern (): String = "[a-z0-9]([a-z0-9\\-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9\\-]*[a-z0-9])?)+"
-
+// whatever code last split an email address. The pattern needed a name of its own while domainOf
+// checked it a second time; domainOf attempts the construction now, so this is the only place it is
+// written.
 data DomainName = String
-    invariant String.matches(domainPattern(), value)
+    invariant String.matches("[a-z0-9]([a-z0-9\\-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9\\-]*[a-z0-9])?)+", value)
 
 // Salesforce's Contact carries a nullable Email and a nullable Phone. That is four states, and the one
 // that matters — a contact reachable by nothing — is representable, which is why every campaign, every
@@ -770,18 +769,14 @@ let emailOf (reach: ContactPoint): List<EmailAddress> =
         | EmailAndPhone { email } -> [ email ]
         | PhoneOnly               -> []
 
-// The domain part of an address, lowercased. The guard restates DomainName's rule, and it has to: there
-// is no way to attempt a construction and be told it failed, so the only way to keep an out-of-range
-// value off the constructor is to check the same rule again first — the invariant that makes the type
-// worth having is the invariant this function has to duplicate. Naming the pattern at least keeps the two
-// checks one rule. Finding F14.
+// The domain part of an address, lowercased. The construction is attempted, so what decides whether
+// this is a domain name is DomainName's own invariant rather than a copy of it written here. A local
+// part with no dot in it — a@b — leaves nothing to work with, and dropping it is the answer: an
+// address whose domain is not one matches no account.
 let domainOf (email: EmailAddress): List<DomainName> =
     match List.get(1, String.split("@", String.lowercase(email.value))) with
-        | Some d ->
-            if String.matches(domainPattern(), d)
-            then [ DomainName(d) ]
-            else []
-        | None -> []
+        | Some d -> if DomainName(d) as name then [ name ] else []
+        | None   -> []
 
 let domainsOf (reach: ContactPoint): List<DomainName> =
     List.concatMap(e -> domainOf(e), emailOf(reach))
