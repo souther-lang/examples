@@ -1,5 +1,8 @@
 package example.crm;
 
+import example.pipeline.ConversionRefused;
+import example.pipeline.ConvertAndOpen;
+import example.pipeline.ConvertAndOpenResult;
 import example.pipeline.NextOpportunityId;
 import example.pipeline.NoOpportunityRequested;
 import example.pipeline.OpenFromLead;
@@ -108,28 +111,57 @@ class LeadConversionTest {
     }
 
     @Test
-    void theThirdLegOfConversionIsBuiltByTheContextThatOwnsIt() {
-        // This is the CRM-to-SFA seam, and it is two calls with a Java line between them rather than one
-        // composition: a cross-module `>->` would put crm's departed cases into a union example.pipeline
-        // declares, which the compiler refuses. So the account and the contact are built here, the
-        // opportunity is built there, and the boundary is what joins them.
-        LeadConverted converted = assertInstanceOf(LeadConverted.class, ConvertLead.of().apply(
-                qualifiedLead(true), request("2026-07-20", "2026-09-30"), emptyAccounts(), emptyContacts()));
+    void conversionCrossesTheSeamAsOneOperation() {
+        // The CRM-to-SFA seam. crm builds the account and the contact, example.pipeline builds the
+        // opportunity, and convertAndOpen is the one behavior that does both — so a conversion that
+        // made two of the three is not a state this boundary can reach. It is a body rather than a
+        // `>->` because a composition would carry crm's departed case into a union pipeline declares,
+        // which the compiler refuses; the body answers that case with pipeline's own instead.
+        ConvertAndOpenResult result = conversion().apply(
+                qualifiedLead(true), request("2026-07-20", "2026-09-30"), emptyAccounts(), emptyContacts());
 
-        OpenFromLead open = OpenFromLead.bind(new SequentialOpportunityIds());
-        Prospecting opened = assertInstanceOf(Prospecting.class, open.apply(converted));
-
+        Prospecting opened = assertInstanceOf(Prospecting.class, result);
         assertEquals("006000000000001", opened.id().value());
         assertEquals("Acme Corp — New Business", opened.name().value(),
                 "the name is built from the account's, not typed in");
         assertEquals("001000000000100", opened.accountId().value());
+    }
 
-        // A conversion that asked for no opportunity gets pipeline's own case back. crm's NoOpportunity
-        // went in; NoOpportunityRequested came out, because a context that declines states its own
-        // declining.
-        LeadConverted filedOnly = assertInstanceOf(LeadConverted.class, ConvertLead.of().apply(
-                qualifiedLead(true), requestWithoutOpportunity(), emptyAccounts(), emptyContacts()));
-        assertInstanceOf(NoOpportunityRequested.class, open.apply(filedOnly));
+    @Test
+    void aBlockedConversionOpensNoOpportunity() {
+        // The aggregate rule, and the reason the whole of conversion is one behavior: the budget is
+        // unconfirmed and the close date is behind the conversion date, so nothing is made at all. What
+        // comes back is pipeline's ConversionRefused carrying crm's reasons — a field may hold an
+        // imported type even though a union may not.
+        ConvertAndOpenResult result = conversion().apply(
+                qualifiedLead(false), request("2026-07-20", "2026-07-01"), emptyAccounts(), emptyContacts());
+
+        ConversionRefused refused = assertInstanceOf(ConversionRefused.class, result);
+        @SuppressWarnings("unchecked")
+        List<Object> reasons = (List<Object>) ConversionRefused.encoder().encode(refused).get("reasons");
+        assertEquals(2, reasons.size(), reasons.toString());
+        assertEquals("BudgetNotConfirmed", ((Map<?, ?>) reasons.get(0)).get("type"));
+        assertEquals("CloseDateInPast", ((Map<?, ?>) reasons.get(1)).get("type"));
+    }
+
+    @Test
+    void aConversionThatAsksForNoOpportunityStillFilesTheAccountAndTheContact() {
+        // crm's NoOpportunity went in; pipeline's NoOpportunityRequested came out, because a context
+        // that declines states its own declining. This is a conversion that succeeded, not one refused.
+        ConvertAndOpenResult result = conversion().apply(
+                qualifiedLead(true), requestWithoutOpportunity(), emptyAccounts(), emptyContacts());
+
+        assertInstanceOf(NoOpportunityRequested.class, result);
+    }
+
+    /**
+     * What the boundary wires. {@code convertAndOpen} calls {@code convertLead} by name — it requires
+     * nothing — and receives {@code openFromLead}, which does. A composition builds its stages and their
+     * requirements accumulate into it; a caller receives what it calls, so one OpenFromLead is bound here
+     * rather than the {@code nextOpportunityId} it rests on.
+     */
+    private static ConvertAndOpen conversion() {
+        return ConvertAndOpen.bind(OpenFromLead.bind(new SequentialOpportunityIds()));
     }
 
     /**

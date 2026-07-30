@@ -15,9 +15,11 @@
 //   - A nested sum where the domain nests: a lost deal was either taken by somebody else or bought by
 //     nobody, and only the first kind names a rival. `match` opens one level at a time, so the rule reads
 //     as that sentence — while the codec folds to the leaf, so the JSON stays one flat tag.
-//   - The seam with example.crm. What crosses is crm's OpportunityIntent; what this module answers with
-//     is its own NoOpportunityRequested, because an output union is built from the cases the module
-//     declares (E1606). A context that declines states its own declining.
+//   - The seam with example.crm, crossed by one behavior. `convertAndOpen` calls crm's convertLead,
+//     carries a converted lead on to openFromLead, and answers crm's ConversionBlocked with its own
+//     ConversionRefused — because an output union is built from the cases the module declares (E1606).
+//     A context that declines states its own declining, and the aggregate rule holds: an account, a
+//     contact and an opportunity are made together or none of them is.
 //   - Aggregation with `Map.upsert`: the pipeline by stage, counted and totalled in two folds, keyed by a
 //     String-backed StageName rather than by the stage sum — a stage carries fields, so it is not the
 //     enumeration a boundary map keys by, which is what is left of finding F3 and the reason the ten stage
@@ -25,11 +27,12 @@
 //   - A zero-argument injected behavior. `nextOpportunityId` produces rather than transforms, so its
 //     generated base declares `apply()` with no input at all.
 //
-// The findings this module hit are recorded where they bite: F1 at openFromLead, F3 at StageName, F5 at
-// winRateOf, F18 at the two names this file had to change, F19 at pipelineByStage, F26 at the fixtures.
-// F16 was recorded at idOf and is gone: a field every case spreads is read on the sum itself. F17 is gone
-// too: a behavior calls a behavior whose requirement set is empty, so probabilityOf and categoryOf have no
-// helper twin. F4 is gone: closeAndSummarize carries its own rows.
+// The findings this module hit are recorded where they bite: F3 at StageName, F5 at winRateOf, F18 at the
+// two names this file had to change, F19 at pipelineByStage, F26 at the fixtures. F16 was recorded at idOf
+// and is gone: a field every case spreads is read on the sum itself. F17 is gone too: a behavior calls a
+// behavior whose requirement set is empty, so probabilityOf and categoryOf have no helper twin. F4 is
+// gone: closeAndSummarize carries its own rows. F1 was recorded at openFromLead and is gone: what a
+// cross-module `>->` cannot do, convertAndOpen does with a body.
 //
 // F18 is worth reading before the model: a behavior generates a class from its name with the first letter
 // capitalized, so a behavior and a data cannot share a word. This domain has two words that are both a
@@ -95,6 +98,8 @@ module example.pipeline exposing (
     nextOpportunityId,
     openFromLead,
     NoOpportunityRequested,
+    convertAndOpen,
+    ConversionRefused,
     probabilityOf,
     probabilityFor,
     categoryOf,
@@ -137,7 +142,9 @@ module example.pipeline exposing (
     closeAndSummarize : WinSummary | BelowFloor
 )
 import example.crm ( AccountId, ContactId, UserId, CompanyName, Amount, CurrencyCode
-                   , LeadConverted, OpportunityIntent, NoOpportunity, OpportunityRequested )
+                   , LeadConverted, OpportunityIntent, NoOpportunity, OpportunityRequested
+                   , QualifiedLead, ConversionRequest, AccountBook, ContactBook
+                   , ConversionBlocked, BlockReason, convertLead )
 
 // === Values ===
 
@@ -548,9 +555,7 @@ example profileOf
 // module answers with is its OWN case: crm's NoOpportunity may not join a union declared here (E1606),
 // however alike the two read.
 //
-// The whole of conversion is therefore two calls with a Java line between them rather than one
-// composition, because a cross-module `>->` would put crm's departed cases into this module's output.
-// Finding F1.
+// The whole of conversion is one behavior all the same — convertAndOpen, below.
 behavior nextOpportunityId : () -> OpportunityId
     constructs OpportunityId
 
@@ -573,6 +578,33 @@ let openFromLead (converted, nextOpportunityId) =
                 , closeDate = closeDate
                 , openedOn = converted.lead.convertedOn
                 }
+
+// === convertAndOpen: conversion, across the seam, as one operation ===
+// A conversion makes an account, a contact AND an opportunity. Making two of the three is a
+// data-integrity bug, so the rule has to be stated somewhere that can refuse all three at once — and
+// that place cannot be crm, which does not know this module (importing it back is a cycle, E1501).
+//
+// It is not a `>->` either: a composition would carry crm's ConversionBlocked into a union declared
+// here, which the compiler refuses (E1606) because a case class settles its unions when its own module
+// is generated. So this is a behavior with a body. It calls convertLead, carries a converted lead on to
+// openFromLead, and answers crm's departure with ConversionRefused — this module's word for it,
+// carrying crm's reasons as data. A field may hold an imported type; only a union may not.
+//
+// openFromLead needs nextOpportunityId, so it is received rather than built: a composition builds its
+// stages and their requirements accumulate into it, while a caller receives what it calls. The boundary
+// binds one OpenFromLead instead of the leaf it rests on, which is the whole difference from `>->`.
+data ConversionRefused = { reasons: List<BlockReason> }
+
+behavior convertAndOpen : (lead: QualifiedLead, request: ConversionRequest,
+                           accounts: AccountBook, contacts: ContactBook)
+        -> Prospecting | NoOpportunityRequested | ConversionRefused
+    depends on openFromLead
+    constructs ConversionRefused
+
+let convertAndOpen (lead, request, accounts, contacts, openFromLead) =
+    match convertLead(lead, request, accounts, contacts) with
+        | LeadConverted as converted -> openFromLead(converted)
+        | ConversionBlocked as blocked -> ConversionRefused { reasons = blocked.reasons }
 
 // === The transitions ===
 // Each one takes the exact stage it advances from. There is no stage argument, no stage check, and no way
