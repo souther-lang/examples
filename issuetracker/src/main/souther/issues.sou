@@ -102,16 +102,17 @@ let openIssue (draft, createIssue) = {
     createIssue(Issue { id = draft.id, title = draft.title, labels = labels, assignee = draft.assignee })
 }
 
+let crashOnSave = Issue { id = IssueId("i-1"), title = "crash on save",
+    labels = Set.fromList([ Label("bug"), Label("ui") ]), assignee = Assignee("kawasima") }
+
 fake createIssue
-    | _ -> Issue { id = IssueId("i-1"), title = "crash on save",
-        labels = [ Label("bug"), Label("ui") ], assignee = "kawasima" }
+    | _ -> crashOnSave
 
 example openIssue
     | "case and spacing collapse into one label, and the issue is stored" :
         (NewIssue { id = IssueId("i-1"), title = "crash on save", labels = "Bug, bug , UI",
             assignee = "kawasima" })
-        -> Issue { id = IssueId("i-1"), title = "crash on save",
-            labels = [ Label("bug"), Label("ui") ], assignee = "kawasima" }
+        -> crashOnSave
     | "blank pieces leave no labels, so nothing is written" :
         (NewIssue { id = IssueId("i-2"), title = "whitespace", labels = " , ", assignee = None })
         -> NoLabels
@@ -151,31 +152,25 @@ let detachLabel (request, findIssue, storeLabels) =
 // equality, with a `_` default. A Set fixture is a list, so the stored issue's labels are written out
 // as the set they became.
 fake findIssue
-    | (IssueId("i-1")) -> Issue { id = IssueId("i-1"), title = "crash on save",
-        labels = [ Label("bug") ], assignee = "kawasima" }
+    | (IssueId("i-1")) -> Issue { ...crashOnSave, labels = [ Label("bug") ] }
     | _ -> IssueNotFound
 
 fake storeLabels
-    | (Issue { id = IssueId("i-1"), title = "crash on save",
-        labels = [ Label("bug"), Label("ui") ], assignee = "kawasima" })
-        -> Issue { id = IssueId("i-1"), title = "crash on save",
-            labels = [ Label("bug"), Label("ui") ], assignee = "kawasima" }
-    | (Issue { id = IssueId("i-1"), title = "crash on save", labels = [], assignee = "kawasima" })
-        -> Issue { id = IssueId("i-1"), title = "crash on save", labels = [], assignee = "kawasima" }
+    | (crashOnSave) -> crashOnSave
+    | (Issue { ...crashOnSave, labels = [] }) -> Issue { ...crashOnSave, labels = [] }
     | _ -> Issue { id = IssueId("i-0"), title = "unstored", labels = [], assignee = None }
 
 example attachLabel
     | "a new label joins the set and is written back" :
         (LabelRequest { id = IssueId("i-1"), label = Label("ui") })
-        -> Issue { id = IssueId("i-1"), title = "crash on save",
-            labels = [ Label("bug"), Label("ui") ], assignee = "kawasima" }
+        -> crashOnSave
     | "an unknown issue is not found, and nothing is written" :
         (LabelRequest { id = IssueId("nope"), label = Label("ui") }) -> IssueNotFound
 
 example detachLabel
     | "the label leaves the set and is written back" :
         (LabelRequest { id = IssueId("i-1"), label = Label("bug") })
-        -> Issue { id = IssueId("i-1"), title = "crash on save", labels = [], assignee = "kawasima" }
+        -> Issue { ...crashOnSave, labels = [] }
     | "an unknown issue is not found" :
         (LabelRequest { id = IssueId("nope"), label = Label("bug") }) -> IssueNotFound
 
