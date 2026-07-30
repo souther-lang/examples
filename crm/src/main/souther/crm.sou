@@ -278,41 +278,9 @@ let tierOf (a) =
     else SmallBusiness
 
 example tierOf
-    | "a thousand people is enterprise" :
-        (Account
-            { id = AccountId("001000000000001")
-            , name = CompanyName("Acme Corp")
-            , domain = DomainName("acme.example.com")
-            , industry = Technology
-            , employees = EmployeeCount(1000)
-            , type = Prospect
-            , owner = UserId("u-001")
-            , currency = CurrencyCode("JPY")
-            })
-        -> Enterprise
-    | "one short of a thousand is mid-market" :
-        (Account
-            { id = AccountId("001000000000002")
-            , name = CompanyName("Beta KK")
-            , domain = DomainName("beta.example.com")
-            , industry = Manufacturing
-            , employees = EmployeeCount(999)
-            , type = Customer { since = Date("2024-04-01") }
-            , owner = UserId("u-001")
-            , currency = CurrencyCode("JPY")
-            })
-        -> MidMarket
-    | "under a hundred is small business, and a domain may be missing" :
-        (Account
-            { id = AccountId("001000000000003")
-            , name = CompanyName("Gamma LLC")
-            , domain = None
-            , industry = Retail
-            , employees = EmployeeCount(99)
-            , type = Prospect
-            , owner = UserId("u-002")
-            , currency = CurrencyCode("USD")
-            })
+    | "a thousand people is enterprise" : (acmeAccount) -> Enterprise
+    | "one short of a thousand is mid-market" : (betaAccount) -> MidMarket
+    | "under a hundred is small business, and a domain may be missing" : (gammaAccount)
         -> SmallBusiness
 
 // === LeadSource: the attribution hierarchy ===
@@ -387,6 +355,116 @@ data Lead = NewLead | WorkingLead | QualifiedLead | DisqualifiedLead | Converted
 // need it may point at it.
 data OpenLead = NewLead | WorkingLead
 
+// === The lead, the accounts and the books the rows are about ===
+// A row names its fixture instead of restating it. The rows of this module are about one lead of Acme
+// Corp walked through its states, and about three accounts whose employee counts are the tier
+// boundaries — so each is a value, and a row that varies one field spreads it.
+//
+// They are declared here, in the model, rather than in `crm.examples.sou` where the rows that use them
+// are: an `examples for` file may hold only examples (E1906), so a named fixture has nowhere else to
+// live. That is the cost of naming one.
+//
+// `acmeNew` and `acmeWorking` are written flat because `recordTouch` and `scoreLead` take the OpenLead
+// union, and a fixture built by a spread reaches such a row as the case it spread rather than as its own
+// (souther#206). The two states after them are handed to a plain state type, so they spread.
+
+let acmeNew = NewLead
+    { id = LeadId("00Q000000000001")
+    , person = PersonName("Aoyagi")
+    , company = CompanyName("Acme Corp")
+    , title = JobTitle("CTO")
+    , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
+    , source = WebForm
+    , campaigns = Set.fromList([ CampaignName("Q3 Expo") ])
+    , owner = UserId("u-001")
+    , createdOn = Date("2026-07-01")
+    }
+
+let acmeWorking = WorkingLead
+    { id = LeadId("00Q000000000001")
+    , person = PersonName("Aoyagi")
+    , company = CompanyName("Acme Corp")
+    , title = JobTitle("CTO")
+    , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
+    , source = WebForm
+    , campaigns = Set.fromList([ CampaignName("Q3 Expo") ])
+    , owner = UserId("u-001")
+    , createdOn = Date("2026-07-01")
+    , firstTouchedOn = Date("2026-07-03")
+    , touches = 3
+    }
+
+let acmeQualified = QualifiedLead
+    { ...acmeWorking, qualifiedOn = Date("2026-07-15"), score = LeadScore(72), budgetConfirmed = true }
+
+let acmeDisqualified = DisqualifiedLead
+    { ...acmeWorking, disqualifiedOn = Date("2026-07-20"), reason = NoBudget }
+
+// The three accounts. Their employee counts are the tier boundaries, beta is the domain a duplicate row
+// hits, and gamma has no domain on file at all — which is what makes it the account a domain rule can
+// never match.
+let acmeAccount = Account
+    { id = AccountId("001000000000001")
+    , name = CompanyName("Acme Corp")
+    , domain = DomainName("acme.example.com")
+    , industry = Technology
+    , employees = EmployeeCount(1000)
+    , type = Prospect
+    , owner = UserId("u-001")
+    , currency = CurrencyCode("JPY")
+    }
+
+let betaAccount = Account
+    { id = AccountId("001000000000002")
+    , name = CompanyName("Beta KK")
+    , domain = DomainName("beta.example.com")
+    , industry = Manufacturing
+    , employees = EmployeeCount(999)
+    , type = Customer { since = Date("2024-04-01") }
+    , owner = UserId("u-001")
+    , currency = CurrencyCode("JPY")
+    }
+
+let gammaAccount = Account
+    { id = AccountId("001000000000003")
+    , name = CompanyName("Gamma LLC")
+    , domain = None
+    , industry = Retail
+    , employees = EmployeeCount(99)
+    , type = Prospect
+    , owner = UserId("u-002")
+    , currency = CurrencyCode("USD")
+    }
+
+let acmeContact = Contact
+    { id = ContactId("003000000000001")
+    , accountId = AccountId("001000000000001")
+    , name = PersonName("Aoyagi")
+    , title = JobTitle("CTO")
+    , reach = EmailAndPhone { email = EmailAddress("cto@acme.example.com")
+                            , phone = PhoneNumber("+81-3-1234-5678") }
+    }
+
+// The books a duplicate rule reads. A rule reads a set, so a row has to show the set — which is why the
+// books are values too rather than four accounts written per row.
+let noAccounts   = AccountBook([ ])
+let noContacts   = ContactBook([ ])
+let betaOnFile   = AccountBook([ betaAccount ])
+let bothOnFile   = AccountBook([ betaAccount, gammaAccount ])
+let aoyagiOnFile = ContactBook([ acmeContact ])
+
+// What conversion is asked for. Every row varies one field of it, so the request is a value as well.
+let conversionRequest = ConversionRequest
+    { accountId = AccountId("001000000000100")
+    , contactId = ContactId("003000000000100")
+    , convertedOn = Date("2026-07-20")
+    , intent = OpportunityRequested { amount = Amount(4800000.00m), closeDate = Date("2026-09-30") }
+    , accountType = Prospect
+    , industry = Technology
+    , employees = EmployeeCount(420)
+    , currency = CurrencyCode("JPY")
+    }
+
 // === Reading a field off the sum ===
 // A sum has no fields, so a rule that reads one opens the state first. The spread lays its fields flat,
 // which is why `NewLead { source }` reaches a field LeadCommon declared.
@@ -427,69 +505,13 @@ let recordTouch (lead, on) =
 
 example recordTouch
     | "the first touch is the first-touch date, and the count starts at one" :
-        (NewLead
-            { id = LeadId("00Q000000000001")
-            , person = PersonName("Aoyagi")
-            , company = CompanyName("Acme Corp")
-            , title = JobTitle("CTO")
-            , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
-            , source = WebForm
-            , campaigns = [ CampaignName("Q3 Expo") ]
-            , owner = UserId("u-001")
-            , createdOn = Date("2026-07-01")
-            }, Date("2026-07-03"))
-        -> WorkingLead
-            { id = LeadId("00Q000000000001")
-            , person = PersonName("Aoyagi")
-            , company = CompanyName("Acme Corp")
-            , title = JobTitle("CTO")
-            , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
-            , source = WebForm
-            , campaigns = [ CampaignName("Q3 Expo") ]
-            , owner = UserId("u-001")
-            , createdOn = Date("2026-07-01")
-            , firstTouchedOn = Date("2026-07-03")
-            , touches = 1
-            }
+        (acmeNew, Date("2026-07-03"))
+        -> WorkingLead { ...acmeWorking, touches = 1 }
     | "a later touch counts up and leaves the first-touch date alone" :
-        (WorkingLead
-            { id = LeadId("00Q000000000001")
-            , person = PersonName("Aoyagi")
-            , company = CompanyName("Acme Corp")
-            , title = JobTitle("CTO")
-            , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
-            , source = WebForm
-            , campaigns = [ CampaignName("Q3 Expo") ]
-            , owner = UserId("u-001")
-            , createdOn = Date("2026-07-01")
-            , firstTouchedOn = Date("2026-07-03")
-            , touches = 1
-            }, Date("2026-07-10"))
-        -> WorkingLead
-            { id = LeadId("00Q000000000001")
-            , person = PersonName("Aoyagi")
-            , company = CompanyName("Acme Corp")
-            , title = JobTitle("CTO")
-            , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
-            , source = WebForm
-            , campaigns = [ CampaignName("Q3 Expo") ]
-            , owner = UserId("u-001")
-            , createdOn = Date("2026-07-01")
-            , firstTouchedOn = Date("2026-07-03")
-            , touches = 2
-            }
+        (acmeWorking, Date("2026-07-10"))
+        -> WorkingLead { ...acmeWorking, touches = 4 }
     | "a touch dated before the lead existed is reported, not stored" :
-        (NewLead
-            { id = LeadId("00Q000000000001")
-            , person = PersonName("Aoyagi")
-            , company = CompanyName("Acme Corp")
-            , title = JobTitle("CTO")
-            , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
-            , source = WebForm
-            , campaigns = [ CampaignName("Q3 Expo") ]
-            , owner = UserId("u-001")
-            , createdOn = Date("2026-07-01")
-            }, Date("2026-06-30"))
+        (acmeNew, Date("2026-06-30"))
         -> TouchBeforeCreation
 
 // === scoreLead: the MQL score, read at the outer level of LeadSource ===
@@ -515,47 +537,20 @@ let scoreLead (lead, priority) =
 
 example scoreLead
     | "an untouched inbound lead in the priority campaign scores the source band plus the bonus" :
-        (NewLead
-            { id = LeadId("00Q000000000001")
-            , person = PersonName("Aoyagi")
-            , company = CompanyName("Acme Corp")
-            , title = JobTitle("CTO")
-            , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
-            , source = WebForm
-            , campaigns = [ CampaignName("Q3 Expo") ]
-            , owner = UserId("u-001")
-            , createdOn = Date("2026-07-01")
-            }, CampaignName("Q3 Expo"))
+        (acmeNew, CampaignName("Q3 Expo"))
         -> LeadScore(35)
     | "a referral outside the priority campaign scores its band and its touches" :
-        (WorkingLead
-            { id = LeadId("00Q000000000002")
-            , person = PersonName("Kawakami")
-            , company = CompanyName("Beta KK")
-            , title = None
-            , reach = PhoneOnly { phone = PhoneNumber("+81-3-1234-5678") }
-            , source = PartnerReferral { partner = AccountId("001000000000009") }
-            , campaigns = [ CampaignName("Newsletter") ]
-            , owner = UserId("u-002")
-            , createdOn = Date("2026-06-01")
-            , firstTouchedOn = Date("2026-06-02")
-            , touches = 4
-            }, CampaignName("Q3 Expo"))
+        (WorkingLead { ...acmeWorking
+                     , source = PartnerReferral { partner = AccountId("001000000000009") }
+                     , campaigns = [ CampaignName("Newsletter") ]
+                     , touches = 4
+                     }, CampaignName("Q3 Expo"))
         -> LeadScore(50)
     | "the score is a hundred at most, however many times somebody was called" :
-        (WorkingLead
-            { id = LeadId("00Q000000000003")
-            , person = PersonName("Sasaki")
-            , company = CompanyName("Gamma LLC")
-            , title = None
-            , reach = EmailOnly { email = EmailAddress("s@gamma.example.com") }
-            , source = EmployeeReferral { employee = UserId("u-007") }
-            , campaigns = [ CampaignName("Q3 Expo") ]
-            , owner = UserId("u-002")
-            , createdOn = Date("2026-05-01")
-            , firstTouchedOn = Date("2026-05-02")
-            , touches = 20
-            }, CampaignName("Q3 Expo"))
+        (WorkingLead { ...acmeWorking
+                     , source = EmployeeReferral { employee = UserId("u-007") }
+                     , touches = 20
+                     }, CampaignName("Q3 Expo"))
         -> LeadScore(100)
 
 // === attributionOf: the same sum, opened to the leaf ===
@@ -621,49 +616,10 @@ let qualifyLead (lead, on, rawScore, budgetConfirmed) = {
 
 example qualifyLead
     | "sixty qualifies" :
-        (WorkingLead
-            { id = LeadId("00Q000000000001")
-            , person = PersonName("Aoyagi")
-            , company = CompanyName("Acme Corp")
-            , title = JobTitle("CTO")
-            , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
-            , source = WebForm
-            , campaigns = [ CampaignName("Q3 Expo") ]
-            , owner = UserId("u-001")
-            , createdOn = Date("2026-07-01")
-            , firstTouchedOn = Date("2026-07-03")
-            , touches = 3
-            }, Date("2026-07-15"), 60, true)
-        -> QualifiedLead
-            { id = LeadId("00Q000000000001")
-            , person = PersonName("Aoyagi")
-            , company = CompanyName("Acme Corp")
-            , title = JobTitle("CTO")
-            , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
-            , source = WebForm
-            , campaigns = [ CampaignName("Q3 Expo") ]
-            , owner = UserId("u-001")
-            , createdOn = Date("2026-07-01")
-            , firstTouchedOn = Date("2026-07-03")
-            , touches = 3
-            , qualifiedOn = Date("2026-07-15")
-            , score = LeadScore(60)
-            , budgetConfirmed = true
-            }
+        (acmeWorking, Date("2026-07-15"), 60, true)
+        -> QualifiedLead { ...acmeQualified, score = LeadScore(60) }
     | "fifty-nine does not, and says which side of the bar it fell" :
-        (WorkingLead
-            { id = LeadId("00Q000000000001")
-            , person = PersonName("Aoyagi")
-            , company = CompanyName("Acme Corp")
-            , title = JobTitle("CTO")
-            , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
-            , source = WebForm
-            , campaigns = [ CampaignName("Q3 Expo") ]
-            , owner = UserId("u-001")
-            , createdOn = Date("2026-07-01")
-            , firstTouchedOn = Date("2026-07-03")
-            , touches = 3
-            }, Date("2026-07-15"), 59, true)
+        (acmeWorking, Date("2026-07-15"), 59, true)
         -> ScoreBelowThreshold
 
 // === disqualifyLead and the nurture plan ===
@@ -698,55 +654,13 @@ let nurturePlan (lead) =
 
 example nurturePlan
     | "no budget this year is next half-year's deal" :
-        (DisqualifiedLead
-            { id = LeadId("00Q000000000001")
-            , person = PersonName("Aoyagi")
-            , company = CompanyName("Acme Corp")
-            , title = JobTitle("CTO")
-            , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
-            , source = WebForm
-            , campaigns = [ CampaignName("Q3 Expo") ]
-            , owner = UserId("u-001")
-            , createdOn = Date("2026-07-01")
-            , firstTouchedOn = Date("2026-07-03")
-            , touches = 3
-            , disqualifiedOn = Date("2026-07-20")
-            , reason = NoBudget
-            })
+        (DisqualifiedLead { ...acmeDisqualified, reason = NoBudget })
         -> RevisitOn { on = Date("2027-01-20") }
     | "bad timing names its own date, so the plan uses it" :
-        (DisqualifiedLead
-            { id = LeadId("00Q000000000001")
-            , person = PersonName("Aoyagi")
-            , company = CompanyName("Acme Corp")
-            , title = JobTitle("CTO")
-            , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
-            , source = WebForm
-            , campaigns = [ CampaignName("Q3 Expo") ]
-            , owner = UserId("u-001")
-            , createdOn = Date("2026-07-01")
-            , firstTouchedOn = Date("2026-07-03")
-            , touches = 3
-            , disqualifiedOn = Date("2026-07-20")
-            , reason = BadTiming { revisitAfter = Date("2026-10-01") }
-            })
+        (DisqualifiedLead { ...acmeDisqualified, reason = BadTiming { revisitAfter = Date("2026-10-01") } })
         -> RevisitOn { on = Date("2026-10-01") }
     | "a duplicate never comes back" :
-        (DisqualifiedLead
-            { id = LeadId("00Q000000000001")
-            , person = PersonName("Aoyagi")
-            , company = CompanyName("Acme Corp")
-            , title = JobTitle("CTO")
-            , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
-            , source = WebForm
-            , campaigns = [ CampaignName("Q3 Expo") ]
-            , owner = UserId("u-001")
-            , createdOn = Date("2026-07-01")
-            , firstTouchedOn = Date("2026-07-03")
-            , touches = 3
-            , disqualifiedOn = Date("2026-07-20")
-            , reason = DuplicateOf { existing = LeadId("00Q000000000009") }
-            })
+        (DisqualifiedLead { ...acmeDisqualified, reason = DuplicateOf { existing = LeadId("00Q000000000009") } })
         -> NoRevisit
 
 // One business operation in two behaviors: disqualify, then decide whether this lead is worth coming
@@ -756,19 +670,7 @@ behavior disqualifyAndNurture = disqualifyLead >-> nurturePlan
 
 example disqualifyAndNurture
     | "no budget disqualifies and comes back in half a year" :
-        (WorkingLead
-            { id = LeadId("00Q000000000001")
-            , person = PersonName("Aoyagi")
-            , company = CompanyName("Acme Corp")
-            , title = JobTitle("CTO")
-            , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
-            , source = WebForm
-            , campaigns = [ CampaignName("Q3 Expo") ]
-            , owner = UserId("u-001")
-            , createdOn = Date("2026-07-01")
-            , firstTouchedOn = Date("2026-07-03")
-            , touches = 3
-            }, Date("2026-07-20"), NoBudget)
+        (acmeWorking, Date("2026-07-20"), NoBudget)
         -> RevisitOn { on = Date("2027-01-20") }
 
 // === Duplicate screening: two rules, two match keys ===
@@ -875,6 +777,8 @@ let linkLeadToAccount (lead, findAccountByDomain) =
 
 // A fake is a table of what the outside world would answer, so the rule around the lookup is checked at
 // compile time with no database in sight. The `_` row is what makes the unmatched path a path.
+// The account it answers with is written out rather than named: this behavior answers a union, and a
+// fake row cannot name a value there (souther#206).
 fake findAccountByDomain
     | (DomainName("beta.example.com")) ->
         Account { id = AccountId("001000000000002"), name = CompanyName("Beta KK")
@@ -885,43 +789,13 @@ fake findAccountByDomain
 
 example linkLeadToAccount
     | "a lead on a known domain is linked to that account" :
-        (NewLead
-            { id = LeadId("00Q000000000020")
-            , person = PersonName("Hirano")
-            , company = CompanyName("Beta KK")
-            , title = None
-            , reach = EmailOnly { email = EmailAddress("h@beta.example.com") }
-            , source = WebForm
-            , campaigns = [ ]
-            , owner = UserId("u-001")
-            , createdOn = Date("2026-07-01")
-            })
-        -> MatchedAccount { leadId = LeadId("00Q000000000020"), accountId = AccountId("001000000000002") }
+        (NewLead { ...acmeNew, reach = EmailOnly { email = EmailAddress("h@beta.example.com") } })
+        -> MatchedAccount { leadId = LeadId("00Q000000000001"), accountId = AccountId("001000000000002") }
     | "a lead on a domain nobody has is unmatched, which is not a failure" :
-        (NewLead
-            { id = LeadId("00Q000000000021")
-            , person = PersonName("Sasaki")
-            , company = CompanyName("Gamma LLC")
-            , title = None
-            , reach = EmailOnly { email = EmailAddress("s@gamma.example.com") }
-            , source = WebForm
-            , campaigns = [ ]
-            , owner = UserId("u-002")
-            , createdOn = Date("2026-07-01")
-            })
+        (NewLead { ...acmeNew, reach = EmailOnly { email = EmailAddress("s@gamma.example.com") } })
         -> UnmatchedLead
     | "a lead reachable only by phone has no key to match on" :
-        (NewLead
-            { id = LeadId("00Q000000000022")
-            , person = PersonName("Kawakami")
-            , company = CompanyName("Delta Inc")
-            , title = None
-            , reach = PhoneOnly { phone = PhoneNumber("+81-3-9999-0000") }
-            , source = PhoneInquiry
-            , campaigns = [ ]
-            , owner = UserId("u-002")
-            , createdOn = Date("2026-07-01")
-            })
+        (NewLead { ...acmeNew, reach = PhoneOnly { phone = PhoneNumber("+81-3-9999-0000") } })
         -> NoEmailOnLead
 
 // === Conversion ===
