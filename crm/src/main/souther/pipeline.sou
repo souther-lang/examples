@@ -850,20 +850,16 @@ example closeAndSummarize
 // boundary map keys by. The picklist vocabulary is written twice in this file and kept in step by one
 // exhaustive match. What is left of finding F3.
 
-// A call's result cannot be reached into — `amountOf(opp).value` does not parse — so opening the newtype
-// is its own helper, and the parameter position is where it comes apart.
-let openAmount (Amount(v)): Decimal = v
-
-let amountValueOf (opp: Opportunity): Decimal = openAmount(amountOf(opp))
-
 let countByStage (opps: List<Opportunity>): Map<StageName, Int> =
     List.fold((acc, opp) -> Map.upsert(stageNameOf(opp), 1, n -> n + 1, acc), Map.empty(), opps)
 
+// A call's result is reached into, so the amount arrives as `amountOf(opp).value` and neither the helper
+// that opened the newtype nor the one that chained the two calls is here any more.
 let totalByStage (opps: List<Opportunity>): Map<StageName, Amount> =
     List.fold((acc, opp) ->
                   Map.upsert(stageNameOf(opp),
-                             Amount(amountValueOf(opp)),
-                             running -> Amount(Decimal.add(openAmount(running), amountValueOf(opp))),
+                             amountOf(opp),
+                             running -> Amount(Decimal.add(running.value, amountOf(opp).value)),
                              acc),
               Map.empty(), opps)
 
