@@ -133,8 +133,9 @@ example periodOf
 // with example.pipeline's categoryOf — which is why the forecast category is not mapped a second time here.
 //
 // The probability is, and the difference is where the call would sit. What needs it is weightedOf, an
-// ordinary helper `let`, and a helper does not reach a behavior: the call is E1401, "`probabilityOf` is
-// neither a behavior nor a builtin". So the ten probabilities are copied into the module that consumes them,
+// ordinary helper `let`, and a helper does not reach a behavior: the call is E1401, "`probabilityOf` is a
+// behavior, and it cannot be called from here". So the ten probabilities are copied into the module that
+// consumes them,
 // and nothing but a comment keeps them in step with the stage machine that owns them. A stage added to
 // example.pipeline breaks three matches there and silently leaves this file weighing the new stage at
 // whatever its own match happens to say. Finding F23.

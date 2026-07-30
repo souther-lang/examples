@@ -25,10 +25,11 @@
 //   - A zero-argument injected behavior. `nextOpportunityId` produces rather than transforms, so its
 //     generated base declares `apply()` with no input at all.
 //
-// The findings this module hit are recorded where they bite: F1 at openFromLead, F3 at StageName, F4 at
-// closeAndSummarize, F5 at winRateOf, F17 at probabilityFor, F18 at the two names this file had to change,
-// F19 at pipelineByStage.
-// F16 was recorded at idOf and is gone: a field every case spreads is read on the sum itself.
+// The findings this module hit are recorded where they bite: F1 at openFromLead, F3 at StageName, F5 at
+// winRateOf, F18 at the two names this file had to change, F19 at pipelineByStage.
+// F16 was recorded at idOf and is gone: a field every case spreads is read on the sum itself. F17 is gone
+// too: a behavior calls a behavior whose requirement set is empty, so probabilityOf and categoryOf have no
+// helper twin. F4 is gone: closeAndSummarize carries its own rows.
 //
 // F18 is worth reading before the model: a behavior generates a class from its name with the first letter
 // capitalized, so a behavior and a data cannot share a word. This domain has two words that are both a
@@ -361,12 +362,13 @@ let stageNameOf (opp: Opportunity): StageName =
         | ClosedWon          -> StageName("Closed Won")
         | ClosedLost         -> StageName("Closed Lost")
 
-// The mapping is a helper and the behavior is a one-line wrapper around it, and that shape is forced: a
-// behavior's body may only call the behaviors it `depends on`, so nothing a behavior computes can be reused
-// by another behavior in the same module. profileOf needs all four readings, so all four are helpers and
-// the two that are worth publishing get a behavior each. Anything shared between behaviors needs a helper
-// twin. Finding F17.
-let probabilityFor (opp: Opportunity): Probability =
+// The two readings other contexts ask for are behaviors, and the two that only profileOf reads are
+// helpers. There is no twin: a behavior whose own requirement set is empty is called by name, so
+// profileOf calls these two rather than a helper copy of the mapping.
+behavior probabilityOf : (opp: Opportunity) -> Probability
+    constructs Probability
+
+let probabilityOf (opp) =
     match opp with
         | Prospecting        -> Probability(10)
         | Qualification      -> Probability(10)
@@ -379,12 +381,10 @@ let probabilityFor (opp: Opportunity): Probability =
         | ClosedWon          -> Probability(100)
         | ClosedLost         -> Probability(0)
 
-behavior probabilityOf : (opp: Opportunity) -> Probability
-    constructs Probability
+behavior categoryOf : (opp: Opportunity) -> ForecastCategory
+    constructs Pipeline, BestCase, Commit, Closed, Omitted
 
-let probabilityOf (opp) = probabilityFor(opp)
-
-let categoryFor (opp: Opportunity): ForecastCategory =
+let categoryOf (opp) =
     match opp with
         | Prospecting        -> Pipeline
         | Qualification      -> Pipeline
@@ -396,11 +396,6 @@ let categoryFor (opp: Opportunity): ForecastCategory =
         | NegotiationReview  -> Commit
         | ClosedWon          -> Closed
         | ClosedLost         -> Omitted
-
-behavior categoryOf : (opp: Opportunity) -> ForecastCategory
-    constructs Pipeline, BestCase, Commit, Closed, Omitted
-
-let categoryOf (opp) = categoryFor(opp)
 
 let isClosedOf (opp: Opportunity): Bool =
     match opp with
@@ -415,13 +410,15 @@ let isClosedOf (opp: Opportunity): Bool =
         | ProposalPriceQuote -> false
         | NegotiationReview  -> false
 
+// The probability and the category are what `probabilityOf` and `categoryOf` built, passed through — so
+// this behavior's construction authority is the two things it makes itself, and the compiler says so.
 behavior profileOf : (opp: Opportunity) -> StageProfile
-    constructs StageProfile, StageName, Probability, Pipeline, BestCase, Commit, Closed, Omitted
+    constructs StageProfile, StageName
 
 let profileOf (opp) =
     StageProfile { stage = stageNameOf(opp)
-                 , probability = probabilityFor(opp)
-                 , category = categoryFor(opp)
+                 , probability = probabilityOf(opp)
+                 , category = categoryOf(opp)
                  , isClosed = isClosedOf(opp)
                  }
 
