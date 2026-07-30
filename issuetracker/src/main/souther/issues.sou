@@ -339,9 +339,10 @@ data Workload = { byAssignee: Map<String, List<IssueId>> }
 behavior groupByAssignee : (board: Board) -> Workload
     constructs Workload
 
-// One issue as the entry it contributes, or nothing when it is unassigned. The optional never gets a
-// name here: it arrives from the `assignee` field and leaves through Option.map.
-let assigneeEntry (issue: Issue) =
+// One issue as the entry it contributes, or nothing when it is unassigned. The return type is written,
+// because a reader of `filterMap(assigneeEntry, …)` should not have to infer what the step answers —
+// `Option<T>` may be named wherever a model reads an optional, and this helper reads one.
+let assigneeEntry (issue: Issue): Option<(String, IssueId)> =
     Option.map(a -> (a.value, issue.id), issue.assignee)
 
 let entryKey (e: (String, IssueId)): String = {
