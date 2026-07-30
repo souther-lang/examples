@@ -425,38 +425,112 @@ let profileOf (opp) =
                  , isClosed = isClosedOf(opp)
                  }
 
+// === The deal the rows are about ===
+// Every example in this file walks one deal, so the deal has a name and the chain spreads the way the
+// states themselves do: each fixture is the one before it plus what that stage agreed. A row then states
+// the transition rather than restating the eight fields that were already there, and the expected side
+// spreads the input, so what a reader compares is the delta.
+//
+// The chain stops where a row hands a fixture to a parameter whose type is a union of states. A value
+// built by a spread reaches such a row as the case it spread rather than as its own, and nothing is
+// reported — so `acme`, `acmeLost` and `acmeInNegotiation`, the three that do, are written flat.
+// souther#206.
+
+let acme = Prospecting
+    { id = OpportunityId("006000000000001")
+    , accountId = AccountId("001000000000100")
+    , name = OpportunityName("Acme Corp — New Business")
+    , owner = UserId("u-001")
+    , amount = Amount(4800000.00m)
+    , currency = CurrencyCode("JPY")
+    , closeDate = Date("2026-09-30")
+    , openedOn = Date("2026-07-20")
+    }
+
+let acmeQualified = Qualification
+    { ...acme, qualifiedOn = Date("2026-07-25"), primaryContactId = ContactId("003000000000100") }
+
+let acmeDiscovered = NeedsAnalysis
+    { ...acmeQualified
+    , needs = Needs([ PainPoint("invoicing takes three days"), PainPoint("no audit trail") ])
+    }
+
+let acmeValued = ValueProposition
+    { ...acmeDiscovered
+    , businessCase = BusinessCase("Automating invoicing removes three days of manual work")
+    , criteria = [ DecisionCriterion("total cost") ]
+    }
+
+// `decisionMakers` wraps a `Set`, and a value is ordinary code where a list literal is a `List` whatever
+// the position declares — so it is written `Set.fromList([...])`, the form the row notation stands for.
+let acmeChampioned = PerceptionAnalysis
+    { ...acmeValued
+    , decisionMakers = DecisionMakers(Set.fromList([ ContactId("003000000000200") ]))
+    , champion = ContactId("003000000000200")
+    , risks = [ PerceivedRisk("security review") ]
+    }
+
+let acmeQuoted = ProposalPriceQuote
+    { ...acmeChampioned
+    , quoteNumber = QuoteNumber("0Q0000000000001")
+    , proposedOn = Date("2026-08-01")
+    , proposedAmount = Amount(4800000.00m)
+    }
+
+// The worked deal in negotiation is published: a module stating a rule against one names this value
+// rather than the twenty-two types inside it. Written flat for the same reason as `acmeLost`, and
+// because an imported value a row names may not be built from other values either (souther#206).
+let acmeInNegotiation = NegotiationReview
+    { id = OpportunityId("006000000000001")
+    , accountId = AccountId("001000000000100")
+    , name = OpportunityName("Acme Corp — New Business")
+    , owner = UserId("u-001")
+    , amount = Amount(4800000.00m)
+    , currency = CurrencyCode("JPY")
+    , closeDate = Date("2026-09-30")
+    , openedOn = Date("2026-07-20")
+    , qualifiedOn = Date("2026-07-25")
+    , primaryContactId = ContactId("003000000000100")
+    , needs = Needs([ PainPoint("invoicing takes three days"), PainPoint("no audit trail") ])
+    , businessCase = BusinessCase("Automating invoicing removes three days of manual work")
+    , criteria = [ DecisionCriterion("total cost") ]
+    , decisionMakers = DecisionMakers(Set.fromList([ ContactId("003000000000200") ]))
+    , champion = ContactId("003000000000200")
+    , risks = [ PerceivedRisk("security review") ]
+    , quoteNumber = QuoteNumber("0Q0000000000001")
+    , proposedOn = Date("2026-08-01")
+    , proposedAmount = Amount(4800000.00m)
+    , openedNegotiationOn = Date("2026-09-01")
+    , floorAmount = Amount(4200000.00m)
+    }
+
+// A lost deal, for the follow-up rules. Every row varies the reason, because the reason is what
+// lossFollowUp reads. Written flat: `profileOf` takes the Opportunity union (souther#206).
+let acmeLost = ClosedLost
+    { id = OpportunityId("006000000000002")
+    , accountId = AccountId("001000000000100")
+    , name = OpportunityName("Acme Corp — Renewal")
+    , owner = UserId("u-001")
+    , amount = Amount(1200000.00m)
+    , currency = CurrencyCode("JPY")
+    , closeDate = Date("2026-08-31")
+    , openedOn = Date("2026-06-01")
+    , closedOn = Date("2026-09-15")
+    , reason = ProjectCancelled
+    , stageAtLoss = StageName("Negotiation/Review")
+    }
+
 // Two rows, not ten. A state is the type here, so a fixture is the whole state — and the ten mappings are
 // held together by the matches being exhaustive rather than by ten rows repeating what the match already
 // says. What the rows pin is the shape of the answer at both ends of the pipeline: the earliest open stage
 // and the closed one that weighs nothing.
 example profileOf
     | "the first stage is pipeline at ten, and it is not closed" :
-        (Prospecting
-            { id = OpportunityId("006000000000001")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — New Business")
-            , owner = UserId("u-001")
-            , amount = Amount(4800000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            })
+        (acme)
         -> StageProfile { stage = StageName("Prospecting"), probability = Probability(10)
                         , category = Pipeline, isClosed = false }
     | "a lost deal is omitted from the forecast at zero, and it is closed" :
-        (ClosedLost
-            { id = OpportunityId("006000000000002")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — Renewal")
-            , owner = UserId("u-001")
-            , amount = Amount(1200000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-08-31")
-            , openedOn = Date("2026-06-01")
-            , closedOn = Date("2026-08-20")
-            , reason = CompetitorLoss { competitor = CompanyName("Rival KK") }
-            , stageAtLoss = StageName("Negotiation/Review")
-            })
+        (acmeLost)
         -> StageProfile { stage = StageName("Closed Lost"), probability = Probability(0)
                         , category = Omitted, isClosed = true }
 
@@ -510,39 +584,10 @@ let qualifyOpportunity (opp, on, primaryContactId) = {
 
 example qualifyOpportunity
     | "a deal with an amount and a contact qualifies" :
-        (Prospecting
-            { id = OpportunityId("006000000000001")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — New Business")
-            , owner = UserId("u-001")
-            , amount = Amount(4800000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            }, Date("2026-07-25"), ContactId("003000000000100"))
-        -> Qualification
-            { id = OpportunityId("006000000000001")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — New Business")
-            , owner = UserId("u-001")
-            , amount = Amount(4800000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            , qualifiedOn = Date("2026-07-25")
-            , primaryContactId = ContactId("003000000000100")
-            }
+        (acme, Date("2026-07-25"), ContactId("003000000000100"))
+        -> Qualification { ...acmeQualified }
     | "a deal worth nothing is not a qualified deal, however real the interest" :
-        (Prospecting
-            { id = OpportunityId("006000000000002")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — Pilot")
-            , owner = UserId("u-001")
-            , amount = Amount(0.0m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            }, Date("2026-07-25"), ContactId("003000000000100"))
+        (Prospecting { ...acme, amount = Amount(0.0m) }, Date("2026-07-25"), ContactId("003000000000100"))
         -> AmountNotStated
 
 // Discovery is over when at least one pain point is written down. The raw text is trimmed and the blanks
@@ -560,44 +605,10 @@ let recordNeeds (opp, points) = {
 
 example recordNeeds
     | "blank entries are dropped and the rest are trimmed" :
-        (Qualification
-            { id = OpportunityId("006000000000001")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — New Business")
-            , owner = UserId("u-001")
-            , amount = Amount(4800000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            , qualifiedOn = Date("2026-07-25")
-            , primaryContactId = ContactId("003000000000100")
-            }, [ "  invoicing takes three days  ", "   ", "no audit trail" ])
-        -> NeedsAnalysis
-            { id = OpportunityId("006000000000001")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — New Business")
-            , owner = UserId("u-001")
-            , amount = Amount(4800000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            , qualifiedOn = Date("2026-07-25")
-            , primaryContactId = ContactId("003000000000100")
-            , needs = Needs([ PainPoint("invoicing takes three days"), PainPoint("no audit trail") ])
-            }
+        (acmeQualified, [ "  invoicing takes three days  ", "   ", "no audit trail" ])
+        -> NeedsAnalysis { ...acmeDiscovered }
     | "a form full of whitespace records nothing, and discovery is not over" :
-        (Qualification
-            { id = OpportunityId("006000000000001")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — New Business")
-            , owner = UserId("u-001")
-            , amount = Amount(4800000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            , qualifiedOn = Date("2026-07-25")
-            , primaryContactId = ContactId("003000000000100")
-            }, [ "  ", "" ])
+        (acmeQualified, [ "  ", "" ])
         -> NoNeedsRecorded
 
 // A business case that answers none of the recorded needs is a pitch, not a business case. The rule is
@@ -753,94 +764,28 @@ let lossFollowUp (lost) =
 // date, and they name different dates.
 example lossFollowUp
     | "a deal a competitor won produces competitive intelligence" :
-        (ClosedLost
-            { id = OpportunityId("006000000000010")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — New Business")
-            , owner = UserId("u-001")
-            , amount = Amount(4800000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            , closedOn = Date("2026-09-15")
-            , reason = CompetitorLoss { competitor = CompanyName("Rival KK") }
-            , stageAtLoss = StageName("Negotiation/Review")
-            })
+        (ClosedLost { ...acmeLost, reason = CompetitorLoss { competitor = CompanyName("Rival KK") }
+                    , stageAtLoss = StageName("Negotiation/Review") })
         -> CompetitiveIntel { rival = CompanyName("Rival KK") }
     | "an incumbent that kept the account is the same kind of intelligence" :
-        (ClosedLost
-            { id = OpportunityId("006000000000011")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — Replacement")
-            , owner = UserId("u-001")
-            , amount = Amount(2000000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            , closedOn = Date("2026-09-15")
-            , reason = IncumbentRetained { incumbent = CompanyName("Legacy Systems Co") }
-            , stageAtLoss = StageName("Proposal/Price Quote")
-            })
+        (ClosedLost { ...acmeLost, reason = IncumbentRetained { incumbent = CompanyName("Legacy Systems Co") }
+                    , stageAtLoss = StageName("Proposal/Price Quote") })
         -> CompetitiveIntel { rival = CompanyName("Legacy Systems Co") }
     | "no budget comes back in half a year, measured from the close" :
-        (ClosedLost
-            { id = OpportunityId("006000000000012")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — Expansion")
-            , owner = UserId("u-001")
-            , amount = Amount(900000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            , closedOn = Date("2026-09-15")
-            , reason = NoBudget
-            , stageAtLoss = StageName("Value Proposition")
-            })
+        (ClosedLost { ...acmeLost, reason = NoBudget
+                    , stageAtLoss = StageName("Value Proposition") })
         -> Renurture { revisitOn = Date("2027-03-15") }
     | "a deal nobody decided on comes back sooner, measured from the last contact" :
-        (ClosedLost
-            { id = OpportunityId("006000000000013")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — Trial")
-            , owner = UserId("u-001")
-            , amount = Amount(600000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            , closedOn = Date("2026-09-15")
-            , reason = NoDecision { lastContactOn = Date("2026-08-01") }
-            , stageAtLoss = StageName("Needs Analysis")
-            })
+        (ClosedLost { ...acmeLost, reason = NoDecision { lastContactOn = Date("2026-08-01") }
+                    , stageAtLoss = StageName("Needs Analysis") })
         -> Renurture { revisitOn = Date("2026-11-01") }
     | "a cancelled project is not somebody to follow up with" :
-        (ClosedLost
-            { id = OpportunityId("006000000000014")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — Rebuild")
-            , owner = UserId("u-001")
-            , amount = Amount(3000000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            , closedOn = Date("2026-09-15")
-            , reason = ProjectCancelled
-            , stageAtLoss = StageName("Qualification")
-            })
+        (ClosedLost { ...acmeLost, reason = ProjectCancelled
+                    , stageAtLoss = StageName("Qualification") })
         -> NoFollowUp
     | "losing on price sends the gap to a price review" :
-        (ClosedLost
-            { id = OpportunityId("006000000000015")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — Renewal")
-            , owner = UserId("u-001")
-            , amount = Amount(1200000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            , closedOn = Date("2026-09-15")
-            , reason = PriceLoss { gapToBudget = Amount(200000.00m) }
-            , stageAtLoss = StageName("Negotiation/Review")
-            })
+        (ClosedLost { ...acmeLost, reason = PriceLoss { gapToBudget = Amount(200000.00m) }
+                    , stageAtLoss = StageName("Negotiation/Review") })
         -> PriceReview { gap = Amount(200000.00m) }
 
 // === slipCloseDate ===
@@ -859,47 +804,21 @@ let slipCloseDate (opp, newDate) = {
 
 example slipCloseDate
     | "a date pushed to the right is a slip, and it says how far" :
-        (Prospecting
-            { id = OpportunityId("006000000000001")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — New Business")
-            , owner = UserId("u-001")
-            , amount = Amount(4800000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            }, Date("2026-10-31"))
+        (acme, Date("2026-10-31"))
         -> SlipReport { id = OpportunityId("006000000000001"), from = Date("2026-09-30")
                       , to = Date("2026-10-31"), slippedDays = 31 }
     | "pulling a date in is not a slip" :
-        (Prospecting
-            { id = OpportunityId("006000000000001")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — New Business")
-            , owner = UserId("u-001")
-            , amount = Amount(4800000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            }, Date("2026-09-15"))
+        (acme, Date("2026-09-15"))
         -> NotASlip
     | "the same date is not a slip either" :
-        (Prospecting
-            { id = OpportunityId("006000000000001")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — New Business")
-            , owner = UserId("u-001")
-            , amount = Amount(4800000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            }, Date("2026-09-30"))
+        (acme, Date("2026-09-30"))
         -> NotASlip
 
 // === summarizeWin, and the one composition ===
 // Closing a deal and emitting the record commission and reporting read is one business operation, so the
-// two behaviors are routed by type. An `example` cannot target a composition (E1902), so this pair is the
-// one thing in the module pinned only by the smoke test rather than at compile time. Finding F4.
+// two behaviors are routed by type. The composition carries its own rows: what no stage's example can
+// state is that a below-floor close leaves the main line and never reaches the summary, because that is
+// the routing and not either stage's rule.
 behavior summarizeWin : (won: ClosedWon) -> WinSummary
     constructs WinSummary
 
@@ -912,6 +831,18 @@ let summarizeWin (won) =
 
 behavior closeAndSummarize = closeWon >-> summarizeWin
     -> WinSummary | BelowFloor
+
+example closeAndSummarize
+    | "a deal closed at or above the floor is summarised" :
+        (acmeInNegotiation, Date("2026-09-20"), Amount(4500000.00m))
+        -> WinSummary { id = OpportunityId("006000000000001")
+                      , owner = UserId("u-001")
+                      , wonAmount = Amount(4500000.00m)
+                      , daysToClose = 62
+                      }
+    | "below the floor never reaches the summary" :
+        (acmeInNegotiation, Date("2026-09-20"), Amount(3000000.00m))
+        -> BelowFloor { floor = Amount(4200000.00m), offered = Amount(3000000.00m) }
 
 // === pipelineByStage: the aggregation ===
 // Two folds with Map.upsert, over one list. The absent branch inserts this deal's own figure and the
@@ -991,29 +922,3 @@ let winRateOf (closed) = {
             , lost = List.length(lost)
             }
 }
-
-// A worked deal in negotiation, for the rules stated against one. It lives here because this is
-// where its type does; a module reading it names this value rather than the twenty-two types inside.
-let acmeInNegotiation = NegotiationReview
-    { id = OpportunityId("006000000000001")
-    , accountId = AccountId("001000000000100")
-    , name = OpportunityName("Acme Corp — New Business")
-    , owner = UserId("u-001")
-    , amount = Amount(4800000.00m)
-    , currency = CurrencyCode("JPY")
-    , closeDate = Date("2026-09-30")
-    , openedOn = Date("2026-07-20")
-    , qualifiedOn = Date("2026-07-25")
-    , primaryContactId = ContactId("003000000000100")
-    , needs = Needs([ PainPoint("invoicing") ])
-    , businessCase = BusinessCase("Automating invoicing removes three days")
-    , criteria = [ DecisionCriterion("total cost") ]
-    , decisionMakers = DecisionMakers(Set.fromList([ ContactId("003000000000200") ]))
-    , champion = ContactId("003000000000200")
-    , risks = [ PerceivedRisk("migration risk") ]
-    , quoteNumber = QuoteNumber("0Q0000000000001")
-    , proposedOn = Date("2026-08-10")
-    , proposedAmount = Amount(4600000.00m)
-    , openedNegotiationOn = Date("2026-09-01")
-    , floorAmount = Amount(4200000.00m)
-    }

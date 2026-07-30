@@ -754,6 +754,23 @@ example nurturePlan
 // composition carries its output in the `exposing` list.
 behavior disqualifyAndNurture = disqualifyLead >-> nurturePlan
 
+example disqualifyAndNurture
+    | "no budget disqualifies and comes back in half a year" :
+        (WorkingLead
+            { id = LeadId("00Q000000000001")
+            , person = PersonName("Aoyagi")
+            , company = CompanyName("Acme Corp")
+            , title = JobTitle("CTO")
+            , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
+            , source = WebForm
+            , campaigns = [ CampaignName("Q3 Expo") ]
+            , owner = UserId("u-001")
+            , createdOn = Date("2026-07-01")
+            , firstTouchedOn = Date("2026-07-03")
+            , touches = 3
+            }, Date("2026-07-20"), NoBudget)
+        -> RevisitOn { on = Date("2027-01-20") }
+
 // === Duplicate screening: two rules, two match keys ===
 // Salesforce's standard duplicate rules match Lead-to-Account on the email *domain* and Lead-to-Contact
 // on the *exact* address. They are different rules and they stay two rules here, over two books handed

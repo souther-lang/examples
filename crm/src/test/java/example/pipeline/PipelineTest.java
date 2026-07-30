@@ -27,10 +27,13 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
  * that the legal path is a path — every state the pipeline produces is accepted by the next transition
  * with nothing re-supplied and nothing re-checked.
  *
- * <p>This class sits in the generated package so it can reach the two behaviors the module deliberately
- * does not expose ({@code closeAndSummarize} and the report behaviors): not being on the {@code exposing}
- * list makes a generated class package-private, and a smoke test in the same package is exactly who is
- * still allowed to read it.
+ * <p>This class sits in the generated package so it can reach the report behaviors the module
+ * deliberately does not expose: not being on the {@code exposing} list makes a generated class
+ * package-private, and a smoke test in the same package is exactly who is still allowed to read it.
+ *
+ * <p>What is no longer here is the pin for {@code closeAndSummarize}. A composition carries an
+ * {@code example} now, so the routing — a win summarised, and a below-floor departure carried to the
+ * composition's output — is stated in {@code pipeline.sou} beside the behaviors it is about.
  */
 class PipelineTest {
 
@@ -125,20 +128,6 @@ class PipelineTest {
         assertEquals("Qualification", encoded.get("stageAtLoss"));
         // A nested sum crosses the boundary as its leaf tag: DisplacedLoss never appears.
         assertEquals("CompetitorLoss", ((Map<?, ?>) encoded.get("reason")).get("type"));
-    }
-
-    @Test
-    void closingAndSummarizingIsOneOperationRoutedByType() {
-        // The composition cannot carry an `example` (E1902), so this is where it is pinned.
-        CloseAndSummarizeResult result = CloseAndSummarize.of()
-                .apply(negotiation(), date("2026-09-20"), amount("4400000.00"));
-
-        WinSummary summary = assertInstanceOf(WinSummary.class, result);
-        assertEquals(62, summary.daysToClose(), "opened 2026-07-20, closed 2026-09-20");
-
-        // The departure of the first stage is carried to the composition's output rather than swallowed.
-        assertInstanceOf(BelowFloor.class, CloseAndSummarize.of()
-                .apply(negotiation(), date("2026-09-20"), amount("1.00")));
     }
 
     @Test
