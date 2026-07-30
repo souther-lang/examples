@@ -95,82 +95,9 @@ besides a model is this list. Every entry is a rule a real CRM enforces, what ha
 and what would let it be written directly. Each one is also recorded in the `.sou` file at the
 declaration that hit it, so a reader meets the finding where the model shows it rather than only here.
 
-A finding the compiler then fixes leaves the list, and the model is rewritten to the form it was asking
-for. Sixteen have left so far:
-
-* **F13** was the first: `tierOf` and `categoryOf` name the sums they answer with.
-* **F16**: a field every case spreads is read on the sum, so six helpers that were an arm per case are
-  field reads.
-* **F14**: a construction can be attempted, so twelve guards that restated a type's invariant are gone,
-  along with the helper that gave `DomainName`'s pattern a name and the two bindings that unwrapped
-  `ValidityDays`. What it did not cover was F24, which has since left too.
-* **F6** left with it rather than for a form of its own: what a blocked conversion is is that there is a
-  reason it is, so the reasons are a list `ConversionBlocked` carries and "at least one" is its own
-  invariant. `convertLead` attempts that construction, `BlockReasons` is gone and no guard restates the
-  emptiness test.
-* **F17** — a behavior can call a behavior of its own module whose requirement set is empty, so the three
-  helper twins are gone: `profileOf` calls `probabilityOf` and `categoryOf`, and `submitForApproval` asks
-  `approvalNeeded` whether approval is needed. Both `constructs` clauses shrank on their own, because a
-  behavior that passes a value through is no longer the one building it.
-* **F20** — a fixture can be named, and this was the single biggest length reduction available to the
-  example. `crm.examples.sou` went from 326 lines to 96, and the fixtures of `pipeline`, `activity`,
-  `forecasting`, `quoting` and `businesstrip` became values that a row spreads the one field it is about.
-  The expected side spreads the input too, so what a reader compares is the delta rather than two
-  twenty-line records. Across the eight `.sou` files these findings touched, the model is 678 lines
-  shorter net, and most of that is this one.
-* **F21** left with it: the deal `activity`'s rows are stated against is `pipeline`'s published value, so
-  ten imports that existed for a fixture are gone.
-* **F22** — a call's result is reached into, so `amountOf(opp).value` is written where it is needed and
-  the two helpers that opened the newtype are gone.
-* **F4** — a composition carries an `example`, so `disqualifyAndNurture` and `closeAndSummarize` are
-  pinned where they are declared. The row that matters is the one no stage's own example could state: a
-  below-floor close leaves the main line at the first stage and never reaches the summary.
-* **F23** — a behavior is callable only from another behavior's body, cross-module or not
-  (souther#159/#189); a plain helper `let` never reaches one, whatever its parameter's type, and that
-  restriction did not move. What retires the finding is publishing the mapping itself: `probabilityOf`'s
-  body is now `probabilityFor`, a published helper (ADR-0075), so `forecasting`'s `weightedOf` — a helper,
-  cross-module — calls that directly instead of carrying its own ten-arm copy, the same way any imported
-  helper is called.
-* **F25** — an `examples for` file may now declare the values its own rows name (souther#210), so
-  `acmeQualified`, the conversion request and the account/contact books move out of `crm.sou` into
-  `crm.examples.sou`, beside the only rows that use them. `businesstrip.examples.sou`'s
-  `最終承認を待つ福岡出張` moves the same way.
-* **F27** — an imported published value can be spread as well as named (souther#212), so a reader who
-  needs the same deal with one field changed no longer has to declare a copy of their own. Neither of
-  `activity.sou`'s `nextStepFor` rows varies `acmeInNegotiation`, so nothing there changed shape, but the
-  restriction that would have forced a duplicate is gone.
-* **F10** — a `String.matches` pattern may be any expression that evaluates to a string at compile time,
-  which covers a `++` of a literal and a module's own value (souther#208/#219), so the twelve-character
-  tail `AccountId`, `ContactId` and `LeadId` shared is a named value, `salesforceIdTail`, and each type
-  composes its own three-character prefix onto it instead of writing the tail out three times.
-* **F24** — an invariant clause may be named, so an attempt departs by the clause that did not hold
-  (souther#209). `QuoteLines`'s two rules are `nonEmpty` and `uniqueProducts`, and `buildQuote` attempts
-  the construction and answers `NoLines` or `DuplicateProduct` by name — the last two guards in this model
-  that restated a type's own invariant are gone. The rule reaches the boundary as well: what a decoder
-  rejects now says which clause it was.
-* **F1** — this one was never true. It said an aggregate spanning two contexts cannot be one operation,
-  and asked for a translating composition. What the compiler refuses is the *composition*: a cross-module
-  `>->` would carry `crm`'s departed case into a union `pipeline` declares (E1606). An operation is not a
-  composition. `convertAndOpen` calls `convertLead`, carries a converted lead on to `openFromLead`, and
-  answers `ConversionBlocked` with its own `ConversionRefused` — a case of this module carrying `crm`'s
-  reasons, since a field may hold an imported type even though a union may not. So the aggregate rule is
-  stated in Souther after all, and a blocked conversion opens no opportunity. The finding was written
-  against a workaround the example never tried; the E1606 hint now names the shape (souther#207).
-* **F26** — a bare name on the right of `->` used to be read as an arm, not a value, so a value named
-  there was E1904, "`priced` is not one of the result cases", and a row whose whole expectation was a
-  fixture already named had to spread it (`-> NeedsAnalysis { ...acmeDiscovered }`) rather than name it. A
-  name is now read as a case first and, only when it is neither, as a value (souther#211), so `pipeline.sou`'s
-  rows name a fixture directly: `-> acmeQualified`.
-
-### A bug the fixtures no longer work around
-
-[souther#206](https://github.com/souther-lang/souther/issues/206) — a fixture built by a spread took the
-spread source's case rather than the construction's own wherever it reached a row whose position is a
-union — is fixed by the same change as F26. `acmeInNegotiation`, `acmeWorking` and `提出された福岡出張` now
-spread the state before them instead of restating it, and `crm.sou`'s `findAccountByDomain` fake answers
-`betaAccount` instead of writing the account out again. `acme`, `acmeLost`, `acmeNew`, `acmeDeal` and the
-row in `businesstrip.examples.sou`'s `差し戻す` stay flat regardless — none of them has an earlier state to
-spread from.
+A finding the compiler fixes is removed from here rather than kept as a resolved entry — the model is
+rewritten to the form it was asking for, and the commit that does it tells the story; git history is
+where that log belongs, not this file. None are currently open.
 
 ### Working as designed, recorded so the next reader does not file it
 
