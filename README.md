@@ -96,14 +96,14 @@ and what would let it be written directly. Each one is also recorded in the `.so
 declaration that hit it, so a reader meets the finding where the model shows it rather than only here.
 
 A finding the compiler then fixes leaves the list, and the model is rewritten to the form it was asking
-for. Fourteen have left so far:
+for. Fifteen have left so far:
 
 * **F13** was the first: `tierOf` and `categoryOf` name the sums they answer with.
 * **F16**: a field every case spreads is read on the sum, so six helpers that were an arm per case are
   field reads.
 * **F14**: a construction can be attempted, so twelve guards that restated a type's invariant are gone,
   along with the helper that gave `DomainName`'s pattern a name and the two bindings that unwrapped
-  `ValidityDays`. What it did not cover is F24.
+  `ValidityDays`. What it did not cover was F24, which has since left too.
 * **F6** left with it rather than for a form of its own: what a blocked conversion is is that there is a
   reason it is, so the reasons are a list `ConversionBlocked` carries and "at least one" is its own
   invariant. `convertLead` attempts that construction, `BlockReasons` is gone and no guard restates the
@@ -143,6 +143,11 @@ for. Fourteen have left so far:
   which covers a `++` of a literal and a module's own value (souther#208/#219), so the twelve-character
   tail `AccountId`, `ContactId` and `LeadId` shared is a named value, `salesforceIdTail`, and each type
   composes its own three-character prefix onto it instead of writing the tail out three times.
+* **F24** — an invariant clause may be named, so an attempt departs by the clause that did not hold
+  (souther#209). `QuoteLines`'s two rules are `nonEmpty` and `uniqueProducts`, and `buildQuote` attempts
+  the construction and answers `NoLines` or `DuplicateProduct` by name — the last two guards in this model
+  that restated a type's own invariant are gone. The rule reaches the boundary as well: what a decoder
+  rejects now says which clause it was.
 * **F1** — this one was never true. It said an aggregate spanning two contexts cannot be one operation,
   and asked for a translating composition. What the compiler refuses is the *composition*: a cross-module
   `>->` would carry `crm`'s departed case into a union `pipeline` declares (E1606). An operation is not a
@@ -173,12 +178,6 @@ named on the right of `->` is E1904, "`priced` is not one of the result cases". 
 spreads one is accepted (`NeedsAnalysis { ...acmeDiscovered }`), which is what the rows use and which is
 usually the better reading anyway; but where a row's whole expectation is a fixture already named, it is
 written as a one-field spread of itself. [souther#211](https://github.com/souther-lang/souther/issues/211).
-
-**F24 — an invariant is attempted whole or not at all.** `QuoteLines` says a quote has at least one line
-and no product twice, and `buildQuote` departs by `NoLines` for the first and `DuplicateProduct` for the
-second. An attempted construction answers one branch for the whole invariant, so those two guards restate
-it where every other guard in this model has stopped. *Would fix it:* letting a type declare more than one
-invariant under a name, so a departure can be chosen per rule. [souther#209](https://github.com/souther-lang/souther/issues/209).
 
 ### Working as designed, recorded so the next reader does not file it
 

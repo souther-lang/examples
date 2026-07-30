@@ -22,7 +22,7 @@
 //   - An expiry window and an approval read as one expression, because both are cases and neither is a
 //     boolean anybody can misread.
 //
-// Findings recorded here: F18 at discountExposureOf, F24 at buildQuote.
+// Findings recorded here: F18 at discountExposureOf.
 module example.quoting exposing (
     ProductCode,
     ProductName,
@@ -117,9 +117,11 @@ data QuoteLine =
                                 * (1.0m - discount.value), 2, HALF_UP)) == 0
 
 // One line per product, and at least one line. Both are properties of the list, so the list is named and
-// carries them; at the boundary it stays a bare JSON array.
+// carries them; at the boundary it stays a bare JSON array. They are named because a caller departs by a
+// different case for each, and the attempt in `buildQuote` chooses that case by the name.
 data QuoteLines = List<QuoteLine>
-    invariant List.length(value) >= 1 && List.allUniqueBy(.product, value)
+    invariant nonEmpty = List.length(value) >= 1
+    invariant uniqueProducts = List.allUniqueBy(.product, value)
 
 // What a caller hands over: the raw figures, before any of them has been checked or the net worked out.
 data LineRequest =
@@ -225,13 +227,15 @@ behavior buildQuote : (number: QuoteNumber, opp: PerceptionAnalysis, lines: List
                LineDiscountOverCap, BlendedDiscountOverCap
 
 let buildQuote (number, opp, lines, issuedOn, validity) = {
-    // QuoteLines' invariant has two clauses and they depart by different cases, so these two restate it
-    // rather than attempting it — an attempt is all-or-nothing over the whole invariant. Finding F24.
-    guard List.length(lines) >= 1 else NoLines
-    guard List.allUniqueBy(.product, lines) else DuplicateProduct
     guard List.all(r -> r.quantity >= 1, lines) else NoLines
     guard withinLineCaps(lines) else LineDiscountOverCap
     guard withinBlendedCap(lines) else BlendedDiscountOverCap
+
+    // Both rules of QuoteLines are its own, and each departs by its own case: the attempt names the clause
+    // that did not hold instead of the two guards that used to restate the rules here.
+    guard QuoteLines(List.map(r -> toLine(r), lines)) as quoteLines else
+        | nonEmpty       -> NoLines
+        | uniqueProducts -> DuplicateProduct
 
     // The range lives in ValidityDays and nowhere else: attempting the construction both applies it and
     // names the value, where before the range was restated in a guard and the newtype wrapped after it.
@@ -240,7 +244,7 @@ let buildQuote (number, opp, lines, issuedOn, validity) = {
     Quote { number = number
           , opportunityId = opp.id
           , accountId = opp.accountId
-          , lines = QuoteLines(List.map(r -> toLine(r), lines))
+          , lines = quoteLines
           , subtotal = Amount(sumOf(List.map(r -> lineList(r), lines)))
           , total = Amount(sumOf(List.map(r -> lineNet(r), lines)))
           , issuedOn = issuedOn
