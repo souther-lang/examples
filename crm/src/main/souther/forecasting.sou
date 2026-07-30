@@ -160,6 +160,31 @@ let weightedProbabilityOf (opp: OpenOpportunity): Int =
 // the eight open states spreads OpportunityCommon, and what holds of every case is a property of the sum.
 // Four eight-arm helpers stood here, which was finding F16.
 
+// === The deal and the forecast the rows are about ===
+// One deal of a million yen closing at the end of September, and the forecast that comes to. The deal is
+// written flat, because a row hands it to a list of the OpenOpportunity union and a fixture built by a
+// spread arrives there as the case it spread (souther#206); the rows vary the amount and the close date by
+// spreading it.
+let acmeDeal = Prospecting
+    { id = OpportunityId("006000000000001")
+    , accountId = AccountId("001000000000100")
+    , name = OpportunityName("Acme Corp — New Business")
+    , owner = UserId("u-001")
+    , amount = Amount(1000000.00m)
+    , currency = CurrencyCode("JPY")
+    , closeDate = Date("2026-09-30")
+    , openedOn = Date("2026-07-20")
+    }
+
+// A hundred and fifty thousand in the third quarter, which is the figure every quota row is held against.
+let q3Forecast = Forecast
+    { owner = UserId("u-001")
+    , periods = [ FiscalPeriod("FY26-Q3") ]
+    , byPeriod = Map.fromList([ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ])
+    , total = Amount(150000.00m)
+    , dealCount = 1
+    }
+
 // === weightedForecast ===
 // The weighted figure is probability × amount ÷ 100, and this is the one place in the project where a division
 // is the arithmetic rather than a way of writing a ratio. So the scale and the rounding mode are named at the
@@ -194,18 +219,7 @@ let weightedForecast (owner, opps, fiscalYearStartMonth) = {
 
 example weightedForecast
     | "a deal in the first stage weighs a tenth of itself, in the quarter it closes in" :
-        (UserId("u-001"),
-         [ Prospecting
-            { id = OpportunityId("006000000000001")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — New Business")
-            , owner = UserId("u-001")
-            , amount = Amount(1000000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            } ],
-         1)
+        (UserId("u-001"), [ acmeDeal ], 1)
         -> Forecast
             { owner = UserId("u-001")
             , periods = [ FiscalPeriod("FY26-Q3") ]
@@ -215,26 +229,9 @@ example weightedForecast
             }
     | "two deals in one quarter add up rather than replacing each other" :
         (UserId("u-001"),
-         [ Prospecting
-            { id = OpportunityId("006000000000001")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — New Business")
-            , owner = UserId("u-001")
-            , amount = Amount(1000000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-09-30")
-            , openedOn = Date("2026-07-20")
-            }
-         , Prospecting
-            { id = OpportunityId("006000000000002")
-            , accountId = AccountId("001000000000100")
-            , name = OpportunityName("Acme Corp — New Business")
-            , owner = UserId("u-001")
-            , amount = Amount(500000.00m)
-            , currency = CurrencyCode("JPY")
-            , closeDate = Date("2026-08-31")
-            , openedOn = Date("2026-07-20")
-            } ],
+         [ acmeDeal
+         , Prospecting { ...acmeDeal, id = OpportunityId("006000000000002")
+                       , amount = Amount(500000.00m), closeDate = Date("2026-08-31") } ],
          1)
         -> Forecast
             { owner = UserId("u-001")
@@ -338,34 +335,13 @@ let quotaGap (forecast, quota, period) =
 
 example quotaGap
     | "a quarter above quota is on track, and says by how much of it" :
-        (Forecast
-            { owner = UserId("u-001")
-            , periods = [ FiscalPeriod("FY26-Q3") ]
-            , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ]
-            , total = Amount(150000.00m)
-            , dealCount = 1
-            },
-         Quota(100000.00m), FiscalPeriod("FY26-Q3"))
+        (q3Forecast, Quota(100000.00m), FiscalPeriod("FY26-Q3"))
         -> OnTrack { attainment = Attainment(150) }
     | "a quarter under quota names the gap rather than a percentage alone" :
-        (Forecast
-            { owner = UserId("u-001")
-            , periods = [ FiscalPeriod("FY26-Q3") ]
-            , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ]
-            , total = Amount(150000.00m)
-            , dealCount = 1
-            },
-         Quota(200000.00m), FiscalPeriod("FY26-Q3"))
+        (q3Forecast, Quota(200000.00m), FiscalPeriod("FY26-Q3"))
         -> ShortOfQuota { gap = Amount(50000.00m), attainment = Attainment(75) }
     | "a quarter with no deals in it has no forecast, which is not a forecast of nothing" :
-        (Forecast
-            { owner = UserId("u-001")
-            , periods = [ FiscalPeriod("FY26-Q3") ]
-            , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ]
-            , total = Amount(150000.00m)
-            , dealCount = 1
-            },
-         Quota(100000.00m), FiscalPeriod("FY26-Q4"))
+        (q3Forecast, Quota(100000.00m), FiscalPeriod("FY26-Q4"))
         -> NoForecastForPeriod
 
 // The same question with the quota read rather than passed: read, compute, answer. This is the shape every
@@ -396,25 +372,10 @@ fake quotaFor
 
 example attainmentFor
     | "the rep's own quota for that quarter is what the forecast is held against" :
-        (UserId("u-001"),
-         Forecast
-            { owner = UserId("u-001")
-            , periods = [ FiscalPeriod("FY26-Q3") ]
-            , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ]
-            , total = Amount(150000.00m)
-            , dealCount = 1
-            },
-         FiscalPeriod("FY26-Q3"))
+        (UserId("u-001"), q3Forecast, FiscalPeriod("FY26-Q3"))
         -> OnTrack { attainment = Attainment(150) }
     | "another rep is held against another number, and the same forecast falls short of it" :
-        (UserId("u-002"),
-         Forecast
-            { owner = UserId("u-002")
-            , periods = [ FiscalPeriod("FY26-Q3") ]
-            , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ]
-            , total = Amount(150000.00m)
-            , dealCount = 1
-            },
+        (UserId("u-002"), Forecast { ...q3Forecast, owner = UserId("u-002") },
          FiscalPeriod("FY26-Q3"))
         -> ShortOfQuota { gap = Amount(350000.00m), attainment = Attainment(30) }
 

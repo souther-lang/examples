@@ -165,6 +165,59 @@ data DayLoad =
     , busiestMinutes: Int
     }
 
+// === The activities the rows are about ===
+// Four activities against one account, named so a row lists the ones it is about instead of restating each.
+// Three calls that differed only in their outcome were written out three times; now the outcome is what the
+// row spreads. `attendees` wraps a `Set`, and a value is ordinary code where a list literal is a `List`
+// whatever the field declares, so it takes `Set.fromList`.
+
+let acmeRelated = RelatedToAccount { accountId = AccountId("001000000000100") }
+
+let introCall = CallTask
+    { id = ActivityId("00T000000000001")
+    , subject = Subject("Intro call")
+    , owner = UserId("u-001")
+    , related = acmeRelated
+    , dueOn = Date("2026-07-20")
+    , outcome = Connected { minutes = DurationMinutes(20) }
+    }
+
+let unopenedDeck = EmailTask
+    { id = ActivityId("00T000000000003")
+    , subject = Subject("Deck")
+    , owner = UserId("u-001")
+    , related = acmeRelated
+    , sentOn = Date("2026-07-22")
+    , opened = false
+    }
+
+let workshop = Meeting
+    { id = ActivityId("00T000000000004")
+    , subject = Subject("Workshop")
+    , owner = UserId("u-001")
+    , related = acmeRelated
+    , startAt = DateTime("2026-07-23T13:00:00")
+    , minutes = DurationMinutes(90)
+    , attendees = Attendees(Set.fromList([ ContactId("003000000000100") ]))
+    }
+
+let discoveryDraft = MeetingDraft
+    { id = ActivityId("00T000000000001")
+    , subject = Subject("Discovery call")
+    , owner = UserId("u-001")
+    , related = acmeRelated
+    , startAt = DateTime("2026-07-28T10:00:00")
+    , attendees = [ ContactId("003000000000100") ]
+    }
+
+let followUpMeeting = Meeting
+    { ...workshop
+    , id = ActivityId("00T000000000005")
+    , subject = Subject("Follow-up")
+    , startAt = DateTime("2026-07-25T13:00:00")
+    , minutes = DurationMinutes(30)
+    }
+
 // === scheduleMeeting ===
 // Two attempted constructions in one behavior, over two different kinds of newtype: a range on an Int
 // and a non-empty on a Set. Both rules are things a booking form gets wrong every day, so both are
@@ -187,44 +240,24 @@ let scheduleMeeting (draft, minutes) = {
             }
 }
 
+// One draft, three durations.
 example scheduleMeeting
     | "a quarter of an hour is a meeting" :
-        (MeetingDraft
-            { id = ActivityId("00T000000000001")
-            , subject = Subject("Discovery call")
-            , owner = UserId("u-001")
-            , related = RelatedToAccount { accountId = AccountId("001000000000100") }
-            , startAt = DateTime("2026-07-28T10:00:00")
-            , attendees = [ ContactId("003000000000100") ]
-            }, 15)
+        (discoveryDraft, 15)
         -> Meeting
             { id = ActivityId("00T000000000001")
             , subject = Subject("Discovery call")
             , owner = UserId("u-001")
-            , related = RelatedToAccount { accountId = AccountId("001000000000100") }
+            , related = acmeRelated
             , startAt = DateTime("2026-07-28T10:00:00")
             , minutes = DurationMinutes(15)
             , attendees = Attendees([ ContactId("003000000000100") ])
             }
     | "fourteen minutes is not, and the range is a case rather than an abort" :
-        (MeetingDraft
-            { id = ActivityId("00T000000000001")
-            , subject = Subject("Discovery call")
-            , owner = UserId("u-001")
-            , related = RelatedToAccount { accountId = AccountId("001000000000100") }
-            , startAt = DateTime("2026-07-28T10:00:00")
-            , attendees = [ ContactId("003000000000100") ]
-            }, 14)
+        (discoveryDraft, 14)
         -> DurationOutOfRange
     | "a meeting with nobody in it is not a meeting" :
-        (MeetingDraft
-            { id = ActivityId("00T000000000001")
-            , subject = Subject("Discovery call")
-            , owner = UserId("u-001")
-            , related = RelatedToAccount { accountId = AccountId("001000000000100") }
-            , startAt = DateTime("2026-07-28T10:00:00")
-            , attendees = [ ]
-            }, 60)
+        (MeetingDraft { ...discoveryDraft, attendees = [ ] }, 60)
         -> NoAttendees
 
 // === touchCount: what counts as having reached somebody ===
@@ -428,49 +461,19 @@ let dayLoadOf (activities, owner) = {
 }
 
 // === The rows ===
-// Every fixture below restates the whole activity, because a fixture is a value and there is nowhere to
-// name one. Three calls that differ only in their outcome are written out three times. A named fixture, or a
-// spread over one, would turn this section from forty lines into ten — the rules being checked are one line
-// each. Finding F20.
 
 example touchCount
     | "a voicemail and an unopened email are not touches; a connected call and a meeting are" :
-        ([ CallTask { id = ActivityId("00T000000000001"), subject = Subject("Intro call")
-                    , owner = UserId("u-001")
-                    , related = RelatedToAccount { accountId = AccountId("001000000000100") }
-                    , dueOn = Date("2026-07-20")
-                    , outcome = Connected { minutes = DurationMinutes(20) } }
-         , CallTask { id = ActivityId("00T000000000002"), subject = Subject("Follow up")
-                    , owner = UserId("u-001")
-                    , related = RelatedToAccount { accountId = AccountId("001000000000100") }
-                    , dueOn = Date("2026-07-21")
-                    , outcome = LeftVoicemail }
-         , EmailTask { id = ActivityId("00T000000000003"), subject = Subject("Deck")
-                     , owner = UserId("u-001")
-                     , related = RelatedToAccount { accountId = AccountId("001000000000100") }
-                     , sentOn = Date("2026-07-22"), opened = false }
-         , Meeting { id = ActivityId("00T000000000004"), subject = Subject("Workshop")
-                   , owner = UserId("u-001")
-                   , related = RelatedToAccount { accountId = AccountId("001000000000100") }
-                   , startAt = DateTime("2026-07-23T13:00:00")
-                   , minutes = DurationMinutes(90)
-                   , attendees = Attendees([ ContactId("003000000000100") ]) } ])
+        ([ introCall
+         , CallTask { ...introCall, id = ActivityId("00T000000000002"), subject = Subject("Follow up")
+                    , dueOn = Date("2026-07-21"), outcome = LeftVoicemail }
+         , unopenedDeck
+         , workshop ])
         -> TouchSummary { connectedCalls = 1, openedEmails = 0, meetings = 1, touches = 2 }
 
 example lastActivityOn
     | "recency is measured from the latest of the three kinds, whichever kind that is" :
-        ([ CallTask { id = ActivityId("00T000000000001"), subject = Subject("Intro call")
-                    , owner = UserId("u-001")
-                    , related = RelatedToAccount { accountId = AccountId("001000000000100") }
-                    , dueOn = Date("2026-07-20")
-                    , outcome = Connected { minutes = DurationMinutes(20) } }
-         , Meeting { id = ActivityId("00T000000000004"), subject = Subject("Workshop")
-                   , owner = UserId("u-001")
-                   , related = RelatedToAccount { accountId = AccountId("001000000000100") }
-                   , startAt = DateTime("2026-07-23T13:00:00")
-                   , minutes = DurationMinutes(90)
-                   , attendees = Attendees([ ContactId("003000000000100") ]) } ],
-         Date("2026-07-30"))
+        ([ introCall, workshop ], Date("2026-07-30"))
         -> Recency { lastOn = Date("2026-07-23"), daysSince = 7 }
     | "an account nobody has touched has no recency, which is not a recency of zero" :
         ([ ], Date("2026-07-30"))
@@ -478,52 +481,23 @@ example lastActivityOn
 
 example multiThreaded
     | "the same person in two rooms is one person" :
-        ([ Meeting { id = ActivityId("00T000000000004"), subject = Subject("Workshop")
-                   , owner = UserId("u-001")
-                   , related = RelatedToAccount { accountId = AccountId("001000000000100") }
-                   , startAt = DateTime("2026-07-23T13:00:00")
-                   , minutes = DurationMinutes(90)
-                   , attendees = Attendees([ ContactId("003000000000100") ]) }
-         , Meeting { id = ActivityId("00T000000000005"), subject = Subject("Follow-up")
-                   , owner = UserId("u-001")
-                   , related = RelatedToAccount { accountId = AccountId("001000000000100") }
-                   , startAt = DateTime("2026-07-25T13:00:00")
-                   , minutes = DurationMinutes(30)
-                   , attendees = Attendees([ ContactId("003000000000100") ]) } ])
+        ([ workshop, followUpMeeting ])
         -> Coverage { contacts = [ ContactId("003000000000100") ], count = 1, singleThreaded = true }
     | "two people across two rooms is a deal with more than one thread" :
-        ([ Meeting { id = ActivityId("00T000000000004"), subject = Subject("Workshop")
-                   , owner = UserId("u-001")
-                   , related = RelatedToAccount { accountId = AccountId("001000000000100") }
-                   , startAt = DateTime("2026-07-23T13:00:00")
-                   , minutes = DurationMinutes(90)
-                   , attendees = Attendees([ ContactId("003000000000100") ]) }
-         , Meeting { id = ActivityId("00T000000000005"), subject = Subject("Follow-up")
-                   , owner = UserId("u-001")
-                   , related = RelatedToAccount { accountId = AccountId("001000000000100") }
-                   , startAt = DateTime("2026-07-25T13:00:00")
-                   , minutes = DurationMinutes(30)
-                   , attendees = Attendees([ ContactId("003000000000200") ]) } ])
+        ([ workshop
+         , Meeting { ...followUpMeeting, attendees = Attendees([ ContactId("003000000000200") ]) } ])
         -> Coverage { contacts = [ ContactId("003000000000100"), ContactId("003000000000200") ]
                     , count = 2, singleThreaded = false }
 
 example staleAccounts
     | "an activity about a lead rolls up to no account, and recency is the freshest touch" :
-        ([ CallTask { id = ActivityId("00T000000000001"), subject = Subject("Intro call")
-                    , owner = UserId("u-001")
-                    , related = RelatedToAccount { accountId = AccountId("001000000000100") }
-                    , dueOn = Date("2026-07-01")
-                    , outcome = Connected { minutes = DurationMinutes(20) } }
-         , CallTask { id = ActivityId("00T000000000002"), subject = Subject("Second call")
-                    , owner = UserId("u-001")
-                    , related = RelatedToAccount { accountId = AccountId("001000000000100") }
-                    , dueOn = Date("2026-07-25")
-                    , outcome = Connected { minutes = DurationMinutes(20) } }
-         , CallTask { id = ActivityId("00T000000000003"), subject = Subject("Lead call")
-                    , owner = UserId("u-002")
+        ([ CallTask { ...introCall, dueOn = Date("2026-07-01") }
+         , CallTask { ...introCall, id = ActivityId("00T000000000002")
+                    , subject = Subject("Second call"), dueOn = Date("2026-07-25") }
+         , CallTask { ...introCall, id = ActivityId("00T000000000003")
+                    , subject = Subject("Lead call"), owner = UserId("u-002")
                     , related = RelatedToLead { leadId = LeadId("00Q000000000001") }
-                    , dueOn = Date("2026-07-02")
-                    , outcome = Connected { minutes = DurationMinutes(20) } } ],
+                    , dueOn = Date("2026-07-02") } ],
          Date("2026-07-30"), CadenceDays(14))
         -> StaleReport { daysSince = [ (AccountId("001000000000100"), 5) ], stale = [ ] }
 
