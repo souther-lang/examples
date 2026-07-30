@@ -99,53 +99,6 @@ A finding the compiler fixes is removed from here rather than kept as a resolved
 rewritten to the form it was asking for, and the commit that does it tells the story; git history is
 where that log belongs, not this file. None are currently open.
 
-### Working as designed, recorded so the next reader does not file it
-
-**F5 — no case for a division by zero.** Every division here is preceded by the `guard` that makes zero
-unreachable, so no outcome union carries a `DivisionByZero` it could never return. The model not stating a
-case it cannot reach is the right answer; what is missing is the spec showing how to `match` the primitive
-arm of `Int | DivisionByZero` for the times a guard is not available.
-
-**F8 — `List.filterMap` serves only the absence a model reads.** An activity about a Lead contributes no key
-to an account rollup, and `filterMap` is the function for that shape. Its step has to answer an optional,
-and the only optionals a model has are ones it read — a `?` field, `Map.get`, `List.find` — or one it made
-by giving a `?` field a value. Absence that is a case of the model's own sum is neither, so the projection
-answers a list of nought or one and `concatMap` does the work. That is the decision, not a gap: absence a
-model owns is a case of its sum, and a `filterMap` step that took a plain value would stop dropping
-anything. The step also says what it answers now: `Option<T>` may be written wherever a model reads an
-optional, so `assigneeEntry` declares `Option<(String, IssueId)>` rather than leaving a reader of
-`filterMap(assigneeEntry, …)` to infer it. What stays refused is `?` outside a field, which is the mark
-for making an optional rather than the name of the type.
-
-**F3 — a picklist whose cases carry fields is still written twice.** A sum every one of whose cases is a
-unit data keys a boundary map, travelling as the case's name, and `categoryRollupOf` keys by
-`ForecastCategory` itself — the five category names are written once, where they are declared, and the
-`CategoryName` newtype and the match that produced it are gone (souther#161). The ten stage names are
-still written twice, and souther#161's own resolution says why: a stage is a state that carries the
-fields that state has, not an enumeration, so there is nothing for a boundary map to key by. Keying the
-report by a separate stage enumeration would be a modelling choice about whether the picklist label
-("Needs Analysis") and the state (`NeedsAnalysis`) are one name or two — not a gap the compiler closes.
-
-**F19 — the stages sort alphabetically, for what F3 leaves behind.** A sum every one of whose cases is a
-unit data is ordered by the order its cases are declared in, which is the order a deal moves through them
-(souther#161). `pipelineByStage` still returns "Closed Lost" first, because what it keys by is
-`StageName`, a String — the same residue F3 records, settled the same way.
-
-**F11 — an input union needs a name.** `OpenLead`, `Committed`, `OpenOpportunity`, `ClosedOpportunity` and
-`Decided` exist only to be input types. Naming them makes each sealed and every match over them
-exhaustive, and `closeLost`'s eight arms are safer for it.
-
-**F12 — a `Set` has no order.** Multi-threading a deal is a membership question and the next person to
-contact is an order question, so one is a `Set` and the other a `List`. Worth writing down because the
-temptation to reuse the set is strong.
-
-**F18 — a behavior and a data cannot share a word.** A behavior generates a class from its name
-capitalized, so `open` and `Open` are one name on the JVM. This domain has words that are both noun and
-verb — you *open* an opportunity and you report on *open* opportunities; a *win rate* is a number and
-*working it out* is an operation; a *day load* is a report and *computing* one is a behavior. Three
-collisions, three renames (`openFromLead`, `winRateOf`, `dayLoadOf`). The vocabulary is worse in three
-places, and it is the price of a generated class being named after what declared it.
-
 ## Running
 
 The examples track the compiler's `develop`, so they build against `souther.version` in the root
