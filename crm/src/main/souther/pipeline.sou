@@ -443,13 +443,12 @@ let profileOf (opp) =
 // the transition rather than restating the eight fields that were already there, and the expected side
 // spreads the input, so what a reader compares is the delta.
 //
-// The chain stops where a row hands a fixture to a parameter whose type is a union of states. A fixture
-// that spreads anything reaches such a row as the case it spread rather than as its own, and nothing is
-// reported — so `acme`, `acmeLost` and `acmeInNegotiation`, the three that do, are written flat.
-// souther#206.
+// Two fixtures in the chain stay flat, but not for the same reason: `acme` opens it, so there is no
+// earlier state to spread, and `acmeLost` is a different deal entirely, not a later state of this one.
+// Every other fixture spreads the one before it, `acmeInNegotiation` included.
 //
-// The expected side spreads rather than naming: a bare name on the right of `->` is read as an arm, so
-// `-> Qualification { ...acmeQualified }` is how a row states a whole fixture. Finding F26.
+// The expected side names a fixture directly rather than spreading it: `-> acmeQualified` is how a row
+// states a whole fixture.
 
 let acme = Prospecting
     { id = OpportunityId("006000000000001")
@@ -493,34 +492,13 @@ let acmeQuoted = ProposalPriceQuote
     }
 
 // The worked deal in negotiation is published: a module stating a rule against one names this value
-// rather than the twenty-two types inside it. Written flat for the same reason as `acmeLost`, and
-// because an imported value a row names may not be built from other values either (souther#206).
+// rather than the twenty-two types inside it.
 let acmeInNegotiation = NegotiationReview
-    { id = OpportunityId("006000000000001")
-    , accountId = AccountId("001000000000100")
-    , name = OpportunityName("Acme Corp — New Business")
-    , owner = UserId("u-001")
-    , amount = Amount(4800000.00m)
-    , currency = CurrencyCode("JPY")
-    , closeDate = Date("2026-09-30")
-    , openedOn = Date("2026-07-20")
-    , qualifiedOn = Date("2026-07-25")
-    , primaryContactId = ContactId("003000000000100")
-    , needs = Needs([ PainPoint("invoicing takes three days"), PainPoint("no audit trail") ])
-    , businessCase = BusinessCase("Automating invoicing removes three days of manual work")
-    , criteria = [ DecisionCriterion("total cost") ]
-    , decisionMakers = DecisionMakers(Set.fromList([ ContactId("003000000000200") ]))
-    , champion = ContactId("003000000000200")
-    , risks = [ PerceivedRisk("security review") ]
-    , quoteNumber = QuoteNumber("0Q0000000000001")
-    , proposedOn = Date("2026-08-01")
-    , proposedAmount = Amount(4800000.00m)
-    , openedNegotiationOn = Date("2026-09-01")
-    , floorAmount = Amount(4200000.00m)
-    }
+    { ...acmeQuoted, openedNegotiationOn = Date("2026-09-01"), floorAmount = Amount(4200000.00m) }
 
 // A lost deal, for the follow-up rules. Every row varies the reason, because the reason is what
-// lossFollowUp reads. Written flat: `profileOf` takes the Opportunity union (souther#206).
+// lossFollowUp reads. Written flat: it is a different deal, not a later state of `acme`, so there is
+// nothing here for it to spread.
 let acmeLost = ClosedLost
     { id = OpportunityId("006000000000002")
     , accountId = AccountId("001000000000100")
@@ -625,7 +603,7 @@ let qualifyOpportunity (opp, on, primaryContactId) = {
 example qualifyOpportunity
     | "a deal with an amount and a contact qualifies" :
         (acme, Date("2026-07-25"), ContactId("003000000000100"))
-        -> Qualification { ...acmeQualified }
+        -> acmeQualified
     | "a deal worth nothing is not a qualified deal, however real the interest" :
         (Prospecting { ...acme, amount = Amount(0.0m) }, Date("2026-07-25"), ContactId("003000000000100"))
         -> AmountNotStated
@@ -646,7 +624,7 @@ let recordNeeds (opp, points) = {
 example recordNeeds
     | "blank entries are dropped and the rest are trimmed" :
         (acmeQualified, [ "  invoicing takes three days  ", "   ", "no audit trail" ])
-        -> NeedsAnalysis { ...acmeDiscovered }
+        -> acmeDiscovered
     | "a form full of whitespace records nothing, and discovery is not over" :
         (acmeQualified, [ "  ", "" ])
         -> NoNeedsRecorded

@@ -146,9 +146,8 @@ example periodOf
 
 // === The deal and the forecast the rows are about ===
 // One deal of a million yen closing at the end of September, and the forecast that comes to. The deal is
-// written flat, because a row hands it to a list of the OpenOpportunity union and a fixture built by a
-// spread arrives there as the case it spread (souther#206); the rows vary the amount and the close date by
-// spreading it.
+// written flat because it is the first state of its own chain — there is nothing earlier for it to spread;
+// the rows vary the amount and the close date by spreading it.
 let acmeDeal = Prospecting
     { id = OpportunityId("006000000000001")
     , accountId = AccountId("001000000000100")

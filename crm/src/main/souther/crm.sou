@@ -367,9 +367,8 @@ data OpenLead = NewLead | WorkingLead
 // to be nameable.
 //
 // `acmeNew` and `acmeWorking` stay here because this module's own examples (`recordTouch`, `scoreLead`,
-// `linkLeadToAccount`) use them too. They are written flat because `recordTouch` and `scoreLead` take the
-// OpenLead union, and a fixture built by a spread reaches such a row as the case it spread rather than as
-// its own (souther#206). The two states after them are handed to a plain state type, so they spread.
+// `linkLeadToAccount`) use them too. `acmeNew` has no earlier state to spread; `acmeWorking` spreads it,
+// the same as the two states after them.
 
 let acmeNew = NewLead
     { id = LeadId("00Q000000000001")
@@ -384,18 +383,7 @@ let acmeNew = NewLead
     }
 
 let acmeWorking = WorkingLead
-    { id = LeadId("00Q000000000001")
-    , person = PersonName("Aoyagi")
-    , company = CompanyName("Acme Corp")
-    , title = JobTitle("CTO")
-    , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
-    , source = WebForm
-    , campaigns = Set.fromList([ CampaignName("Q3 Expo") ])
-    , owner = UserId("u-001")
-    , createdOn = Date("2026-07-01")
-    , firstTouchedOn = Date("2026-07-03")
-    , touches = 3
-    }
+    { ...acmeNew, firstTouchedOn = Date("2026-07-03"), touches = 3 }
 
 let acmeDisqualified = DisqualifiedLead
     { ...acmeWorking, disqualifiedOn = Date("2026-07-20"), reason = NoBudget }
@@ -757,14 +745,8 @@ let linkLeadToAccount (lead, findAccountByDomain) =
 
 // A fake is a table of what the outside world would answer, so the rule around the lookup is checked at
 // compile time with no database in sight. The `_` row is what makes the unmatched path a path.
-// The account it answers with is written out rather than named: this behavior answers a union, and a
-// fake row cannot name a value there (souther#206).
 fake findAccountByDomain
-    | (DomainName("beta.example.com")) ->
-        Account { id = AccountId("001000000000002"), name = CompanyName("Beta KK")
-                , domain = DomainName("beta.example.com"), industry = Manufacturing
-                , employees = EmployeeCount(999), type = Customer { since = Date("2024-04-01") }
-                , owner = UserId("u-001"), currency = CurrencyCode("JPY") }
+    | (DomainName("beta.example.com")) -> betaAccount
     | _ -> AccountNotFound
 
 example linkLeadToAccount

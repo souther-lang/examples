@@ -96,7 +96,7 @@ and what would let it be written directly. Each one is also recorded in the `.so
 declaration that hit it, so a reader meets the finding where the model shows it rather than only here.
 
 A finding the compiler then fixes leaves the list, and the model is rewritten to the form it was asking
-for. Fifteen have left so far:
+for. Sixteen have left so far:
 
 * **F13** was the first: `tierOf` and `categoryOf` name the sums they answer with.
 * **F16**: a field every case spreads is read on the sum, so six helpers that were an arm per case are
@@ -156,28 +156,21 @@ for. Fifteen have left so far:
   reasons, since a field may hold an imported type even though a union may not. So the aggregate rule is
   stated in Souther after all, and a blocked conversion opens no opportunity. The finding was written
   against a workaround the example never tried; the E1606 hint now names the shape (souther#207).
+* **F26** — a bare name on the right of `->` used to be read as an arm, not a value, so a value named
+  there was E1904, "`priced` is not one of the result cases", and a row whose whole expectation was a
+  fixture already named had to spread it (`-> NeedsAnalysis { ...acmeDiscovered }`) rather than name it. A
+  name is now read as a case first and, only when it is neither, as a value (souther#211), so `pipeline.sou`'s
+  rows name a fixture directly: `-> acmeQualified`.
 
-### One bug the fixtures are written around
+### A bug the fixtures no longer work around
 
-Naming the fixtures found [souther#206](https://github.com/souther-lang/souther/issues/206): a fixture
-that spreads a value takes **the spread source's case**, not the construction's. Where the position's
-type is a union the row is refused if the decoder needs a discriminator, and where it does not the row
-runs against the other case with nothing reported — a green example asserting the wrong value whenever
-the two cases answer alike. It does not matter whether the spread is written in the value or in the row,
-or whether what it spreads is flat.
-
-So a fixture handed to a union of states is written flat, and there are seven of them: `acme`,
-`acmeLost`, `acmeInNegotiation`, `acmeNew`, `acmeWorking`, `acmeDeal`, `提出された福岡出張`, plus one row
-each in `crm.sou`'s `findAccountByDomain` fake and `businesstrip.examples.sou`'s `差し戻す`. Each says so
-at the declaration. This is a bug rather than a finding — nothing about the language asks for it.
-
-### It could be stated, at several times the length
-
-**F26 — the expected side of a row cannot name a value.** A bare name there is read as an arm, so a value
-named on the right of `->` is E1904, "`priced` is not one of the result cases". A construction that
-spreads one is accepted (`NeedsAnalysis { ...acmeDiscovered }`), which is what the rows use and which is
-usually the better reading anyway; but where a row's whole expectation is a fixture already named, it is
-written as a one-field spread of itself. [souther#211](https://github.com/souther-lang/souther/issues/211).
+[souther#206](https://github.com/souther-lang/souther/issues/206) — a fixture built by a spread took the
+spread source's case rather than the construction's own wherever it reached a row whose position is a
+union — is fixed by the same change as F26. `acmeInNegotiation`, `acmeWorking` and `提出された福岡出張` now
+spread the state before them instead of restating it, and `crm.sou`'s `findAccountByDomain` fake answers
+`betaAccount` instead of writing the account out again. `acme`, `acmeLost`, `acmeNew`, `acmeDeal` and the
+row in `businesstrip.examples.sou`'s `差し戻す` stay flat regardless — none of them has an earlier state to
+spread from.
 
 ### Working as designed, recorded so the next reader does not file it
 
