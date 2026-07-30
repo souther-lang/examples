@@ -28,16 +28,15 @@
 //   - A rollup keyed by a sum. ForecastCategory's five cases are all unit data, so the category itself keys
 //     the map and the five names are written once, where they are declared.
 //
-// Findings recorded here: F5 at attainmentOf. F3, F16 and F23 were recorded here too and are gone: a sum
-// whose cases are all unit data keys a boundary map, a field every case spreads is read on the sum, and a
-// helper `let` reaches a behavior whose requirement set is empty the same way a behavior's own body does.
+// Findings recorded here: F5 at attainmentOf, F23 at weightedOf. F3 and F16 were recorded here too and are
+// gone: a sum whose cases are all unit data keys a boundary map, and a field every case spreads is read on
+// the sum.
 module example.forecasting
 import example.crm ( Amount, UserId, AccountId, CurrencyCode )
 import example.pipeline ( OpportunityId, OpportunityName, Opportunity, OpenOpportunity, ClosedWon
                         , Prospecting, Qualification, NeedsAnalysis, ValueProposition
                         , IdDecisionMakers, PerceptionAnalysis, ProposalPriceQuote, NegotiationReview
-                        , ClosedLost, ForecastCategory, Pipeline, BestCase, Commit, Closed, Omitted
-                        , categoryOf, probabilityOf )
+                        , ClosedLost, ForecastCategory, Pipeline, BestCase, Commit, Closed, Omitted, categoryOf )
 import example.activity ( StaleReport )
 
 // === Values ===
@@ -132,10 +131,30 @@ example periodOf
 // === Reading a deal ===
 // An imported behavior that depends on nothing is called by name, and categoryRollupOf below does exactly that
 // with example.pipeline's categoryOf — which is why the forecast category is not mapped a second time here.
-// weightedOf below reaches probabilityOf the same way, from a helper `let` rather than a behavior's own
-// body, which is what retired finding F23: the stage-probability mapping used to be copied into this module
-// because a helper could not call a behavior across a module boundary, and nothing but a comment kept the
-// copy in step with the stage machine that owns it.
+//
+// The probability is, and the difference is where the call would sit. What needs it is weightedOf, an
+// ordinary helper `let`, and a helper does not reach a behavior: the call is E1401, "`probabilityOf` is a
+// behavior, and it cannot be called from here". So the ten probabilities are copied into the module that
+// consumes them,
+// and nothing but a comment keeps them in step with the stage machine that owns them. A stage added to
+// example.pipeline breaks three matches there and silently leaves this file weighing the new stage at
+// whatever its own match happens to say. Finding F23.
+//
+// The other route the hint offers — re-declare probabilityOf here as an injected behavior and bind
+// example.pipeline's implementation at the boundary — is worse: a pure, total, compile-time-checkable
+// mapping would become an injected dependency wired up in every caller, and every `example` in this file
+// would need a `fake` for it. Copying the match keeps the checking; injecting it would keep the single
+// source. Neither keeps both.
+let weightedProbabilityOf (opp: OpenOpportunity): Int =
+    match opp with
+        | Prospecting        -> 10
+        | Qualification      -> 10
+        | NeedsAnalysis      -> 20
+        | ValueProposition   -> 50
+        | IdDecisionMakers   -> 60
+        | PerceptionAnalysis -> 70
+        | ProposalPriceQuote -> 75
+        | NegotiationReview  -> 90
 
 // The amount, the close date, the id and the account are read straight off OpenOpportunity: every one of
 // the eight open states spreads OpportunityCommon, and what holds of every case is a property of the sum.
@@ -172,7 +191,7 @@ let q3Forecast = Forecast
 // call, once per deal, and the answer is a Decimal rather than a union because the denominator is a literal
 // hundred and cannot be zero.
 let weightedOf (opp: OpenOpportunity): Decimal =
-    Decimal.round(Decimal.fromInt(probabilityOf(opp).value) * opp.amount.value * 0.01m, 2, HALF_UP)
+    Decimal.round(Decimal.fromInt(weightedProbabilityOf(opp)) * opp.amount.value * 0.01m, 2, HALF_UP)
 
 let addToPeriod (acc: Map<FiscalPeriod, Decimal>, opp: OpenOpportunity, fyStart: Int)
         : Map<FiscalPeriod, Decimal> = {

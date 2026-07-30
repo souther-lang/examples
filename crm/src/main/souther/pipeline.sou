@@ -100,10 +100,8 @@ module example.pipeline exposing (
     profileOf,
     // The transitions are the module's interface: a boundary drives a deal through them and a downstream
     // context takes a state type as an input. Listing a behavior only settles its visibility on the JVM,
-    // though — a behavior with a requirement set, such as qualifyOpportunity, is still reachable only
-    // through `>->` and not by a plain call (retired finding F23 covered the other case: a behavior whose
-    // requirement set is empty, such as probabilityOf just above, is callable from a helper `let` now,
-    // the same way it is from another behavior's body).
+    // though — another Souther module can import the name and still not call it (F23), so `exposing` a
+    // behavior is a statement about the Java side and nothing else.
     qualifyOpportunity,
     AmountNotStated,
     recordNeeds,
