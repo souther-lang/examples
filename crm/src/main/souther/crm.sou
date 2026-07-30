@@ -851,9 +851,10 @@ let blockingReasons (lead: QualifiedLead, request: ConversionRequest,
 // the second call does not typecheck.
 //
 // The account and the contact are built here. The opportunity is the leg this module cannot reach:
-// example.pipeline imports this one, so this one cannot import it back (E1501), and a cross-module `>->`
-// would put this behavior's departed cases into a union pipeline declares (E1606). Conversion is therefore
-// two calls with a Java line between them, which is where the context boundary falls. Finding F1.
+// example.pipeline imports this one, so this one cannot import it back (E1501). The whole of conversion
+// is one operation all the same, and it is stated on the other side of the seam — pipeline's
+// convertAndOpen calls this behavior and answers ConversionBlocked with a case of its own. What cannot
+// cross a module boundary is the composition, not the operation.
 behavior convertLead : (lead: QualifiedLead, request: ConversionRequest,
                         accounts: AccountBook, contacts: ContactBook)
         -> LeadConverted | ConversionBlocked

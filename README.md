@@ -96,7 +96,7 @@ and what would let it be written directly. Each one is also recorded in the `.so
 declaration that hit it, so a reader meets the finding where the model shows it rather than only here.
 
 A finding the compiler then fixes leaves the list, and the model is rewritten to the form it was asking
-for. Thirteen have left so far:
+for. Fourteen have left so far:
 
 * **F13** was the first: `tierOf` and `categoryOf` name the sums they answer with.
 * **F16**: a field every case spreads is read on the sum, so six helpers that were an arm per case are
@@ -143,6 +143,14 @@ for. Thirteen have left so far:
   which covers a `++` of a literal and a module's own value (souther#208/#219), so the twelve-character
   tail `AccountId`, `ContactId` and `LeadId` shared is a named value, `salesforceIdTail`, and each type
   composes its own three-character prefix onto it instead of writing the tail out three times.
+* **F1** — this one was never true. It said an aggregate spanning two contexts cannot be one operation,
+  and asked for a translating composition. What the compiler refuses is the *composition*: a cross-module
+  `>->` would carry `crm`'s departed case into a union `pipeline` declares (E1606). An operation is not a
+  composition. `convertAndOpen` calls `convertLead`, carries a converted lead on to `openFromLead`, and
+  answers `ConversionBlocked` with its own `ConversionRefused` — a case of this module carrying `crm`'s
+  reasons, since a field may hold an imported type even though a union may not. So the aggregate rule is
+  stated in Souther after all, and a blocked conversion opens no opportunity. The finding was written
+  against a workaround the example never tried; the E1606 hint now names the shape (souther#207).
 
 ### One bug the fixtures are written around
 
@@ -157,17 +165,6 @@ So a fixture handed to a union of states is written flat, and there are seven of
 `acmeLost`, `acmeInNegotiation`, `acmeNew`, `acmeWorking`, `acmeDeal`, `提出された福岡出張`, plus one row
 each in `crm.sou`'s `findAccountByDomain` fake and `businesstrip.examples.sou`'s `差し戻す`. Each says so
 at the declaration. This is a bug rather than a finding — nothing about the language asks for it.
-
-### The rule could not be stated where it belongs
-
-**F1 — an aggregate that spans two contexts cannot be one operation.** Lead conversion produces an
-Account, a Contact *and* an Opportunity together; a conversion that made two of the three is a
-data-integrity bug. The Opportunity is built in `example.pipeline`, which imports `crm`, so `crm` cannot
-import it back (E1501); and the two are joined in Java, because a cross-module `>->` would put `crm`'s
-departed cases into a union `pipeline` declares (E1606). *Would fix it:* a translating composition — `crm.convertLead >-> openFromLead translating
-(crm.ConversionBlocked -> ConversionRefused)` — naming the local case each imported departure lands on.
-The compiler already computes the departed set; what is missing is the syntax to land it.
-[souther#207](https://github.com/souther-lang/souther/issues/207).
 
 ### It could be stated, at several times the length
 
