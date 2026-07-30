@@ -96,7 +96,7 @@ and what would let it be written directly. Each one is also recorded in the `.so
 declaration that hit it, so a reader meets the finding where the model shows it rather than only here.
 
 A finding the compiler then fixes leaves the list, and the model is rewritten to the form it was asking
-for. Ten have left so far:
+for. Thirteen have left so far:
 
 * **F13** was the first: `tierOf` and `categoryOf` name the sums they answer with.
 * **F16**: a field every case spreads is read on the sum, so six helpers that were an arm per case are
@@ -131,6 +131,18 @@ for. Ten have left so far:
   body is now `probabilityFor`, a published helper (ADR-0075), so `forecasting`'s `weightedOf` — a helper,
   cross-module — calls that directly instead of carrying its own ten-arm copy, the same way any imported
   helper is called.
+* **F25** — an `examples for` file may now declare the values its own rows name (souther#210), so
+  `acmeQualified`, the conversion request and the account/contact books move out of `crm.sou` into
+  `crm.examples.sou`, beside the only rows that use them. `businesstrip.examples.sou`'s
+  `最終承認を待つ福岡出張` moves the same way.
+* **F27** — an imported published value can be spread as well as named (souther#212), so a reader who
+  needs the same deal with one field changed no longer has to declare a copy of their own. Neither of
+  `activity.sou`'s `nextStepFor` rows varies `acmeInNegotiation`, so nothing there changed shape, but the
+  restriction that would have forced a duplicate is gone.
+* **F10** — a `String.matches` pattern may be any expression that evaluates to a string at compile time,
+  which covers a `++` of a literal and a module's own value (souther#208/#219), so the twelve-character
+  tail `AccountId`, `ContactId` and `LeadId` shared is a named value, `salesforceIdTail`, and each type
+  composes its own three-character prefix onto it instead of writing the tail out three times.
 
 ### One bug the fixtures are written around
 
@@ -159,32 +171,11 @@ The compiler already computes the departed set; what is missing is the syntax to
 
 ### It could be stated, at several times the length
 
-**F25 — a named fixture cannot live beside the rows that use it.** An `examples for` file may hold only
-examples (E1906), so the values `crm.examples.sou`'s rows name are declared in `crm.sou`. The companion
-file was introduced to keep fixtures out of the model source, and naming them puts them back — the rows
-are a third of the length they were, and the lead, the books and the request are in the model file. The
-same holds for `businesstrip`. *Would fix it:* letting an `examples for` file declare the values its own
-rows name, since nothing else can reach them. [souther#210](https://github.com/souther-lang/souther/issues/210).
-
 **F26 — the expected side of a row cannot name a value.** A bare name there is read as an arm, so a value
 named on the right of `->` is E1904, "`priced` is not one of the result cases". A construction that
 spreads one is accepted (`NeedsAnalysis { ...acmeDiscovered }`), which is what the rows use and which is
 usually the better reading anyway; but where a row's whole expectation is a fixture already named, it is
 written as a one-field spread of itself. [souther#211](https://github.com/souther-lang/souther/issues/211).
-
-**F27 — an imported value can be named but not varied.** `activity.sou` names `example.pipeline`'s
-`acmeInNegotiation`, which is what removed ten imports (F21). Spreading it — `NegotiationReview
-{ ...acmeInNegotiation, floorAmount = … }` — is "`acmeInNegotiation` is not a value a fixture can
-spread", so a reader that needs the same deal with one field changed has to declare its own.
-[souther#212](https://github.com/souther-lang/souther/issues/212).
-
-**F10 — a pattern can be named but not composed.** A regex does get a name: a zero-argument `let` whose
-body is a literal is accepted where `String.matches` wants a pattern, and the compiler still validates it,
-reporting an invalid one at the `let`. `DomainName`'s pattern used to be written that way so its invariant
-and `domainOf`'s guard read one name; the guard is gone and the pattern is a literal again. What still
-cannot be done is factoring the shared part out — the three Salesforce id patterns differ only in a
-three-character prefix, and `prefix ++ "[0-9A-Za-z]{12}…"` is no longer a literal, so the check refuses it.
-The tail is written three times. [souther#208](https://github.com/souther-lang/souther/issues/208).
 
 **F24 — an invariant is attempted whole or not at all.** `QuoteLines` says a quote has at least one line
 and no product twice, and `buildQuote` departs by `NoLines` for the first and `DuplicateProduct` for the

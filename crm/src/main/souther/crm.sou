@@ -31,7 +31,7 @@
 //
 // Where the language could not state a rule directly, this file says so at the declaration that hit it.
 // Those notes are the point of the example as much as the model is (see the README's dogfooding
-// findings): F8 at `screenForDuplicates`, F10 at the id newtypes, F25 at the fixtures.
+// findings): F8 at `screenForDuplicates`.
 module example.crm exposing (
     AccountId,
     ContactId,
@@ -131,19 +131,20 @@ module example.crm exposing (
 // carries its own, and a contact id handed to something expecting an account is a decode failure at the
 // boundary rather than a lookup that finds nothing.
 //
-// The pattern is written out per type. Naming one works — a zero-argument `let` whose body is a literal
-// is accepted by String.matches and validated at that `let` — but the twelve-character tail these three
-// share cannot be factored out of them, because `prefix ++ "…"` is no longer a literal and the check
-// refuses it. That is finding F10. Naming pays where a pattern is used twice, which is DomainName below.
+// The twelve-character tail these three share is held once: a `String.matches` pattern may be any
+// expression that evaluates to a string at compile time, which covers a `++` of a literal and a module's
+// own value (souther#208/#219, retiring finding F10), so the tail is a named value and each type composes
+// its own prefix onto it. Naming pays where a pattern is used twice, which is DomainName below.
+let salesforceIdTail = "[0-9A-Za-z]{12}([0-9A-Z]{3})?"
 
 data AccountId = String
-    invariant String.matches("001[0-9A-Za-z]{12}([0-9A-Z]{3})?", value)
+    invariant String.matches("001" ++ salesforceIdTail, value)
 
 data ContactId = String
-    invariant String.matches("003[0-9A-Za-z]{12}([0-9A-Z]{3})?", value)
+    invariant String.matches("003" ++ salesforceIdTail, value)
 
 data LeadId = String
-    invariant String.matches("00Q[0-9A-Za-z]{12}([0-9A-Z]{3})?", value)
+    invariant String.matches("00Q" ++ salesforceIdTail, value)
 
 // The owner of a record. User ids come from the identity provider, so there is no format to claim.
 data UserId = String
@@ -355,18 +356,20 @@ data Lead = NewLead | WorkingLead | QualifiedLead | DisqualifiedLead | Converted
 // need it may point at it.
 data OpenLead = NewLead | WorkingLead
 
-// === The lead, the accounts and the books the rows are about ===
+// === The lead and the accounts the rows are about ===
 // A row names its fixture instead of restating it. The rows of this module are about one lead of Acme
 // Corp walked through its states, and about three accounts whose employee counts are the tier
 // boundaries — so each is a value, and a row that varies one field spreads it.
 //
-// They are declared here, in the model, rather than in `crm.examples.sou` where the rows that use them
-// are: an `examples for` file may hold only examples (E1906), so a named fixture has nowhere else to
-// live. That is the cost of naming one. Finding F25.
+// `acmeQualified`, the conversion request and the account/contact books live in `crm.examples.sou`
+// instead, beside the only rows that use them: an `examples for` file may now declare the values its own
+// rows name (souther#210, retiring finding F25), so a fixture named there no longer has to live here just
+// to be nameable.
 //
-// `acmeNew` and `acmeWorking` are written flat because `recordTouch` and `scoreLead` take the OpenLead
-// union, and a fixture built by a spread reaches such a row as the case it spread rather than as its own
-// (souther#206). The two states after them are handed to a plain state type, so they spread.
+// `acmeNew` and `acmeWorking` stay here because this module's own examples (`recordTouch`, `scoreLead`,
+// `linkLeadToAccount`) use them too. They are written flat because `recordTouch` and `scoreLead` take the
+// OpenLead union, and a fixture built by a spread reaches such a row as the case it spread rather than as
+// its own (souther#206). The two states after them are handed to a plain state type, so they spread.
 
 let acmeNew = NewLead
     { id = LeadId("00Q000000000001")
@@ -393,9 +396,6 @@ let acmeWorking = WorkingLead
     , firstTouchedOn = Date("2026-07-03")
     , touches = 3
     }
-
-let acmeQualified = QualifiedLead
-    { ...acmeWorking, qualifiedOn = Date("2026-07-15"), score = LeadScore(72), budgetConfirmed = true }
 
 let acmeDisqualified = DisqualifiedLead
     { ...acmeWorking, disqualifiedOn = Date("2026-07-20"), reason = NoBudget }
@@ -443,26 +443,6 @@ let acmeContact = Contact
     , title = JobTitle("CTO")
     , reach = EmailAndPhone { email = EmailAddress("cto@acme.example.com")
                             , phone = PhoneNumber("+81-3-1234-5678") }
-    }
-
-// The books a duplicate rule reads. A rule reads a set, so a row has to show the set — which is why the
-// books are values too rather than four accounts written per row.
-let noAccounts   = AccountBook([ ])
-let noContacts   = ContactBook([ ])
-let betaOnFile   = AccountBook([ betaAccount ])
-let bothOnFile   = AccountBook([ betaAccount, gammaAccount ])
-let aoyagiOnFile = ContactBook([ acmeContact ])
-
-// What conversion is asked for. Every row varies one field of it, so the request is a value as well.
-let conversionRequest = ConversionRequest
-    { accountId = AccountId("001000000000100")
-    , contactId = ContactId("003000000000100")
-    , convertedOn = Date("2026-07-20")
-    , intent = OpportunityRequested { amount = Amount(4800000.00m), closeDate = Date("2026-09-30") }
-    , accountType = Prospect
-    , industry = Technology
-    , employees = EmployeeCount(420)
-    , currency = CurrencyCode("JPY")
     }
 
 // === Reading a field off the sum ===
