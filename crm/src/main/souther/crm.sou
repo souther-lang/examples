@@ -434,23 +434,17 @@ let acmeContact = Contact
     }
 
 // === Reading a field off the sum ===
-// A sum has no fields, so a rule that reads one opens the state first. The spread lays its fields flat,
-// which is why `NewLead { source }` reaches a field LeadCommon declared.
+// A field both cases of OpenLead spread is read directly off it. `touches` is not one of them — NewLead
+// carries none — so touchesOf still opens the state.
 
-let sourceOf (lead: OpenLead): LeadSource =
-    match lead with
-        | NewLead { source }     -> source
-        | WorkingLead { source } -> source
+let sourceOf (lead: OpenLead): LeadSource = lead.source
 
 let touchesOf (lead: OpenLead): Int =
     match lead with
         | NewLead                -> 0
         | WorkingLead { touches } -> touches
 
-let campaignsOf (lead: OpenLead): Set<CampaignName> =
-    match lead with
-        | NewLead { campaigns }     -> campaigns
-        | WorkingLead { campaigns } -> campaigns
+let campaignsOf (lead: OpenLead): Set<CampaignName> = lead.campaigns
 
 // === recordTouch: New becomes Working, Working counts up ===
 // A touch dated before the lead existed is a data-entry error a CRM does report, so it is a case. It has

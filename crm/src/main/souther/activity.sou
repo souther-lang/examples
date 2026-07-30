@@ -343,11 +343,7 @@ let accountKeyOf (a: Activity): List<AccountId> =
         | RelatedToOpportunity { accountId } -> [ accountId ]
         | RelatedToLead                      -> []
 
-let relatedOf (a: Activity): RelatedTo =
-    match a with
-        | CallTask { related }  -> related
-        | EmailTask { related } -> related
-        | Meeting { related }   -> related
+let relatedOf (a: Activity): RelatedTo = a.related
 
 let accountDatesOf (a: Activity): List<(AccountId, Date)> =
     List.map(k -> (k, dateOf(a)), accountKeyOf(a))
