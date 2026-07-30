@@ -62,7 +62,8 @@ module example.activity exposing (
 )
 // The import list names what this module works with. The deal its `nextStepFor` rows are stated
 // against is `example.pipeline`'s own value, named here rather than restated, so the types inside it
-// stay that module's business.
+// stay that module's business. What a row here cannot do is vary it: an imported value may be named
+// but not spread, which is finding F27.
 import example.crm ( AccountId, ContactId, LeadId, UserId )
 import example.pipeline ( OpportunityId, OpenOpportunity
                         , Prospecting, Qualification, NeedsAnalysis, ValueProposition

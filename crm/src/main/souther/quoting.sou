@@ -22,7 +22,7 @@
 //   - An expiry window and an approval read as one expression, because both are cases and neither is a
 //     boolean anybody can misread.
 //
-// Findings recorded here: F18 at discountExposureOf.
+// Findings recorded here: F18 at discountExposureOf, F24 at buildQuote.
 module example.quoting exposing (
     ProductCode,
     ProductName,

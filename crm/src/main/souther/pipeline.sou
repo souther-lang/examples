@@ -26,7 +26,7 @@
 //     generated base declares `apply()` with no input at all.
 //
 // The findings this module hit are recorded where they bite: F1 at openFromLead, F3 at StageName, F5 at
-// winRateOf, F18 at the two names this file had to change, F19 at pipelineByStage.
+// winRateOf, F18 at the two names this file had to change, F19 at pipelineByStage, F26 at the fixtures.
 // F16 was recorded at idOf and is gone: a field every case spreads is read on the sum itself. F17 is gone
 // too: a behavior calls a behavior whose requirement set is empty, so probabilityOf and categoryOf have no
 // helper twin. F4 is gone: closeAndSummarize carries its own rows.
@@ -428,10 +428,13 @@ let profileOf (opp) =
 // the transition rather than restating the eight fields that were already there, and the expected side
 // spreads the input, so what a reader compares is the delta.
 //
-// The chain stops where a row hands a fixture to a parameter whose type is a union of states. A value
-// built by a spread reaches such a row as the case it spread rather than as its own, and nothing is
+// The chain stops where a row hands a fixture to a parameter whose type is a union of states. A fixture
+// that spreads anything reaches such a row as the case it spread rather than as its own, and nothing is
 // reported — so `acme`, `acmeLost` and `acmeInNegotiation`, the three that do, are written flat.
 // souther#206.
+//
+// The expected side spreads rather than naming: a bare name on the right of `->` is read as an arm, so
+// `-> Qualification { ...acmeQualified }` is how a row states a whole fixture. Finding F26.
 
 let acme = Prospecting
     { id = OpportunityId("006000000000001")

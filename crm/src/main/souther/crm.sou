@@ -31,7 +31,7 @@
 //
 // Where the language could not state a rule directly, this file says so at the declaration that hit it.
 // Those notes are the point of the example as much as the model is (see the README's dogfooding
-// findings): F8 at `screenForDuplicates`, F10 at the id newtypes.
+// findings): F8 at `screenForDuplicates`, F10 at the id newtypes, F25 at the fixtures.
 module example.crm exposing (
     AccountId,
     ContactId,
@@ -362,7 +362,7 @@ data OpenLead = NewLead | WorkingLead
 //
 // They are declared here, in the model, rather than in `crm.examples.sou` where the rows that use them
 // are: an `examples for` file may hold only examples (E1906), so a named fixture has nowhere else to
-// live. That is the cost of naming one.
+// live. That is the cost of naming one. Finding F25.
 //
 // `acmeNew` and `acmeWorking` are written flat because `recordTouch` and `scoreLead` take the OpenLead
 // union, and a fixture built by a spread reaches such a row as the case it spread rather than as its own

@@ -93,16 +93,52 @@ returns `Result<T>`, and `Ok`/`Err` are told apart by pattern match — no wildc
 The `crm` example was written to put the language under a domain that fights back, and what it produced
 besides a model is this list. Every entry is a rule a real CRM enforces, what had to be written instead,
 and what would let it be written directly. Each one is also recorded in the `.sou` file at the
-declaration that hit it, so a reader meets the finding where the model shows it rather than only here. A
-finding the compiler then fixes leaves the list, and the model is rewritten to the form it was asking for;
-F13 was the first, and `tierOf` and `categoryOf` now name the sums they answer with. F16 left next: a field
-every case spreads is read on the sum, so six helpers that were an arm per case are field reads. F14 left
-after that: a construction can be attempted, so twelve guards that restated a type's invariant are gone,
-along with the helper that gave `DomainName`'s pattern a name and the two bindings that unwrapped
-`ValidityDays`. What it did not cover is F24. F6 left with it rather than for a form of its own: what a
-blocked conversion is is that there is a reason it is, so the reasons are a list `ConversionBlocked`
-carries and "at least one" is its own invariant. `convertLead` attempts that construction, `BlockReasons`
-is gone and no guard restates the emptiness test.
+declaration that hit it, so a reader meets the finding where the model shows it rather than only here.
+
+A finding the compiler then fixes leaves the list, and the model is rewritten to the form it was asking
+for. Nine have left so far, and the last five went together:
+
+* **F13** was the first: `tierOf` and `categoryOf` name the sums they answer with.
+* **F16**: a field every case spreads is read on the sum, so six helpers that were an arm per case are
+  field reads.
+* **F14**: a construction can be attempted, so twelve guards that restated a type's invariant are gone,
+  along with the helper that gave `DomainName`'s pattern a name and the two bindings that unwrapped
+  `ValidityDays`. What it did not cover is F24.
+* **F6** left with it rather than for a form of its own: what a blocked conversion is is that there is a
+  reason it is, so the reasons are a list `ConversionBlocked` carries and "at least one" is its own
+  invariant. `convertLead` attempts that construction, `BlockReasons` is gone and no guard restates the
+  emptiness test.
+* **F17** — a behavior can call a behavior of its own module whose requirement set is empty, so the three
+  helper twins are gone: `profileOf` calls `probabilityOf` and `categoryOf`, and `submitForApproval` asks
+  `approvalNeeded` whether approval is needed. Both `constructs` clauses shrank on their own, because a
+  behavior that passes a value through is no longer the one building it.
+* **F20** — a fixture can be named, and this was the single biggest length reduction available to the
+  example. `crm.examples.sou` went from 326 lines to 96, and the fixtures of `pipeline`, `activity`,
+  `forecasting`, `quoting` and `businesstrip` became values that a row spreads the one field it is about.
+  The expected side spreads the input too, so what a reader compares is the delta rather than two
+  twenty-line records. Across the eight `.sou` files these findings touched, the model is 678 lines
+  shorter net, and most of that is this one.
+* **F21** left with it: the deal `activity`'s rows are stated against is `pipeline`'s published value, so
+  ten imports that existed for a fixture are gone.
+* **F22** — a call's result is reached into, so `amountOf(opp).value` is written where it is needed and
+  the two helpers that opened the newtype are gone.
+* **F4** — a composition carries an `example`, so `disqualifyAndNurture` and `closeAndSummarize` are
+  pinned where they are declared. The row that matters is the one no stage's own example could state: a
+  below-floor close leaves the main line at the first stage and never reaches the summary.
+
+### One bug the fixtures are written around
+
+Naming the fixtures found [souther#206](https://github.com/souther-lang/souther/issues/206): a fixture
+that spreads a value takes **the spread source's case**, not the construction's. Where the position's
+type is a union the row is refused if the decoder needs a discriminator, and where it does not the row
+runs against the other case with nothing reported — a green example asserting the wrong value whenever
+the two cases answer alike. It does not matter whether the spread is written in the value or in the row,
+or whether what it spreads is flat.
+
+So a fixture handed to a union of states is written flat, and there are seven of them: `acme`,
+`acmeLost`, `acmeInNegotiation`, `acmeNew`, `acmeWorking`, `acmeDeal`, `提出された福岡出張`, plus one row
+each in `crm.sou`'s `findAccountByDomain` fake and `businesstrip.examples.sou`'s `差し戻す`. Each says so
+at the declaration. This is a bug rather than a finding — nothing about the language asks for it.
 
 ### The rule could not be stated where it belongs
 
@@ -114,13 +150,14 @@ departed cases into a union `pipeline` declares (E1606). *Would fix it:* a trans
 (crm.ConversionBlocked -> ConversionRefused)` — naming the local case each imported departure lands on.
 The compiler already computes the departed set; what is missing is the syntax to land it.
 
-**F23 — an imported behavior is reachable from a behavior's body, not from a helper.** A behavior that
-depends on nothing is called by name now, and `categoryRollupOf` calls `example.pipeline`'s `categoryOf`
-directly — which is what let the duplicated category mapping go. The probability mapping is still copied,
-because the caller that needs it is `weightedOf`, an ordinary helper `let`, and a helper does not reach a
-behavior (E1401). So a stage added to `pipeline` breaks three matches there and silently leaves
-`forecasting` weighing it at whatever its own copy says. *Would fix it:* let a helper `let` call an
-imported behavior on the same terms a behavior's own body does.
+**F23 — a behavior is reachable from a behavior's body, not from a helper.** A behavior whose requirement
+set is empty is called by name, in its own module and across one: `profileOf` calls `probabilityOf`, and
+`categoryRollupOf` calls `example.pipeline`'s `categoryOf`, which is what let the duplicated category
+mapping and the three helper twins go (F17). The probability mapping is still copied, because the caller
+that needs it is `weightedOf`, an ordinary helper `let`, and a helper does not reach a behavior — E1401,
+"`probabilityOf` is a behavior, and it cannot be called from here". So a stage added to `pipeline` breaks
+three matches there and silently leaves `forecasting` weighing it at whatever its own copy says. *Would
+fix it:* let a helper `let` call a behavior on the same terms a behavior's own body does.
 
 **F3 — a picklist whose cases carry fields is still written twice.** A sum every one of whose cases is a
 unit data now keys a boundary map, travelling as the case's name, and `categoryRollupOf` keys by
@@ -137,26 +174,23 @@ the same residue F3 records.
 
 ### It could be stated, at several times the length
 
-**F17 — a behavior cannot call another behavior in its own module.** Only the behaviors it `depends on`.
-So anything two behaviors share is a helper, and a behavior that is also a building block needs a helper
-twin: `probabilityFor`/`probabilityOf`, `categoryFor`/`categoryOf`, `roleFor`/`approvalNeeded`.
+**F25 — a named fixture cannot live beside the rows that use it.** An `examples for` file may hold only
+examples (E1906), so the values `crm.examples.sou`'s rows name are declared in `crm.sou`. The companion
+file was introduced to keep fixtures out of the model source, and naming them puts them back — the rows
+are a third of the length they were, and the lead, the books and the request are in the model file. The
+same holds for `businesstrip`. *Would fix it:* letting an `examples for` file declare the values its own
+rows name, since nothing else can reach them.
 
-**F20 — a fixture cannot be named.** "`quoteAt10` is not a value a fixture can name" is the compiler's own
-wording. Every `example` row restates its whole input, so four rows checking a four-band approval matrix
-are four twenty-line quotes differing in one number, and `crm.examples.sou` exists at all because a
-`QualifiedLead` fixture is twelve fields. *Would fix it:* a named fixture and a spread over one —
-`fixture acme = QualifiedLead { … }`, then `QualifiedLead { ...acme, budgetConfirmed = false }`. This is
-the single biggest length reduction available to this example.
+**F26 — the expected side of a row cannot name a value.** A bare name there is read as an arm, so a value
+named on the right of `->` is E1904, "`priced` is not one of the result cases". A construction that
+spreads one is accepted (`NeedsAnalysis { ...acmeDiscovered }`), which is what the rows use and which is
+usually the better reading anyway; but where a row's whole expectation is a fixture already named, it is
+written as a one-field spread of itself.
 
-**F21 — fixtures drag in imports the module does not use.** `nextStepFor` takes an `OpenOpportunity` and
-reads nothing from it but the stage; writing its `example` rows means importing the ten newtypes that
-appear anywhere inside a `NegotiationReview`. Ten of `activity.sou`'s imports exist for fixtures alone, and
-the import list stops describing what the module does.
-
-**F22 — a call's result cannot be reached into.** `amountOf(opp).value` does not parse, so opening a
-newtype is its own helper or its own binding. `buildQuote` and `renewQuote` used to need one for
-`ValidityDays` alone; attempting the construction names the value as it builds it, so the binding they
-needed is the binder. The finding stays for every other call.
+**F27 — an imported value can be named but not varied.** `activity.sou` names `example.pipeline`'s
+`acmeInNegotiation`, which is what removed ten imports (F21). Spreading it — `NegotiationReview
+{ ...acmeInNegotiation, floorAmount = … }` — is "`acmeInNegotiation` is not a value a fixture can
+spread", so a reader that needs the same deal with one field changed has to declare its own.
 
 **F10 — a pattern can be named but not composed.** A regex does get a name: a zero-argument `let` whose
 body is a literal is accepted where `String.matches` wants a pattern, and the compiler still validates it,
@@ -172,11 +206,6 @@ second. An attempted construction answers one branch for the whole invariant, so
 it where every other guard in this model has stopped. *Would fix it:* letting a type declare more than one
 invariant under a name, so a departure can be chosen per rule.
 
-**F4 — a composition cannot carry an `example`.** `disqualifyAndNurture` and `closeAndSummarize` are the
-two most business-meaningful units in the model and the only two pinned by a test rather than at compile
-time (E1902). *Would fix it:* allow `example` on a `>->` composition, supplying the stages' dependencies
-with the same `fake` tables an example already accepts.
-
 ### Working as designed, recorded so the next reader does not file it
 
 **F5 — no case for a division by zero.** Every division here is preceded by the `guard` that makes zero
@@ -190,9 +219,10 @@ and the only optionals a model has are ones it read — a `?` field, `Map.get`, 
 by giving a `?` field a value. Absence that is a case of the model's own sum is neither, so the projection
 answers a list of nought or one and `concatMap` does the work. That is the decision, not a gap: absence a
 model owns is a case of its sum, and a `filterMap` step that took a plain value would stop dropping
-anything. The step needs no annotation to be named — a helper that leaves its result type off has the
-optional inferred, so `filterMap(assigneeOf, issues)` is writable; writing `Name?` is what the rule
-refuses.
+anything. The step also says what it answers now: `Option<T>` may be written wherever a model reads an
+optional, so `assigneeEntry` declares `Option<(String, IssueId)>` rather than leaving a reader of
+`filterMap(assigneeEntry, …)` to infer it. What stays refused is `?` outside a field, which is the mark
+for making an optional rather than the name of the type.
 
 **F11 — an input union needs a name.** `OpenLead`, `Committed`, `OpenOpportunity`, `ClosedOpportunity` and
 `Decided` exist only to be input types. Naming them makes each sealed and every match over them
