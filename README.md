@@ -96,7 +96,7 @@ and what would let it be written directly. Each one is also recorded in the `.so
 declaration that hit it, so a reader meets the finding where the model shows it rather than only here.
 
 A finding the compiler then fixes leaves the list, and the model is rewritten to the form it was asking
-for. Nine have left so far:
+for. Ten have left so far:
 
 * **F13** was the first: `tierOf` and `categoryOf` name the sums they answer with.
 * **F16**: a field every case spreads is read on the sum, so six helpers that were an arm per case are
@@ -125,6 +125,12 @@ for. Nine have left so far:
 * **F4** — a composition carries an `example`, so `disqualifyAndNurture` and `closeAndSummarize` are
   pinned where they are declared. The row that matters is the one no stage's own example could state: a
   below-floor close leaves the main line at the first stage and never reaches the summary.
+* **F23** — a behavior is callable only from another behavior's body, cross-module or not
+  (souther#159/#189); a plain helper `let` never reaches one, whatever its parameter's type, and that
+  restriction did not move. What retires the finding is publishing the mapping itself: `probabilityOf`'s
+  body is now `probabilityFor`, a published helper (ADR-0075), so `forecasting`'s `weightedOf` — a helper,
+  cross-module — calls that directly instead of carrying its own ten-arm copy, the same way any imported
+  helper is called.
 
 ### One bug the fixtures are written around
 
@@ -150,16 +156,6 @@ departed cases into a union `pipeline` declares (E1606). *Would fix it:* a trans
 (crm.ConversionBlocked -> ConversionRefused)` — naming the local case each imported departure lands on.
 The compiler already computes the departed set; what is missing is the syntax to land it.
 [souther#207](https://github.com/souther-lang/souther/issues/207).
-
-**F23 — a behavior is reachable from a behavior's body, not reliably from a helper.** `profileOf` calls
-`probabilityOf` and `categoryOf` from its own module's body, and `categoryRollupOf` calls
-`example.pipeline`'s `categoryOf` across the module boundary, both fine — a behavior whose requirement set
-is empty is called by name either way (souther#159, ADR-0068). `weightedOf` still cannot reach
-`probabilityOf` the same way, and still carries its own ten-arm copy of the stage-probability mapping,
-because both behaviors' parameter is `Opportunity`, a named sum — the same call that works for a record or
-a primitive parameter fails with the pre-fix E1401 the moment the parameter is a sum, in the same module or
-across one. *Would fix it:* whatever ADR-0068's helper-calls-behavior path does for a record or primitive
-parameter, done the same way for a sum parameter. [souther#215](https://github.com/souther-lang/souther/issues/215).
 
 ### It could be stated, at several times the length
 

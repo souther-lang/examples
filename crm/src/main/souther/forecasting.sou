@@ -28,15 +28,17 @@
 //   - A rollup keyed by a sum. ForecastCategory's five cases are all unit data, so the category itself keys
 //     the map and the five names are written once, where they are declared.
 //
-// Findings recorded here: F5 at attainmentOf, F23 at weightedOf. F3 and F16 were recorded here too and are
-// gone: a sum whose cases are all unit data keys a boundary map, and a field every case spreads is read on
-// the sum.
+// Findings recorded here: F5 at attainmentOf. F3, F16 and F23 were recorded here too and are gone: a sum
+// whose cases are all unit data keys a boundary map, a field every case spreads is read on the sum, and a
+// published helper is called directly instead of copied, since a behavior — unlike a helper — is callable
+// only from another behavior's body.
 module example.forecasting
 import example.crm ( Amount, UserId, AccountId, CurrencyCode )
 import example.pipeline ( OpportunityId, OpportunityName, Opportunity, OpenOpportunity, ClosedWon
                         , Prospecting, Qualification, NeedsAnalysis, ValueProposition
                         , IdDecisionMakers, PerceptionAnalysis, ProposalPriceQuote, NegotiationReview
-                        , ClosedLost, ForecastCategory, Pipeline, BestCase, Commit, Closed, Omitted, categoryOf )
+                        , ClosedLost, ForecastCategory, Pipeline, BestCase, Commit, Closed, Omitted
+                        , categoryOf, probabilityFor )
 import example.activity ( StaleReport )
 
 // === Values ===
@@ -129,32 +131,14 @@ example periodOf
         -> InvalidFiscalYearStart
 
 // === Reading a deal ===
-// An imported behavior that depends on nothing is called by name, and categoryRollupOf below does exactly that
-// with example.pipeline's categoryOf — which is why the forecast category is not mapped a second time here.
-//
-// The probability is, and the difference is where the call would sit. What needs it is weightedOf, an
-// ordinary helper `let`, and a helper does not reach a behavior: the call is E1401, "`probabilityOf` is a
-// behavior, and it cannot be called from here". So the ten probabilities are copied into the module that
-// consumes them,
-// and nothing but a comment keeps them in step with the stage machine that owns them. A stage added to
-// example.pipeline breaks three matches there and silently leaves this file weighing the new stage at
-// whatever its own match happens to say. Finding F23.
-//
-// The other route the hint offers — re-declare probabilityOf here as an injected behavior and bind
-// example.pipeline's implementation at the boundary — is worse: a pure, total, compile-time-checkable
-// mapping would become an injected dependency wired up in every caller, and every `example` in this file
-// would need a `fake` for it. Copying the match keeps the checking; injecting it would keep the single
-// source. Neither keeps both.
-let weightedProbabilityOf (opp: OpenOpportunity): Int =
-    match opp with
-        | Prospecting        -> 10
-        | Qualification      -> 10
-        | NeedsAnalysis      -> 20
-        | ValueProposition   -> 50
-        | IdDecisionMakers   -> 60
-        | PerceptionAnalysis -> 70
-        | ProposalPriceQuote -> 75
-        | NegotiationReview  -> 90
+// An imported behavior that depends on nothing is called by name, and categoryRollupOf below does exactly
+// that with example.pipeline's categoryOf — because categoryRollupOf is itself a behavior, and a behavior
+// is callable from another behavior's body, cross-module or not (souther#159/#189). weightedOf below is
+// an ordinary helper `let`, not a behavior, and a helper never reaches a behavior — that restriction did
+// not move. What moved is which side of pipeline's mapping is the copyable one: probabilityOf's own body
+// is now a published helper, probabilityFor (ADR-0075), and a helper reaches a published helper the same
+// way it reaches any imported function, so weightedOf calls that directly instead of carrying its own
+// ten-arm copy. Retired finding F23.
 
 // The amount, the close date, the id and the account are read straight off OpenOpportunity: every one of
 // the eight open states spreads OpportunityCommon, and what holds of every case is a property of the sum.
@@ -191,7 +175,7 @@ let q3Forecast = Forecast
 // call, once per deal, and the answer is a Decimal rather than a union because the denominator is a literal
 // hundred and cannot be zero.
 let weightedOf (opp: OpenOpportunity): Decimal =
-    Decimal.round(Decimal.fromInt(weightedProbabilityOf(opp)) * opp.amount.value * 0.01m, 2, HALF_UP)
+    Decimal.round(Decimal.fromInt(probabilityFor(opp).value) * opp.amount.value * 0.01m, 2, HALF_UP)
 
 let addToPeriod (acc: Map<FiscalPeriod, Decimal>, opp: OpenOpportunity, fyStart: Int)
         : Map<FiscalPeriod, Decimal> = {

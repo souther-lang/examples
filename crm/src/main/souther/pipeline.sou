@@ -96,12 +96,14 @@ module example.pipeline exposing (
     openFromLead,
     NoOpportunityRequested,
     probabilityOf,
+    probabilityFor,
     categoryOf,
     profileOf,
     // The transitions are the module's interface: a boundary drives a deal through them and a downstream
     // context takes a state type as an input. Listing a behavior only settles its visibility on the JVM,
-    // though — another Souther module can import the name and still not call it (F23), so `exposing` a
-    // behavior is a statement about the Java side and nothing else.
+    // though — a behavior, such as qualifyOpportunity, is callable only from another behavior's body
+    // (cross-module or not), never from a plain helper `let` (retired finding F23, at probabilityFor
+    // above: the fix there was publishing the helper the behavior wraps, not a change to this rule).
     qualifyOpportunity,
     AmountNotStated,
     recordNeeds,
@@ -364,11 +366,12 @@ let stageNameOf (opp: Opportunity): StageName =
 
 // The two readings other contexts ask for are behaviors, and the two that only profileOf reads are
 // helpers. There is no twin: a behavior whose own requirement set is empty is called by name, so
-// profileOf calls these two rather than a helper copy of the mapping.
-behavior probabilityOf : (opp: Opportunity) -> Probability
-    constructs Probability
-
-let probabilityOf (opp) =
+// profileOf calls these two rather than a helper copy of the mapping. probabilityOf's own mapping is a
+// published helper (ADR-0075) rather than the behavior's own match: a behavior is only callable from
+// another behavior's body, cross-module or not (souther#159/#189), never from a plain helper `let` —
+// so forecasting's weightedOf, an ordinary helper, reaches probabilityFor directly and probabilityOf
+// is the published helper's behavior wrapper, retiring finding F23.
+let probabilityFor (opp: Opportunity): Probability =
     match opp with
         | Prospecting        -> Probability(10)
         | Qualification      -> Probability(10)
@@ -380,6 +383,11 @@ let probabilityOf (opp) =
         | NegotiationReview  -> Probability(90)
         | ClosedWon          -> Probability(100)
         | ClosedLost         -> Probability(0)
+
+behavior probabilityOf : (opp: Opportunity) -> Probability
+    constructs Probability
+
+let probabilityOf (opp) = probabilityFor(opp)
 
 behavior categoryOf : (opp: Opportunity) -> ForecastCategory
     constructs Pipeline, BestCase, Commit, Closed, Omitted
