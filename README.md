@@ -96,7 +96,7 @@ and what would let it be written directly. Each one is also recorded in the `.so
 declaration that hit it, so a reader meets the finding where the model shows it rather than only here.
 
 A finding the compiler then fixes leaves the list, and the model is rewritten to the form it was asking
-for. Nine have left so far, and the last five went together:
+for. Ten have left so far:
 
 * **F13** was the first: `tierOf` and `categoryOf` name the sums they answer with.
 * **F16**: a field every case spreads is read on the sum, so six helpers that were an arm per case are
@@ -125,6 +125,10 @@ for. Nine have left so far, and the last five went together:
 * **F4** — a composition carries an `example`, so `disqualifyAndNurture` and `closeAndSummarize` are
   pinned where they are declared. The row that matters is the one no stage's own example could state: a
   below-floor close leaves the main line at the first stage and never reaches the summary.
+* **F23** — a helper `let` reaches a behavior whose requirement set is empty, the same way a behavior's
+  own body does, so `weightedOf`'s copy of `pipeline`'s ten-arm stage-probability mapping is gone:
+  `forecasting` calls `probabilityOf` directly and a stage added to `pipeline` cannot leave it weighing
+  the new one at a value nobody wrote down for it.
 
 ### One bug the fixtures are written around
 
@@ -149,28 +153,7 @@ import it back (E1501); and the two are joined in Java, because a cross-module `
 departed cases into a union `pipeline` declares (E1606). *Would fix it:* a translating composition — `crm.convertLead >-> openFromLead translating
 (crm.ConversionBlocked -> ConversionRefused)` — naming the local case each imported departure lands on.
 The compiler already computes the departed set; what is missing is the syntax to land it.
-
-**F23 — a behavior is reachable from a behavior's body, not from a helper.** A behavior whose requirement
-set is empty is called by name, in its own module and across one: `profileOf` calls `probabilityOf`, and
-`categoryRollupOf` calls `example.pipeline`'s `categoryOf`, which is what let the duplicated category
-mapping and the three helper twins go (F17). The probability mapping is still copied, because the caller
-that needs it is `weightedOf`, an ordinary helper `let`, and a helper does not reach a behavior — E1401,
-"`probabilityOf` is a behavior, and it cannot be called from here". So a stage added to `pipeline` breaks
-three matches there and silently leaves `forecasting` weighing it at whatever its own copy says. *Would
-fix it:* let a helper `let` call a behavior on the same terms a behavior's own body does.
-
-**F3 — a picklist whose cases carry fields is still written twice.** A sum every one of whose cases is a
-unit data now keys a boundary map, travelling as the case's name, and `categoryRollupOf` keys by
-`ForecastCategory` itself — the five category names are written once, where they are declared, and the
-`CategoryName` newtype and the match that produced it are gone. The ten stage names are still written
-twice, and the reason is no longer the key rule: a stage is a state that carries fields, so there is no
-enumeration to key by. Keying the report by a separate stage enumeration is a modelling choice about
-whether the picklist label ("Needs Analysis") and the state (`NeedsAnalysis`) are one name or two.
-
-**F19 — the stages sort alphabetically, for what is left of F3.** A sum every one of whose cases is a unit
-data is now ordered by the order its cases are declared in, which is the order a deal moves through them.
-`pipelineByStage` still returns "Closed Lost" first, because what it keys by is `StageName`, a String —
-the same residue F3 records.
+[souther#207](https://github.com/souther-lang/souther/issues/207).
 
 ### It could be stated, at several times the length
 
@@ -179,18 +162,19 @@ examples (E1906), so the values `crm.examples.sou`'s rows name are declared in `
 file was introduced to keep fixtures out of the model source, and naming them puts them back — the rows
 are a third of the length they were, and the lead, the books and the request are in the model file. The
 same holds for `businesstrip`. *Would fix it:* letting an `examples for` file declare the values its own
-rows name, since nothing else can reach them.
+rows name, since nothing else can reach them. [souther#210](https://github.com/souther-lang/souther/issues/210).
 
 **F26 — the expected side of a row cannot name a value.** A bare name there is read as an arm, so a value
 named on the right of `->` is E1904, "`priced` is not one of the result cases". A construction that
 spreads one is accepted (`NeedsAnalysis { ...acmeDiscovered }`), which is what the rows use and which is
 usually the better reading anyway; but where a row's whole expectation is a fixture already named, it is
-written as a one-field spread of itself.
+written as a one-field spread of itself. [souther#211](https://github.com/souther-lang/souther/issues/211).
 
 **F27 — an imported value can be named but not varied.** `activity.sou` names `example.pipeline`'s
 `acmeInNegotiation`, which is what removed ten imports (F21). Spreading it — `NegotiationReview
 { ...acmeInNegotiation, floorAmount = … }` — is "`acmeInNegotiation` is not a value a fixture can
 spread", so a reader that needs the same deal with one field changed has to declare its own.
+[souther#212](https://github.com/souther-lang/souther/issues/212).
 
 **F10 — a pattern can be named but not composed.** A regex does get a name: a zero-argument `let` whose
 body is a literal is accepted where `String.matches` wants a pattern, and the compiler still validates it,
@@ -198,13 +182,13 @@ reporting an invalid one at the `let`. `DomainName`'s pattern used to be written
 and `domainOf`'s guard read one name; the guard is gone and the pattern is a literal again. What still
 cannot be done is factoring the shared part out — the three Salesforce id patterns differ only in a
 three-character prefix, and `prefix ++ "[0-9A-Za-z]{12}…"` is no longer a literal, so the check refuses it.
-The tail is written three times.
+The tail is written three times. [souther#208](https://github.com/souther-lang/souther/issues/208).
 
 **F24 — an invariant is attempted whole or not at all.** `QuoteLines` says a quote has at least one line
 and no product twice, and `buildQuote` departs by `NoLines` for the first and `DuplicateProduct` for the
 second. An attempted construction answers one branch for the whole invariant, so those two guards restate
 it where every other guard in this model has stopped. *Would fix it:* letting a type declare more than one
-invariant under a name, so a departure can be chosen per rule.
+invariant under a name, so a departure can be chosen per rule. [souther#209](https://github.com/souther-lang/souther/issues/209).
 
 ### Working as designed, recorded so the next reader does not file it
 
@@ -223,6 +207,20 @@ anything. The step also says what it answers now: `Option<T>` may be written whe
 optional, so `assigneeEntry` declares `Option<(String, IssueId)>` rather than leaving a reader of
 `filterMap(assigneeEntry, …)` to infer it. What stays refused is `?` outside a field, which is the mark
 for making an optional rather than the name of the type.
+
+**F3 — a picklist whose cases carry fields is still written twice.** A sum every one of whose cases is a
+unit data keys a boundary map, travelling as the case's name, and `categoryRollupOf` keys by
+`ForecastCategory` itself — the five category names are written once, where they are declared, and the
+`CategoryName` newtype and the match that produced it are gone (souther#161). The ten stage names are
+still written twice, and souther#161's own resolution says why: a stage is a state that carries the
+fields that state has, not an enumeration, so there is nothing for a boundary map to key by. Keying the
+report by a separate stage enumeration would be a modelling choice about whether the picklist label
+("Needs Analysis") and the state (`NeedsAnalysis`) are one name or two — not a gap the compiler closes.
+
+**F19 — the stages sort alphabetically, for what F3 leaves behind.** A sum every one of whose cases is a
+unit data is ordered by the order its cases are declared in, which is the order a deal moves through them
+(souther#161). `pipelineByStage` still returns "Closed Lost" first, because what it keys by is
+`StageName`, a String — the same residue F3 records, settled the same way.
 
 **F11 — an input union needs a name.** `OpenLead`, `Committed`, `OpenOpportunity`, `ClosedOpportunity` and
 `Decided` exist only to be input types. Naming them makes each sealed and every match over them
