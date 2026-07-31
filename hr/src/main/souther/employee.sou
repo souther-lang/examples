@@ -83,6 +83,7 @@ module example.employee exposing (
     ActiveEmployee,
     totalRemuneration,
     fixedRemuneration,
+    scheduledWage,
     ageOn,
     attainedAgeOn,
     hire,
@@ -214,16 +215,27 @@ data EmploymentTerms =
 
 // Why the split: an occasional revision of the standard monthly remuneration (月額変更届) is triggered
 // by a change in the *fixed* wage and by nothing else — three months of heavy overtime do not revise a
-// grade. So the fixed part and the variable part are separate fields, and the rule downstream reads the
-// fixed part alone. A single monthlyPay field would leave that rule with nothing to read.
+// grade. And the short-time-worker coverage test reads a third figure again, the scheduled wage, which
+// is the fixed wage less commuting, family and attendance allowances. Three rules, three sums over the
+// same four fields, and no rule can be stated at all against a single monthlyPay column.
 data MonthlyRemuneration =
-    { baseSalary: Yen           // 基本給
-    , fixedAllowances: Yen      // 役職手当・住宅手当・通勤手当など、支給額が月ごとに動かないもの
-    , variableAllowances: Yen   // 残業手当など、月ごとに動くもの
+    { baseSalary: Yen             // 基本給
+    , scheduledAllowances: Yen    // 役職手当・住宅手当など、所定内賃金に算入される固定的手当
+    , excludedAllowances: Yen     // 通勤手当・家族手当・精皆勤手当。標準報酬月額には算入するが、
+                                  // 短時間労働者の 8.8 万円要件からは除かれる
+    , variableAllowances: Yen     // 残業手当など、月ごとに動くもの
     }
 
-let fixedRemuneration (r: MonthlyRemuneration): Yen = r.baseSalary + r.fixedAllowances
+// 所定内賃金. What the short-time-worker wage test of example.socialinsurance reads: the wage for the
+// scheduled hours, before overtime and before the allowances that test excludes by name.
+let scheduledWage (r: MonthlyRemuneration): Yen = r.baseSalary + r.scheduledAllowances
 
+// 固定的賃金. What the occasional-revision trigger reads: everything paid at a rate that does not move
+// with the month, commuting allowance included — a commuting allowance that changes because somebody
+// moved house is a fixed-wage change and does start a revision.
+let fixedRemuneration (r: MonthlyRemuneration): Yen = scheduledWage(r) + r.excludedAllowances
+
+// 報酬月額. What a grade is decided from: everything paid in the month.
 let totalRemuneration (r: MonthlyRemuneration): Yen = fixedRemuneration(r) + r.variableAllowances
 
 // === Leave and separation ===
