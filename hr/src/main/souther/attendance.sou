@@ -1,0 +1,459 @@
+// Working hours: what was worked, what it is uplifted by, what the overtime agreement allows, and how
+// much annual leave has accrued.
+//
+// This module produces *hours and multipliers* and never money. The uplift rates are labour law and move
+// when the Diet moves them; an hourly rate is pay policy and moves when the company does. Multiplying
+// the two is example.payroll's business, and keeping them apart is what stops a change of pay scale
+// from looking like a change of statute.
+//
+// What is on show:
+//   - Uplifts that add rather than replace. Overtime worked after ten at night is 50 per cent, and that
+//     is 25 for the overtime plus 25 for the hour of night — so late-night hours are tallied on their
+//     own and counted again, rather than a fifth bucket being invented for the overlap. Holiday work
+//     after ten at night is 60 by the same addition, with no arm anywhere that says so.
+//   - A limit test with five reasons and two regimes. What an overtime agreement allows depends on
+//     whether it carries a special clause, and the four figures the special clause is bounded by are
+//     not the same measure: two of them count holiday work and two do not. Reporting every breach
+//     matters here because a company fixes all of them or none.
+//   - A five-by-seven accrual table, and the rule that decides which row of it to read. Somebody
+//     scheduled for 30 hours a week accrues the full entitlement however few days they work it over,
+//     which is why the row is chosen by two fields and not one.
+//   - The five-day duty stated against what was granted rather than against a headcount rule. An
+//     employee granted ten days or more must take five, so the duty follows from the grant — and the
+//     grant is a value this module already produced.
+module example.attendance exposing (
+    Hours,
+    AttendanceRate,
+    LeaveDays,
+    WeeklyWorkDays,
+    DayKind,
+    OrdinaryDay,
+    PrescribedHoliday,
+    StatutoryHoliday,
+    DailyAttendance,
+    MonthlyTally,
+    UpliftRates,
+    SpecialClause,
+    WithSpecialClause,
+    WithoutSpecialClause,
+    OvertimeHistory,
+    LimitBreach,
+    MonthlyLimitExceeded,
+    AbsoluteMonthlyLimitReached,
+    RollingAverageExceeded,
+    AnnualLimitExceeded,
+    TooManyExtendedMonths,
+    WithinLimits,
+    LimitsExceeded,
+    ServiceYearBand,
+    HalfYear,
+    OneAndAHalfYears,
+    TwoAndAHalfYears,
+    ThreeAndAHalfYears,
+    FourAndAHalfYears,
+    FiveAndAHalfYears,
+    SixAndAHalfYearsOrMore,
+    LeaveGrant,
+    AttendanceRateTooLow,
+    DutyDischarged,
+    DesignationRequired,
+    statutoryDailyHours,
+    statutoryWeeklyHours,
+    upliftRates,
+    tallyMonth,
+    judgeOvertimeLimits,
+    grantAnnualLeave,
+    judgeDesignationDuty
+)
+
+import example.employee ( WeeklyScheduledHours )
+
+// === Measures ===
+
+data Hours = Decimal
+    invariant value >= 0.0m
+
+// Why: annual leave accrues only for somebody who attended at least eight tenths of the days they were
+// scheduled for (労働基準法第39条第1項). It is a ratio, so it is a Decimal and not a count.
+data AttendanceRate = Decimal
+    invariant value >= 0.0m && value <= 1.0m
+
+// Why: the accrual table runs from 1 day to 20 (労働基準法第39条第1項・第3項). Nothing outside that is
+// an entitlement, so a computation that produced one would abort rather than be written into a record.
+data LeaveDays = Int
+    invariant value >= 1 && value <= 20
+
+data WeeklyWorkDays = Int
+    invariant value >= 1 && value <= 7
+
+// Why: exactly one day a week is a *statutory* holiday and work on it carries the 35 per cent uplift
+// (労働基準法第35条・第37条). A second day off in the same week is a prescribed holiday the employer
+// gave, and work on it is ordinary overtime at 25. Calling both "holiday" is the mistake that overpays
+// every Saturday and underpays every Sunday.
+data DayKind = OrdinaryDay | PrescribedHoliday | StatutoryHoliday
+
+// A day as it was actually worked. The late-night hours are a *part of* the hours worked, not a figure
+// beside them: an eight-hour shift ending at midnight is eight hours worked of which two are late night.
+data DailyAttendance =
+    { day: Date
+    , worked: Hours
+    , lateNight: Hours     // 22時から翌5時までの労働時間
+    , kind: DayKind
+    }
+    invariant lateNight <= worked
+
+// === The statutory day and week ===
+
+// Why: eight hours a day and forty a week (労働基準法第32条). The weekly figure is here because the
+// agreement limits below are stated against a week's worth of ordinary hours, even though the daily one
+// is what a month's tally is computed from.
+let statutoryDailyHours = Hours(8.0m)
+let statutoryWeeklyHours = Hours(40.0m)
+
+// Why: 25 per cent for hours beyond the statutory day, 50 for the part of a month's overtime beyond
+// sixty hours, 25 for hours between ten at night and five in the morning, and 35 for work on the
+// statutory holiday (労働基準法第37条). The sixty-hour rate has applied to small and medium employers
+// too since April 2023, so there is no size condition left to write.
+data UpliftRates =
+    { overtime: Decimal
+    , extendedOvertime: Decimal
+    , lateNight: Decimal
+    , statutoryHoliday: Decimal
+    }
+
+let upliftRates = UpliftRates
+    { overtime = 0.25m
+    , extendedOvertime = 0.50m
+    , lateNight = 0.25m
+    , statutoryHoliday = 0.35m
+    }
+
+// === A month's tally ===
+
+// The four buckets a month's pay is computed from. Late-night hours overlap the other three by design:
+// an hour of overtime at eleven at night appears in overtimeWithinSixty and in lateNight, and its 50 per
+// cent is the sum of the two rates rather than a fifth rate somebody has to remember to write down.
+data MonthlyTally =
+    { ordinary: Hours              // 法定労働時間の枠内
+    , overtimeWithinSixty: Hours   // 法定時間外のうち月60時間まで
+    , overtimeBeyondSixty: Hours   // 月60時間を超える法定時間外
+    , lateNight: Hours             // 深夜。上の三つと重なる
+    , statutoryHoliday: Hours      // 法定休日労働。60時間の算定には入らない
+    }
+
+let overtimeOn (d: DailyAttendance): Hours =
+    match d.kind with
+        // Why: work on the statutory holiday is not overtime at all — it is holiday work, and it is
+        // excluded from the sixty-hour count (労働基準法第37条第1項但書).
+        | StatutoryHoliday -> Hours(0.0m)
+        | OrdinaryDay | PrescribedHoliday ->
+            if d.worked > statutoryDailyHours
+            then Hours(d.worked.value - statutoryDailyHours.value)
+            else Hours(0.0m)
+
+let ordinaryOn (d: DailyAttendance): Hours =
+    match d.kind with
+        | StatutoryHoliday -> Hours(0.0m)
+        | OrdinaryDay | PrescribedHoliday ->
+            if d.worked > statutoryDailyHours then statutoryDailyHours else d.worked
+
+let holidayOn (d: DailyAttendance): Hours =
+    match d.kind with
+        | StatutoryHoliday                -> d.worked
+        | OrdinaryDay | PrescribedHoliday -> Hours(0.0m)
+
+// Why the fold rather than `List.sum`: the standard library declares `sum` and `product` over
+// `List<Int>` only, so a list of Decimal has no sum to take and the fold with a `0.0m` seed is written
+// out instead. Hours are a Decimal because half an hour is an hour anybody works. Finding F32.
+let sumHours (f: (DailyAttendance) -> Hours, days: List<DailyAttendance>): Hours =
+    Hours(List.fold((acc, d) -> acc + f(d).value, 0.0m, days))
+
+// Why: the sixty-hour threshold is monthly, so it cannot be applied a day at a time — a month of
+// six-hour days and one of sixty-hour weeks reach it differently. The split is made once, on the total.
+behavior tallyMonth : (days: List<DailyAttendance>) -> MonthlyTally
+    constructs MonthlyTally, Hours
+
+let tallyMonth (days) = {
+    let overtime = sumHours(d -> overtimeOn(d), days)
+    MonthlyTally
+        { ordinary = sumHours(d -> ordinaryOn(d), days)
+        , overtimeWithinSixty = Hours(Decimal.min(overtime.value, 60.0m))
+        , overtimeBeyondSixty = Hours(Decimal.max(0.0m, overtime.value - 60.0m))
+        , lateNight = sumHours(d -> d.lateNight, days)
+        , statutoryHoliday = sumHours(d -> holidayOn(d), days)
+        }
+}
+
+// === The overtime agreement ===
+
+// Why: without a special clause an agreement may not exceed 45 hours a month or 360 a year
+// (労働基準法第36条第4項). With one it may, up to four separate bounds — and only some of those bounds
+// count holiday work, which is why the history below carries the two measures apart.
+data SpecialClause = WithSpecialClause | WithoutSpecialClause
+
+// The figures a month's compliance is judged against. Two of them include holiday work and two do not,
+// which is the trap in this rule and the reason they are separate fields rather than one number the
+// caller adds up whichever way it last remembered.
+data OvertimeHistory =
+    { monthOvertime: Hours                 // 当月の時間外（休日労働を含まない）
+    , monthOvertimeWithHoliday: Hours      // 当月の時間外＋休日労働
+    , highestRollingAverage: Hours         // 2〜6か月平均の最大値（休日労働を含む）
+    , yearOvertime: Hours                  // 年度累計の時間外（休日労働を含まない）
+    , extendedMonths: Int                  // 45時間を超えた月数（当月を含む）
+    }
+    invariant monthOvertime <= monthOvertimeWithHoliday
+
+data MonthlyLimitExceeded       = { limit: Hours, actual: Hours }
+data AbsoluteMonthlyLimitReached = { limit: Hours, actual: Hours }
+data RollingAverageExceeded     = { limit: Hours, actual: Hours }
+data AnnualLimitExceeded        = { limit: Hours, actual: Hours }
+data TooManyExtendedMonths      = { limit: Int, actual: Int }
+
+data LimitBreach =
+    MonthlyLimitExceeded
+  | AbsoluteMonthlyLimitReached
+  | RollingAverageExceeded
+  | AnnualLimitExceeded
+  | TooManyExtendedMonths
+
+data LimitsExceeded = { breaches: List<LimitBreach> }
+    invariant List.length(breaches) >= 1
+
+// Why: the special-clause bounds are 720 hours a year excluding holiday work, under 100 hours in any
+// single month including it, an average of 80 or less over any two to six consecutive months including
+// it, and no more than six months in the year above 45 (労働基準法第36条第5項・第6項). The monthly one
+// is "less than 100", not "at most", so 100 exactly is already a breach — which is why it is written as
+// a separate case from the 45-hour limit rather than as the same rule with a bigger number.
+let specialClauseBreaches (h: OvertimeHistory): List<LimitBreach> =
+       [ AbsoluteMonthlyLimitReached { limit = Hours(100.0m), actual = h.monthOvertimeWithHoliday }
+       | h.monthOvertimeWithHoliday >= 100.0m ]
+    ++ [ RollingAverageExceeded { limit = Hours(80.0m), actual = h.highestRollingAverage }
+       | h.highestRollingAverage > 80.0m ]
+    ++ [ AnnualLimitExceeded { limit = Hours(720.0m), actual = h.yearOvertime }
+       | h.yearOvertime > 720.0m ]
+    ++ [ TooManyExtendedMonths { limit = 6, actual = h.extendedMonths }
+       | h.extendedMonths > 6 ]
+
+let ordinaryBreaches (h: OvertimeHistory): List<LimitBreach> =
+       [ MonthlyLimitExceeded { limit = Hours(45.0m), actual = h.monthOvertime }
+       | h.monthOvertime > 45.0m ]
+    ++ [ AnnualLimitExceeded { limit = Hours(360.0m), actual = h.yearOvertime }
+       | h.yearOvertime > 360.0m ]
+
+behavior judgeOvertimeLimits : (clause: SpecialClause, history: OvertimeHistory)
+        -> WithinLimits | LimitsExceeded
+    constructs WithinLimits, LimitsExceeded, Hours, MonthlyLimitExceeded,
+               AbsoluteMonthlyLimitReached, RollingAverageExceeded, AnnualLimitExceeded,
+               TooManyExtendedMonths
+
+let judgeOvertimeLimits (clause, history) = {
+    let breaches = match clause with
+        | WithSpecialClause    -> specialClauseBreaches(history)
+        | WithoutSpecialClause -> ordinaryBreaches(history)
+    if LimitsExceeded { breaches = breaches } as exceeded then exceeded else WithinLimits
+}
+
+// === Annual leave ===
+
+// Why: entitlement steps at six months of continuous service and then every year
+// (労働基準法第39条第1項・第2項). The bands are the table's own rows, so a band is a case and not a
+// number of months somebody compares against seven thresholds each time.
+data ServiceYearBand =
+    HalfYear
+  | OneAndAHalfYears
+  | TwoAndAHalfYears
+  | ThreeAndAHalfYears
+  | FourAndAHalfYears
+  | FiveAndAHalfYears
+  | SixAndAHalfYearsOrMore
+
+data LeaveGrant = { days: LeaveDays, band: ServiceYearBand }
+
+// 通常の労働者の付与日数（労働基準法第39条第1項・第2項）.
+let fullEntitlement (band: ServiceYearBand): LeaveDays =
+    match band with
+        | HalfYear               -> LeaveDays(10)
+        | OneAndAHalfYears       -> LeaveDays(11)
+        | TwoAndAHalfYears       -> LeaveDays(12)
+        | ThreeAndAHalfYears     -> LeaveDays(14)
+        | FourAndAHalfYears      -> LeaveDays(16)
+        | FiveAndAHalfYears      -> LeaveDays(18)
+        | SixAndAHalfYearsOrMore -> LeaveDays(20)
+
+// 比例付与（労働基準法施行規則第24条の3）. Four rows of the same seven columns, for somebody scheduled
+// for four days a week or fewer. Written out rather than computed from the full entitlement, because the
+// table is not a proportion of it — four days of five would give eight at the first step and the table
+// says seven.
+let proportionalEntitlement (weeklyDays: WeeklyWorkDays, band: ServiceYearBand): LeaveDays =
+    if weeklyDays >= 4 then
+        match band with
+            | HalfYear               -> LeaveDays(7)
+            | OneAndAHalfYears       -> LeaveDays(8)
+            | TwoAndAHalfYears       -> LeaveDays(9)
+            | ThreeAndAHalfYears     -> LeaveDays(10)
+            | FourAndAHalfYears      -> LeaveDays(12)
+            | FiveAndAHalfYears      -> LeaveDays(13)
+            | SixAndAHalfYearsOrMore -> LeaveDays(15)
+    else if weeklyDays == 3 then
+        match band with
+            | HalfYear               -> LeaveDays(5)
+            | OneAndAHalfYears       -> LeaveDays(6)
+            | TwoAndAHalfYears       -> LeaveDays(6)
+            | ThreeAndAHalfYears     -> LeaveDays(8)
+            | FourAndAHalfYears      -> LeaveDays(9)
+            | FiveAndAHalfYears      -> LeaveDays(10)
+            | SixAndAHalfYearsOrMore -> LeaveDays(11)
+    else if weeklyDays == 2 then
+        match band with
+            | HalfYear               -> LeaveDays(3)
+            | OneAndAHalfYears       -> LeaveDays(4)
+            | TwoAndAHalfYears       -> LeaveDays(4)
+            | ThreeAndAHalfYears     -> LeaveDays(5)
+            | FourAndAHalfYears      -> LeaveDays(6)
+            | FiveAndAHalfYears      -> LeaveDays(6)
+            | SixAndAHalfYearsOrMore -> LeaveDays(7)
+    else
+        match band with
+            | HalfYear               -> LeaveDays(1)
+            | OneAndAHalfYears       -> LeaveDays(2)
+            | TwoAndAHalfYears       -> LeaveDays(2)
+            | ThreeAndAHalfYears     -> LeaveDays(2)
+            | FourAndAHalfYears      -> LeaveDays(3)
+            | FiveAndAHalfYears      -> LeaveDays(3)
+            | SixAndAHalfYearsOrMore -> LeaveDays(3)
+
+// Why: proportional accrual applies only to somebody scheduled for under 30 hours a week *and* four days
+// or fewer (労働基準法施行規則第24条の3第1項). Somebody working 30 hours over three long days accrues the
+// full entitlement, which is why the row is chosen by both fields — and it is the condition a leave
+// system that reads only the day count gets wrong.
+behavior grantAnnualLeave : (
+    band:       ServiceYearBand,
+    weeklyDays: WeeklyWorkDays,
+    weekly:     WeeklyScheduledHours,
+    rate:       AttendanceRate
+) -> LeaveGrant | AttendanceRateTooLow
+    constructs LeaveGrant, LeaveDays, AttendanceRateTooLow
+
+let grantAnnualLeave (band, weeklyDays, weekly, rate) = {
+    guard rate >= 0.8m else AttendanceRateTooLow
+    LeaveGrant
+        { days = if weekly.value >= 30.0m || weeklyDays >= 5
+                 then fullEntitlement(band)
+                 else proportionalEntitlement(weeklyDays, band)
+        , band = band
+        }
+}
+
+// Why: an employer must see that five of the days are actually taken, for every employee granted ten
+// days or more (労働基準法第39条第7項). The duty follows from the grant rather than from a headcount, so
+// it is asked of the value grantAnnualLeave already produced — a part-timer granted seven days is not
+// under it, and the same person a year later granted ten is.
+data DesignationRequired = { shortfall: Int }
+
+behavior judgeDesignationDuty : (grant: LeaveGrant, taken: Int) -> DutyDischarged | DesignationRequired
+    constructs DutyDischarged, DesignationRequired
+
+let judgeDesignationDuty (grant, taken) = {
+    guard grant.days >= 10 else DutyDischarged
+    guard taken < 5 else DutyDischarged
+    DesignationRequired { shortfall = 5 - taken }
+}
+
+// === The days the rows are about ===
+
+let ordinaryDay = DailyAttendance
+    { day = Date("2026-07-01")
+    , worked = Hours(8.0m)
+    , lateNight = Hours(0.0m)
+    , kind = OrdinaryDay
+    }
+
+let longDay = DailyAttendance { ...ordinaryDay, worked = Hours(12.0m), lateNight = Hours(1.0m) }
+
+let sundayShift = DailyAttendance
+    { ...ordinaryDay
+    , day = Date("2026-07-05")
+    , worked = Hours(6.0m)
+    , lateNight = Hours(0.0m)
+    , kind = StatutoryHoliday
+    }
+
+example tallyMonth
+    | "an eight-hour day is all ordinary and no uplift is owed on it" :
+        ([ ordinaryDay ])
+        -> MonthlyTally { ordinary = Hours(8.0m)
+                        , overtimeWithinSixty = Hours(0.0m)
+                        , overtimeBeyondSixty = Hours(0.0m)
+                        , lateNight = Hours(0.0m)
+                        , statutoryHoliday = Hours(0.0m)
+                        }
+    | "a twelve-hour day ending after ten at night is four hours over and one of them at night" :
+        ([ longDay ])
+        -> MonthlyTally { ordinary = Hours(8.0m)
+                        , overtimeWithinSixty = Hours(4.0m)
+                        , overtimeBeyondSixty = Hours(0.0m)
+                        , lateNight = Hours(1.0m)
+                        , statutoryHoliday = Hours(0.0m)
+                        }
+    | "work on the statutory holiday is holiday work and never overtime, so it misses the sixty-hour count" :
+        ([ sundayShift ])
+        -> MonthlyTally { ordinary = Hours(0.0m)
+                        , overtimeWithinSixty = Hours(0.0m)
+                        , overtimeBeyondSixty = Hours(0.0m)
+                        , lateNight = Hours(0.0m)
+                        , statutoryHoliday = Hours(6.0m)
+                        }
+
+let quietMonth = OvertimeHistory
+    { monthOvertime = Hours(40.0m)
+    , monthOvertimeWithHoliday = Hours(40.0m)
+    , highestRollingAverage = Hours(35.0m)
+    , yearOvertime = Hours(300.0m)
+    , extendedMonths = 0
+    }
+
+let busyMonth = OvertimeHistory
+    { monthOvertime = Hours(92.0m)
+    , monthOvertimeWithHoliday = Hours(100.0m)
+    , highestRollingAverage = Hours(84.0m)
+    , yearOvertime = Hours(700.0m)
+    , extendedMonths = 5
+    }
+
+example judgeOvertimeLimits
+    | "forty hours is inside the ordinary limit and inside the special one" :
+        (WithoutSpecialClause, quietMonth) -> WithinLimits
+    | "the same forty-hour month has nothing to answer for under a special clause either" :
+        (WithSpecialClause, quietMonth) -> WithinLimits
+    | "ninety-two hours breaches the 45-hour limit and the 360-hour one at once" :
+        (WithoutSpecialClause, busyMonth) -> LimitsExceeded
+    | "a hundred hours counting holiday work is a breach even with a special clause, and so is the average" :
+        (WithSpecialClause, busyMonth) -> LimitsExceeded
+
+example grantAnnualLeave
+    | "six months in, a full-time employee who attended eight tenths gets ten days" :
+        (HalfYear, WeeklyWorkDays(5), WeeklyScheduledHours(40.0m), AttendanceRate(0.8m))
+        -> LeaveGrant { days = LeaveDays(10), band = HalfYear }
+    | "six and a half years in, twenty" :
+        (SixAndAHalfYearsOrMore, WeeklyWorkDays(5), WeeklyScheduledHours(40.0m), AttendanceRate(1.0m))
+        -> LeaveGrant { days = LeaveDays(20), band = SixAndAHalfYearsOrMore }
+    | "three days a week accrues proportionally" :
+        (HalfYear, WeeklyWorkDays(3), WeeklyScheduledHours(21.0m), AttendanceRate(1.0m))
+        -> LeaveGrant { days = LeaveDays(5), band = HalfYear }
+    | "thirty hours over three long days is not proportional accrual at all" :
+        (HalfYear, WeeklyWorkDays(3), WeeklyScheduledHours(30.0m), AttendanceRate(1.0m))
+        -> LeaveGrant { days = LeaveDays(10), band = HalfYear }
+    | "attending seven tenths accrues nothing" :
+        (HalfYear, WeeklyWorkDays(5), WeeklyScheduledHours(40.0m), AttendanceRate(0.7m))
+        -> AttendanceRateTooLow
+
+example judgeDesignationDuty
+    | "granted ten and took two, so three more have to be designated" :
+        (LeaveGrant { days = LeaveDays(10), band = HalfYear }, 2)
+        -> DesignationRequired { shortfall = 3 }
+    | "granted seven, so the duty does not reach this employee at all" :
+        (LeaveGrant { days = LeaveDays(7), band = HalfYear }, 0)
+        -> DutyDischarged
+    | "granted twenty and took five, which is what the duty asks for" :
+        (LeaveGrant { days = LeaveDays(20), band = SixAndAHalfYearsOrMore }, 5)
+        -> DutyDischarged
