@@ -120,7 +120,7 @@ let monthStart (d: Date): Date = Date.addDays(1 - Date.day(d), d)
 // data this module declares — a primitive is refused here exactly as an imported case is
 // (example.payroll hit the same wall with a Yen). So the date is wrapped, and every behavior in this
 // repository that answers "a plain value, or a reason there is none" ends up declaring one of these.
-// Finding F33.
+// Finding F33 (souther#242).
 data FilingDeadline = Date
 
 behavior deadlineFor : (kind: NotificationKind, eventOn: Date) -> FilingDeadline | NoStatutoryDeadline

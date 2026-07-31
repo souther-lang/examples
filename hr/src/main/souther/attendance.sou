@@ -164,7 +164,8 @@ let holidayOn (d: DailyAttendance): Hours =
 
 // Why the fold rather than `List.sum`: the standard library declares `sum` and `product` over
 // `List<Int>` only, so a list of Decimal has no sum to take and the fold with a `0.0m` seed is written
-// out instead. Hours are a Decimal because half an hour is an hour anybody works. Finding F32.
+// out instead. Hours are a Decimal because half an hour is an hour anybody works.
+// Finding F32 (souther#241).
 let sumHours (f: (DailyAttendance) -> Hours, days: List<DailyAttendance>): Hours =
     Hours(List.fold((acc, d) -> acc + f(d).value, 0.0m, days))
 

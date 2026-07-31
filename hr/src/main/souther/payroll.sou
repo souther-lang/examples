@@ -186,7 +186,7 @@ let nonTaxableCommuting (remuneration: MonthlyRemuneration): Yen =
 // declared here may not hold a case another module declares (E1606) — so a behavior answering "an
 // amount, or a reason there is none" has to wrap the amount in a type of its own. Every module that
 // answers with money beside a failure ends up declaring one of these, and the behavior beside it has
-// to be renamed, since a behavior is capitalised into a class of the same name. Finding F33.
+// to be renamed, since a behavior is capitalised into a class of the same name. Finding F33 (souther#242).
 data TaxableAmount = Yen
 
 behavior computeTaxableAmount : (
@@ -266,7 +266,7 @@ let monthlyScheduled = Hours(160.0m)
 //
 // It is not a diagnostic but an internal failure, and it appeared only when the eighth module joined the
 // build — seven of these files compile with the row written the short way. Restating the four figures
-// here is the workaround, and it is the one thing in this example that a reader should not copy. Finding F34.
+// here is the workaround, and it is the one thing in this example that a reader should not copy. Finding F34 (souther#243).
 let statutoryUplifts = UpliftRates
     { overtime = 0.25m
     , extendedOvertime = 0.50m

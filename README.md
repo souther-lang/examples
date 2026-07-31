@@ -109,16 +109,17 @@ rewritten to the form it was asking for, and the commit that does it tells the s
 where that log belongs, not this file.
 
 The seven below are open, and all seven came out of `hr` — the first example large enough for the
-scale of a model to be the thing under test.
+scale of a model to be the thing under test, and each is filed upstream under the number on its
+heading.
 
-**F28. A sum every case of which spreads a common data can be read through but not spread from.**
+**F28 (souther#237). A sum every case of which spreads a common data can be read through but not spread from.**
 `employee.sou`'s `separate` reads `employee.hiredOn` straight off `ActiveEmployee`, which the language
 grants because both cases spread `EmployedCommon`. `Separated { ...employee, … }` is refused — a spread
 must be a data value — so the behavior opens the sum with a two-arm `match` whose arms differ only in the
 name they bind. The fields a spread would copy are exactly the ones the read already reaches, so letting
 the spread follow the read would collapse the two arms into the one line the rule actually is.
 
-**F30. A table with a hole has no way to say the hole is unreachable.**
+**F30 (souther#239). A table with a hole has no way to say the hole is unreachable.**
 `employmentinsurance.sou` writes the benefit-days matrix as a nested match over two banded sums, which is
 what makes adding a band a compile error. Two of the twenty-five cells are blank in the printed table —
 twenty insured years cannot have accrued before the age of thirty, and an ordinary recipient with under a
@@ -126,7 +127,7 @@ year is not entitled at all — and exhaustiveness asks for an arm for each of t
 there that says so. Both answer with the neighbouring cell, which is the least wrong number available. An
 arm that declares itself unreachable — a surface form for `Never` — is what the table wants.
 
-**F31. A named limit costs its reader a construction authority.**
+**F31 (souther#240). A named limit costs its reader a construction authority.**
 `weeklyHoursFloor` in `employmentinsurance.sou` is a `let` value, so it is elaborated where it is named,
 so `judgeInsuredStatus` has to declare `constructs WeeklyScheduledHours` although it originates no such
 value and only compares against this one. A called *behavior*'s construction set stays its own, so the
@@ -134,13 +135,13 @@ asymmetry is between a behavior and a value rather than between building and rea
 meant to tell a behavior that creates a value from one that passes an existing one through, and a limit
 written down makes every rule that reads it look like the former.
 
-**F32. `List.sum` and `List.product` are declared over `List<Int>` only.**
+**F32 (souther#241). `List.sum` and `List.product` are declared over `List<Int>` only.**
 `attendance.sou` keeps hours as `Decimal`, because half an hour is an hour anybody works, and a list of
 them has no sum to take — `souther.list` declares `let sum (xs: List<Int>)`. The fold with a `0.0m` seed
 is written out instead. `List.max` and `List.min` are already stated over any ordered element; the same
 treatment for the two numeric folds would remove the workaround.
 
-**F33. An output union's member must be a data the module declares.**
+**F33 (souther#242). An output union's member must be a data the module declares.**
 `payroll.sou` wanted `computeTaxableAmount : (…) -> Yen | DeductionsExceedGross` and `filing.sou` wanted
 `deadlineFor : (…) -> Date | NoStatutoryDeadline`. Both are refused: an imported case may not join a union
 declared here (E1606), and neither may a primitive. So each declares a wrapper — `TaxableAmount` and
@@ -149,7 +150,7 @@ behavior is capitalised into a class of the same name as its wrapper. Every beha
 value, or a reason there is none" pays this, and core already has the shape it needs in `Int |
 DivisionByZero`.
 
-**F34. Naming an imported value in an `example` row aborts the compiler.**
+**F34 (souther#243). Naming an imported value in an `example` row aborts the compiler.**
 `payroll.sou`'s rows want `example.attendance`'s published `upliftRates`, which is what the rule is
 actually stated against. Writing it that way ends the build with
 
@@ -162,7 +163,7 @@ depends on itself and says nothing about what that means: [Examples[name=example
 the build; seven of these files compile with the row written the short way. The four rates are restated
 locally as a workaround, which is the one thing in this example a reader should not copy.
 
-**F35. A construction inside a helper an invariant names is reported as an arbitrary Java call.**
+**F35 (souther#244). A construction inside a helper an invariant names is reported as an arbitrary Java call.**
 `socialinsurance.sou` states its grade table's ascendingness as a fold, and the fold wanted a `Yen(0)`
 seed. An invariant may not construct data and neither may a helper it names, which is the rule — but the
 diagnostic is `ARBITRARY JAVA CALL E1401`, "`Yen` is not a behavior or a builtin", hinting that a

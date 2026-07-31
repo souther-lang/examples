@@ -13,7 +13,7 @@
 //   - The table's holes, which the type cannot state. Twenty insured years cannot have accrued before
 //     the age of thirty and a general recipient cannot be entitled with under a year, so two cells of
 //     the printed table are blank — and exhaustiveness asks for an arm for each of them anyway, with
-//     nothing to write there that says the combination cannot arise. Finding F30.
+//     nothing to write there that says the combination cannot arise. Finding F30 (souther#239).
 //   - A condition derived rather than asked for. "Expected to be employed for 31 days or more" is read
 //     off the contract term, because an indefinite contract always is and a fixed one says when it
 //     ends — so there is no separate field for somebody to fill in inconsistently.
@@ -149,7 +149,7 @@ data InsuredStatus = { category: InsuredCategory }
 // own — judgeInsuredCategory's GeneralInsured is not declared here — so the asymmetry is between a
 // behavior and a value, not between reading and building. `constructs` is for telling a behavior that
 // creates a value from one that passes an existing one through, and a limit written down makes every
-// rule that reads it look like the former. Finding F31.
+// rule that reads it look like the former. Finding F31 (souther#240).
 let weeklyHoursFloor = WeeklyScheduledHours(20.0m)
 
 // Derived rather than asked for: an indefinite contract is always expected to run past 31 days, and a
@@ -197,7 +197,7 @@ behavior judgeInsuredStatus : (terms: EmploymentTerms, birthday: Date, on: Date)
         -> InsuredStatus | NotInsured
     constructs InsuredStatus, NotInsured, OfficerExcluded, WeeklyHoursUnderTwenty,
                EmploymentUnderThirtyOneDays, DaytimeStudentExcluded,
-               WeeklyScheduledHours   // 下限値を名前で読むだけで要る。Finding F31
+               WeeklyScheduledHours   // 下限値を名前で読むだけで要る。souther#240
 
 // judgeInsuredCategory depends on nothing, so it is called by name rather than injected — the seam a
 // `depends on` marks is the outside world, and an age is not outside anything.
@@ -339,7 +339,7 @@ let bandOfInsuredPeriod (months) =
 // Two of the twenty-five cells are blank in the printed table. Twenty insured years cannot have accrued
 // before the age of thirty, so the under-thirty row stops at ten-to-twenty — and exhaustiveness asks for
 // the arm regardless, with nothing to write there that says the combination cannot arise. It answers the
-// cell above it, which is the least wrong number available. Finding F30.
+// cell above it, which is the least wrong number available. Finding F30 (souther#239).
 let specifiedBenefitDays (age: AgeBand, period: InsuredPeriodBand): BenefitDays =
     match age with
         | UnderThirty ->
@@ -348,7 +348,7 @@ let specifiedBenefitDays (age: AgeBand, period: InsuredPeriodBand): BenefitDays 
                 | OneToFiveYears    -> BenefitDays(90)
                 | FiveToTenYears    -> BenefitDays(120)
                 | TenToTwentyYears  -> BenefitDays(180)
-                | TwentyYearsOrMore -> BenefitDays(180)   // 表に欄なし。Finding F30
+                | TwentyYearsOrMore -> BenefitDays(180)   // 表に欄なし。souther#239 (souther#239)
         | ThirtyToThirtyFour ->
             match period with
                 | UnderOneYear      -> BenefitDays(90)
@@ -381,10 +381,10 @@ let specifiedBenefitDays (age: AgeBand, period: InsuredPeriodBand): BenefitDays 
 // 一般の受給資格者の所定給付日数. Age does not enter it, which is the whole difference the specified
 // categories buy. The under-a-year cell is the second blank: an ordinary recipient with under twelve
 // months is not entitled at all, so judgeBenefitEntitlement has already turned them away by the time
-// this is asked. Finding F30 again.
+// this is asked. Finding F30 again (souther#239).
 let generalBenefitDays (period: InsuredPeriodBand): BenefitDays =
     match period with
-        | UnderOneYear      -> BenefitDays(90)    // 表に欄なし。Finding F30
+        | UnderOneYear      -> BenefitDays(90)    // 表に欄なし。souther#239 (souther#239)
         | OneToFiveYears    -> BenefitDays(90)
         | FiveToTenYears    -> BenefitDays(90)
         | TenToTwentyYears  -> BenefitDays(120)

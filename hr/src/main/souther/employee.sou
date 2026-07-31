@@ -365,7 +365,8 @@ let returnFromLeave (employee, on) = {
 // cannot be spread. `employee.hiredOn` a line above reads a field every case of ActiveEmployee spreads,
 // which the language grants; `Separated { ...employee, … }` is refused with "a spread must be a data
 // value". The fields a spread would copy are exactly the ones the read already reaches, so the rule
-// could follow the read — and the arms would collapse into the one line the rule actually is. Finding F28.
+// could follow the read — and the arms would collapse into the one line the rule actually is.
+// Finding F28 (souther#237).
 behavior separate : (employee: ActiveEmployee, on: Date, reason: SeparationReason)
         -> Separated | SeparationBeforeHire
     constructs Separated, SeparationBeforeHire
