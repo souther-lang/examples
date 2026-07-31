@@ -1,0 +1,732 @@
+// Health and pension insurance: who is covered, what their remuneration is graded at, when that grade
+// is redecided, and what the premium comes to.
+//
+// This is the module the domain fights back in. Coverage is not one test but two — the three-quarters
+// rule, and a four-condition short-time rule for everybody it fails — and the answer is not one bit but
+// which of the two insurances apply, because pension coverage ends at 70 and health coverage at 75. A
+// grade is decided three different ways with three different windows and three different effective
+// dates. And a premium is halved in a way that does not divide evenly, because the employee's half is
+// rounded and the employer pays the rest.
+//
+// What is on show:
+//   - A fifty-row statutory table as data rather than as a fifty-arm match. The grades and their lower
+//     bounds are read from a list, and the lookup is a fold — which is what a table this size wants. The
+//     table's own rules are on the type: fifty rows, no repeated grade. That it is *sorted* is not
+//     statable, because sortedness is a fold and an invariant may not fold. Finding F29.
+//   - The pension grades derived from the health grades rather than written twice. Pension grade 1 is
+//     health grade 4 and pension grade 32 is health grade 35, so the whole of the second table is a
+//     clamp — which is also what the law says it is.
+//   - A window of exactly three months as a product of three fields rather than a list with a length
+//     invariant. Three is an arity, not a size, and writing it as a product is what lets the first month
+//     be read without an unreachable None arm.
+//   - Two attempted constructions in one behavior, each answering a different stage of the coverage
+//     test. The age exclusion is attempted first; the short-time conditions are attempted only for
+//     somebody the three-quarters rule already turned away.
+//   - Rounding named where money stops being exact. The employee's half is rounded with HALF_DOWN
+//     because the statute says 50 sen is dropped and anything above it carried, and the employer's share
+//     is the remainder — so the two halves of a 10,901-yen premium are 5,450 and 5,451.
+//   - The one-day rule that moves a month of premium. Coverage is lost the day *after* separation and
+//     premiums run to the month before that, so resigning on the 30th costs a month less than resigning
+//     on the 31st. Two example rows a day apart are the whole of it.
+module example.socialinsurance exposing (
+    HealthGrade,
+    PensionGrade,
+    ContributionMonth,
+    ContributionRate,
+    ContributionRates,
+    PaidBaseDays,
+    MonthlyPayRecord,
+    ThreeMonthWindow,
+    InsuranceScope,
+    HealthAndPension,
+    HealthOnly,
+    CoverageRoute,
+    RegularRoute,
+    ShortTimeRoute,
+    Covered,
+    ExclusionReason,
+    AttainedSeventyFive,
+    WeeklyHoursBelowTwenty,
+    ScheduledWageBelowFloor,
+    EnrolledAsDaytimeStudent,
+    OfficeBelowSpecifiedSize,
+    CoverageNotRequired,
+    DeterminationBasis,
+    OnAcquisition,
+    RegularDetermination,
+    OccasionalRevision,
+    GradeDecision,
+    Insured,
+    CoverageLost,
+    Coverage,
+    NotCovered,
+    LongTermCareStatus,
+    LongTermCareInsured,
+    OutsideLongTermCare,
+    PremiumLiability,
+    PremiumExempt,
+    PremiumDue,
+    PremiumShare,
+    Premium,
+    shortTimeWageFloor,
+    specifiedOfficeFloor,
+    monthOf,
+    judgeCoverage,
+    acquireCoverage,
+    loseCoverage,
+    LossBeforeAcquisition,
+    finalContributionMonth,
+    decideRegularly,
+    NoPayableMonth,
+    judgeOccasionalRevision,
+    RevisionBlockReason,
+    FixedWageUnchanged,
+    PaidDaysBelowSeventeen,
+    GradeDifferenceBelowTwo,
+    RevisionNotRequired,
+    applyDecision,
+    judgeLongTermCareCategory,
+    judgePremiumExemption,
+    computePremium,
+    contributionRatesOf,
+    premiumFor
+)
+
+import example.employee (
+    Yen, Office, PrefectureCode, EmploymentTerms, MonthlyRemuneration, WeeklyScheduledHours,
+    EmploymentType, FullTime, ContractEmployee, PartTime, Executive,
+    StudentStatus, DaytimeStudent, NotDaytimeStudent,
+    ActiveEmployee, Employed, OnLeave,
+    LeaveKind, SickLeave, MaternityLeave, ChildcareLeave, CaregiverLeave,
+    OfficeId, ContractTerm, Indefinite, TermUntil,
+    attainedAgeOn, scheduledWage, fixedRemuneration, totalRemuneration
+)
+
+// === Grades and months ===
+
+// Why: health insurance grades run 1 to 50, from a standard monthly remuneration of 58,000 yen to one of
+// 1,390,000 (健康保険法第40条). The bound is on the type because a grade outside it is not a grade a
+// premium table can be read with.
+data HealthGrade = Int
+    invariant value >= 1 && value <= 50
+
+// Why: pension grades run 1 to 32, from 88,000 to 650,000 (厚生年金保険法第20条). They are not a second
+// table: pension grade 1 *is* health grade 4 and pension grade 32 *is* health grade 35, so the mapping
+// below is a shift and a clamp rather than thirty-two more rows to keep in step.
+data PensionGrade = Int
+    invariant value >= 1 && value <= 32
+
+// A month, named by its first day. Premiums, determinations and effective dates are all monthly, and a
+// month written as an arbitrary date within it is a month two values of which are not equal.
+data ContributionMonth = Date
+    invariant Date.day(value) == 1
+
+let monthOf (d: Date): ContributionMonth = ContributionMonth(Date.addDays(1 - Date.day(d), d))
+
+data ContributionRate = Decimal
+    invariant value >= 0.0m && value <= 1.0m
+
+data ContributionRates =
+    { health: ContributionRate
+    , longTermCare: ContributionRate
+    , pension: ContributionRate
+    }
+
+// === The statutory grade table ===
+
+data GradeRow =
+    { grade: HealthGrade
+    , standard: Yen        // 標準報酬月額
+    , lowerBound: Yen      // 報酬月額がこの額以上であればこの等級。上限は次の行の下限
+    }
+
+// Why: the rows are contiguous and ascending, so a lookup is "the last row whose lower bound the
+// remuneration reaches" and nothing else has to be stored. Fifty rows and no repeated grade are on the
+// type; that the rows *ascend* is not, because sortedness is a fold over neighbouring pairs and an
+// invariant may not fold (§invariant-expressions). The one property the lookup actually depends on is
+// the one that cannot be written down. Finding F29.
+data GradeTable = List<GradeRow>
+    invariant fiftyRows = List.length(value) == 50
+    invariant distinctGrades = List.allUniqueBy(.grade, value)
+
+let gradeRow (g: Int, standard: Int, lowerBound: Int): GradeRow =
+    GradeRow { grade = HealthGrade(g), standard = Yen(standard), lowerBound = Yen(lowerBound) }
+
+// 健康保険標準報酬月額等級表（令和2年9月〜）. The lower bound of grade 1 is zero rather than the table's
+// blank, because a lookup needs somewhere to land for a remuneration below every printed bound.
+let standardGradeTable = GradeTable(
+    [ gradeRow(1,    58000,       0), gradeRow(2,    68000,   63000)
+    , gradeRow(3,    78000,   73000), gradeRow(4,    88000,   83000)
+    , gradeRow(5,    98000,   93000), gradeRow(6,   104000,  101000)
+    , gradeRow(7,   110000,  107000), gradeRow(8,   118000,  114000)
+    , gradeRow(9,   126000,  122000), gradeRow(10,  134000,  130000)
+    , gradeRow(11,  142000,  138000), gradeRow(12,  150000,  146000)
+    , gradeRow(13,  160000,  155000), gradeRow(14,  170000,  165000)
+    , gradeRow(15,  180000,  175000), gradeRow(16,  190000,  185000)
+    , gradeRow(17,  200000,  195000), gradeRow(18,  220000,  210000)
+    , gradeRow(19,  240000,  230000), gradeRow(20,  260000,  250000)
+    , gradeRow(21,  280000,  270000), gradeRow(22,  300000,  290000)
+    , gradeRow(23,  320000,  310000), gradeRow(24,  340000,  330000)
+    , gradeRow(25,  360000,  350000), gradeRow(26,  380000,  370000)
+    , gradeRow(27,  410000,  395000), gradeRow(28,  440000,  425000)
+    , gradeRow(29,  470000,  455000), gradeRow(30,  500000,  485000)
+    , gradeRow(31,  530000,  515000), gradeRow(32,  560000,  545000)
+    , gradeRow(33,  590000,  575000), gradeRow(34,  620000,  605000)
+    , gradeRow(35,  650000,  635000), gradeRow(36,  680000,  665000)
+    , gradeRow(37,  710000,  695000), gradeRow(38,  750000,  730000)
+    , gradeRow(39,  790000,  770000), gradeRow(40,  830000,  810000)
+    , gradeRow(41,  880000,  855000), gradeRow(42,  930000,  905000)
+    , gradeRow(43,  980000,  955000), gradeRow(44, 1030000, 1005000)
+    , gradeRow(45, 1090000, 1055000), gradeRow(46, 1150000, 1115000)
+    , gradeRow(47, 1210000, 1175000), gradeRow(48, 1270000, 1235000)
+    , gradeRow(49, 1330000, 1295000), gradeRow(50, 1390000, 1355000)
+    ])
+
+// The last row the remuneration reaches. The seed is grade 1, which is also the answer for a
+// remuneration below every bound — the table's own first row, not a stand-in.
+let gradeRowFor (monthly: Yen): GradeRow =
+    List.fold((acc, r) -> if r.lowerBound <= monthly then r else acc,
+              gradeRow(1, 58000, 0),
+              standardGradeTable.value)
+
+// Why: pension grade 1 covers health grades 1 to 4 and pension grade 32 covers health grade 35 upward
+// (厚生年金保険法第20条第1項). Subtracting three and clamping is the whole mapping, so the second table
+// cannot fall out of step with the first.
+let pensionGradeOf (health: HealthGrade): PensionGrade =
+    PensionGrade(Int.clamp(1, 32, health.value - 3))
+
+// === Coverage ===
+
+// Why: pension coverage ends when somebody attains 70 (厚生年金保険法第14条第5号) and health coverage
+// when they attain 75, at which point the latter-stage elderly medical system takes over. So the two
+// insurances part company between 70 and 75 — and there is no window in which pension applies and health
+// does not, which is why the fourth combination a pair of flags would admit has no name here.
+data InsuranceScope = HealthAndPension | HealthOnly
+
+// Which of the two tests brought somebody in. It is not decoration: a short-time insured person is
+// counted differently in the office's own head count and is reported separately on the notification.
+data CoverageRoute = RegularRoute | ShortTimeRoute
+
+data Covered = { route: CoverageRoute, scope: InsuranceScope }
+
+data WeeklyHoursBelowTwenty   = { hours: WeeklyScheduledHours }
+data ScheduledWageBelowFloor  = { wage: Yen, floor: Yen }
+data OfficeBelowSpecifiedSize = { insuredCount: Int, floor: Int }
+
+data ExclusionReason =
+    AttainedSeventyFive
+  | WeeklyHoursBelowTwenty
+  | ScheduledWageBelowFloor
+  | EnrolledAsDaytimeStudent
+  | OfficeBelowSpecifiedSize
+
+data CoverageNotRequired = { reasons: List<ExclusionReason> }
+    invariant List.length(reasons) >= 1
+
+// Why: 88,000 yen a month of scheduled wage, and an office with more than 50 pension-insured heads.
+// Both are the short-time-worker conditions of 厚生年金保険法第12条第5号 as they have stood since the
+// October 2024 extension. They are published because example.filing states the same two figures on the
+// notification it produces, and a limit two modules read is owned by one of them.
+let shortTimeWageFloor = Yen(88000)
+let specifiedOfficeFloor = 51
+
+let isDaytimeStudent (s: StudentStatus): Bool =
+    match s with
+        | DaytimeStudent    -> true
+        | NotDaytimeStudent -> false
+
+// Why: an officer of a company is covered as somebody the company uses, whatever their hours
+// (昭和24年保発第74号). The three-quarters test is about workers and does not reach one, which is why
+// this is a case of its own rather than a large number written into an officer's contracted hours.
+let coveredAsOfficer (t: EmploymentType): Bool =
+    match t with
+        | Executive                          -> true
+        | FullTime | ContractEmployee | PartTime -> false
+
+// Why: three quarters of the hours an ordinary worker of the same office is scheduled for
+// (平成28年厚生労働省告示). Written as the multiplication it implies rather than as a division, so an
+// office whose ordinary workers are scheduled for nothing refuses the comparison rather than aborting on
+// it.
+let meetsThreeQuarters (terms: EmploymentTerms, standardWeekly: WeeklyScheduledHours): Bool =
+    terms.weeklyHours.value * 4.0m >= standardWeekly.value * 3.0m
+
+let shortTimeBlockers (terms: EmploymentTerms, remuneration: MonthlyRemuneration, office: Office)
+        : List<ExclusionReason> =
+       [ WeeklyHoursBelowTwenty { hours = terms.weeklyHours } | terms.weeklyHours.value < 20.0m ]
+    ++ [ ScheduledWageBelowFloor { wage = scheduledWage(remuneration), floor = shortTimeWageFloor }
+       | scheduledWage(remuneration) < shortTimeWageFloor ]
+    ++ [ EnrolledAsDaytimeStudent | isDaytimeStudent(terms.student) ]
+    ++ [ OfficeBelowSpecifiedSize { insuredCount = office.insuredCount, floor = specifiedOfficeFloor }
+       | office.insuredCount < specifiedOfficeFloor ]
+
+let scopeFor (age: Int): InsuranceScope = if age >= 70 then HealthOnly else HealthAndPension
+
+behavior judgeCoverage : (
+    terms:         EmploymentTerms,
+    remuneration:  MonthlyRemuneration,
+    office:        Office,
+    standardWeekly: WeeklyScheduledHours,
+    birthday:      Date,
+    on:            Date
+) -> Covered | CoverageNotRequired
+    constructs Covered, CoverageNotRequired, AttainedSeventyFive, WeeklyHoursBelowTwenty,
+               ScheduledWageBelowFloor, EnrolledAsDaytimeStudent, OfficeBelowSpecifiedSize,
+               RegularRoute, ShortTimeRoute, HealthAndPension, HealthOnly, Yen
+
+// Two attempts, one per stage of the test. The age exclusion is asked of everybody; the short-time
+// conditions are asked only of somebody the three-quarters rule already turned away, which is what makes
+// their reasons the right ones to report — telling a full-time employee their wage is under 88,000 would
+// be answering a question nobody asked.
+let judgeCoverage (terms, remuneration, office, standardWeekly, birthday, on) = {
+    let age = attainedAgeOn(birthday, on)
+    if CoverageNotRequired { reasons = [ AttainedSeventyFive | age >= 75 ] } as excluded
+    then excluded
+    else if coveredAsOfficer(terms.employmentType) || meetsThreeQuarters(terms, standardWeekly)
+    then Covered { route = RegularRoute, scope = scopeFor(age) }
+    else if CoverageNotRequired { reasons = shortTimeBlockers(terms, remuneration, office) } as shortTime
+    then shortTime
+    else Covered { route = ShortTimeRoute, scope = scopeFor(age) }
+}
+
+// === The states of coverage ===
+
+// Why: a determination says which window it was made from, because the three are three different
+// notifications with three different deadlines — and example.filing matches on this to decide which one
+// to produce. The three effective dates differ too, which is the other half of why they are not one.
+data DeterminationBasis = OnAcquisition | RegularDetermination | OccasionalRevision
+
+data GradeDecision =
+    { basis: DeterminationBasis
+    , standard: Yen
+    , health: HealthGrade
+    , pension: PensionGrade
+    , appliesFrom: ContributionMonth
+    }
+
+data Insured =
+    { acquiredOn: Date
+    , scope: InsuranceScope
+    , route: CoverageRoute
+    , decision: GradeDecision
+    }
+
+data CoverageLost =
+    { acquiredOn: Date
+    , lostOn: Date
+    }
+    invariant Date.daysBetween(acquiredOn, lostOn) >= 0
+
+data Coverage = NotCovered | Insured | CoverageLost
+
+let decisionFor (basis: DeterminationBasis, monthly: Yen, appliesFrom: ContributionMonth): GradeDecision = {
+    let row = gradeRowFor(monthly)
+    GradeDecision { basis = basis
+                  , standard = row.standard
+                  , health = row.grade
+                  , pension = pensionGradeOf(row.grade)
+                  , appliesFrom = appliesFrom
+                  }
+}
+
+// Why: on acquisition the remuneration is what the person is expected to be paid, and the grade holds
+// from the month coverage begins (健康保険法第42条). There is no window to average yet, which is exactly
+// what makes this a different determination from the other two rather than a special case of them.
+behavior acquireCoverage : (verdict: Covered, remuneration: MonthlyRemuneration, on: Date) -> Insured
+    constructs Insured, GradeDecision, GradeRow, GradeTable, HealthGrade, PensionGrade,
+               ContributionMonth, Yen, OnAcquisition
+
+let acquireCoverage (verdict, remuneration, on) =
+    Insured { acquiredOn = on
+            , scope = verdict.scope
+            , route = verdict.route
+            , decision = decisionFor(OnAcquisition, totalRemuneration(remuneration), monthOf(on))
+            }
+
+// Why: coverage is lost the day *after* separation (健康保険法第36条第2号). The day of separation is
+// still a covered day, which is what makes the following rule move a whole month for one day of
+// difference.
+behavior loseCoverage : (insured: Insured, separatedOn: Date) -> CoverageLost | LossBeforeAcquisition
+    constructs CoverageLost, LossBeforeAcquisition
+
+let loseCoverage (insured, separatedOn) = {
+    guard Date.daysBetween(insured.acquiredOn, separatedOn) >= 0 else LossBeforeAcquisition
+    CoverageLost { acquiredOn = insured.acquiredOn, lostOn = Date.addDays(1, separatedOn) }
+}
+
+// Why: premiums are collected through the month before the one in which coverage is lost
+// (健康保険法第156条第3項). Leaving on 30 March loses coverage on the 31st, so March is not collected;
+// leaving on 31 March loses it on 1 April, so March is. One day of difference is one month of premium
+// for both the employee and the employer, and it is the single most argued-about line in Japanese
+// payroll.
+behavior finalContributionMonth : (coverage: CoverageLost) -> ContributionMonth
+    constructs ContributionMonth
+
+let finalContributionMonth (coverage) = monthOf(Date.addMonths(0 - 1, coverage.lostOn))
+
+// === The three-month window ===
+
+// Why: the paid base days decide whether a month counts towards an average — 17 or more and it does,
+// fewer and it does not (健康保険法第41条). For a monthly-paid employee it is the calendar days of the
+// month less unpaid absences; for an hourly one it is days actually worked.
+data PaidBaseDays = Int
+    invariant value >= 0 && value <= 31
+
+data MonthlyPayRecord =
+    { month: ContributionMonth
+    , paidBaseDays: PaidBaseDays
+    , remuneration: MonthlyRemuneration
+    }
+
+// Three months, written as three fields rather than as a list with a length invariant. Three is an
+// arity and not a size: as a product the first month is read directly, where a `List<MonthlyPayRecord>`
+// with `List.length(value) == 3` would still answer `List.get(0, …)` with an optional and leave an arm
+// for a case its own invariant has ruled out.
+data ThreeMonthWindow =
+    { first: MonthlyPayRecord
+    , second: MonthlyPayRecord
+    , third: MonthlyPayRecord
+    }
+
+let monthsOf (w: ThreeMonthWindow): List<MonthlyPayRecord> = [ w.first, w.second, w.third ]
+
+let payableMonths (w: ThreeMonthWindow): List<MonthlyPayRecord> =
+    List.filter(r -> r.paidBaseDays >= 17, monthsOf(w))
+
+let averageRemuneration (records: List<MonthlyPayRecord>): Yen =
+    Yen(List.sum(List.map(r -> totalRemuneration(r.remuneration).value, records))
+        / List.length(records))
+
+// === The regular determination (算定基礎届) ===
+
+// Why: the average of April, May and June decides the grade that holds from September to the following
+// August (健康保険法第41条). Months under 17 paid base days are left out of the average; a person for
+// whom none of the three counts is determined by the insurer on other evidence, which is a case rather
+// than a computation this module can make.
+behavior decideRegularly : (window: ThreeMonthWindow) -> GradeDecision | NoPayableMonth
+    constructs GradeDecision, GradeRow, GradeTable, HealthGrade, PensionGrade, ContributionMonth,
+               Yen, NoPayableMonth, RegularDetermination
+
+let decideRegularly (window) = {
+    let payable = payableMonths(window)
+    guard List.length(payable) >= 1 else NoPayableMonth
+    // September of the same year, reached by counting months from April rather than by writing a date —
+    // the effective month follows from the window and is not a second thing to be told.
+    let september = ContributionMonth(Date.addMonths(9 - Date.month(window.first.month.value), window.first.month.value))
+    decisionFor(RegularDetermination, averageRemuneration(payable), september)
+}
+
+// === The occasional revision (月額変更届) ===
+
+data PaidDaysBelowSeventeen  = { month: ContributionMonth, days: PaidBaseDays }
+data GradeDifferenceBelowTwo = { current: HealthGrade, computed: HealthGrade }
+
+data RevisionBlockReason = FixedWageUnchanged | PaidDaysBelowSeventeen | GradeDifferenceBelowTwo
+
+data RevisionNotRequired = { reasons: List<RevisionBlockReason> }
+    invariant List.length(reasons) >= 1
+
+let shortMonths (w: ThreeMonthWindow): List<RevisionBlockReason> =
+    List.map(r -> PaidDaysBelowSeventeen { month = r.month, days = r.paidBaseDays },
+             List.filter(r -> r.paidBaseDays < 17, monthsOf(w)))
+
+// Why: a revision needs all three of a fixed-wage change, three months of 17 or more paid base days, and
+// a difference of two grades or more between the current grade and the one the three-month average falls
+// in (健康保険法第43条). Three months of heavy overtime move the average and do not revise anything,
+// because the first condition was not met — which is the whole reason example.employee keeps the fixed
+// part of the remuneration in a field of its own.
+let revisionBlockers (current: GradeDecision, previousFixedWage: Yen, w: ThreeMonthWindow,
+                      computed: HealthGrade): List<RevisionBlockReason> =
+       [ FixedWageUnchanged | fixedWageOf(w) == previousFixedWage ]
+    ++ shortMonths(w)
+    ++ [ GradeDifferenceBelowTwo { current = current.health, computed = computed }
+       | Int.abs(computed.value - current.health.value) < 2 ]
+
+let fixedWageOf (w: ThreeMonthWindow): Yen = fixedRemuneration(w.first.remuneration)
+
+behavior judgeOccasionalRevision : (
+    current:           GradeDecision,
+    previousFixedWage: Yen,
+    window:            ThreeMonthWindow
+) -> GradeDecision | RevisionNotRequired
+    constructs GradeDecision, GradeRow, GradeTable, HealthGrade, PensionGrade, ContributionMonth,
+               Yen, RevisionNotRequired, FixedWageUnchanged, PaidDaysBelowSeventeen,
+               GradeDifferenceBelowTwo, OccasionalRevision
+
+let judgeOccasionalRevision (current, previousFixedWage, window) = {
+    let average = averageRemuneration(monthsOf(window))
+    let computed = gradeRowFor(average).grade
+    if RevisionNotRequired
+        { reasons = revisionBlockers(current, previousFixedWage, window, computed) } as unchanged
+    then unchanged
+    // Why: the revised grade holds from the fourth month, counting the month the fixed wage changed as
+    // the first (健康保険法第43条第1項).
+    else decisionFor(OccasionalRevision, average,
+                     ContributionMonth(Date.addMonths(3, window.first.month.value)))
+}
+
+// Deciding a grade and applying it are two operations, because they answer two questions: what the grade
+// should be, and what the record becomes. A notification is filed off the first and the payroll reads
+// the second.
+behavior applyDecision : (insured: Insured, decision: GradeDecision) -> Insured
+    constructs Insured
+
+let applyDecision (insured, decision) = Insured { ...insured, decision = decision }
+
+// === Long-term care and exemption ===
+
+// Why: a category-2 long-term-care insured person is somebody who has attained 40 and not yet 65
+// (介護保険法第9条第2号). The premium runs from the month they attain 40 to the month before they attain
+// 65, and both ages are attained the day before the birthday — so somebody born on the first of a month
+// starts paying a month earlier than their birthday suggests.
+data LongTermCareStatus = LongTermCareInsured | OutsideLongTermCare
+
+behavior judgeLongTermCareCategory : (birthday: Date, on: Date)
+        -> LongTermCareInsured | OutsideLongTermCare
+    constructs LongTermCareInsured, OutsideLongTermCare
+
+let judgeLongTermCareCategory (birthday, on) = {
+    let age = attainedAgeOn(birthday, on)
+    if age >= 40 && age < 65 then LongTermCareInsured else OutsideLongTermCare
+}
+
+// Why: premiums are waived for both sides for the duration of maternity leave and childcare leave
+// (健康保険法第159条, 厚生年金保険法第81条の2), and coverage continues throughout — the person stays
+// insured, the money stops. Sick leave and caregiver leave carry no such waiver, so an employee on
+// unpaid sick leave still owes a premium their pay slip has nothing to deduct it from.
+data PremiumLiability = PremiumExempt | PremiumDue
+
+behavior judgePremiumExemption : (employee: ActiveEmployee) -> PremiumExempt | PremiumDue
+    constructs PremiumExempt, PremiumDue
+
+let judgePremiumExemption (employee) =
+    match employee with
+        | Employed -> PremiumDue
+        | OnLeave as l ->
+            match l.leave with
+                | MaternityLeave | ChildcareLeave -> PremiumExempt
+                | SickLeave | CaregiverLeave      -> PremiumDue
+
+// === The premium ===
+
+data PremiumShare = { employee: Yen, employer: Yen }
+
+data Premium =
+    { health: PremiumShare
+    , longTermCare: PremiumShare
+    , pension: PremiumShare
+    }
+
+// Why: the employee's share is half the premium with 50 sen and below dropped and anything above it
+// carried (通貨の単位及び貨幣の発行等に関する法律第3条), which is exactly HALF_DOWN. The employer pays
+// the rest of the premium rather than the same half, so on a premium of 10,901 yen the two shares are
+// 5,450 and 5,451. Naming the mode at the call is what makes that visible instead of accidental.
+let shareOf (standard: Yen, rate: ContributionRate): PremiumShare = {
+    let exact = Decimal.fromInt(standard.value) * rate.value
+    let total = Decimal.toInt(exact, DOWN)
+    let employee = Decimal.toInt(exact * 0.5m, HALF_DOWN)
+    PremiumShare { employee = Yen(employee), employer = Yen(total - employee) }
+}
+
+let noShare = PremiumShare { employee = Yen(0), employer = Yen(0) }
+
+// Why the scope is read here: somebody between 70 and 75 is covered by health insurance and not by
+// pension, so their pension share is nothing — not a rate of zero, which would be a rate somebody could
+// change.
+behavior computePremium : (
+    standard: Yen,
+    scope:    InsuranceScope,
+    care:     LongTermCareStatus,
+    rates:    ContributionRates
+) -> Premium
+    constructs Premium, PremiumShare, Yen
+
+let computePremium (standard, scope, care, rates) =
+    Premium
+        { health = shareOf(standard, rates.health)
+        , longTermCare = match care with
+            | LongTermCareInsured  -> shareOf(standard, rates.longTermCare)
+            | OutsideLongTermCare  -> noShare
+        , pension = match scope with
+            | HealthAndPension -> shareOf(standard, rates.pension)
+            | HealthOnly       -> noShare
+        }
+
+// The rates are outside the model: the health and long-term-care rates are set per prefecture and
+// revised every March, and only the pension rate is fixed in the statute. So the table is read rather
+// than written down, and the reading is an injected behavior with the prefecture and the date as its two
+// arguments.
+behavior contributionRatesOf : (prefecture: PrefectureCode, on: Date) -> ContributionRates
+    constructs ContributionRates
+
+behavior premiumFor : (
+    standard:   Yen,
+    scope:      InsuranceScope,
+    care:       LongTermCareStatus,
+    prefecture: PrefectureCode,
+    on:         Date
+) -> Premium
+    depends on contributionRatesOf
+
+let premiumFor (standard, scope, care, prefecture, on, contributionRatesOf) =
+    computePremium(standard, scope, care, contributionRatesOf(prefecture, on))
+
+// === The office and the people the rows are about ===
+
+let tokyoOffice = Office
+    { id = OfficeId("13-000001")
+    , prefecture = PrefectureCode("13")
+    , insuredCount = 120
+    }
+
+let smallOffice = Office
+    { id = OfficeId("13-000002")
+    , prefecture = PrefectureCode("13")
+    , insuredCount = 30
+    }
+
+let fullTimeTerms = EmploymentTerms
+    { officeId = OfficeId("13-000001")
+    , employmentType = FullTime
+    , weeklyHours = WeeklyScheduledHours(40.0m)
+    , contract = Indefinite
+    , student = NotDaytimeStudent
+    }
+
+let shortTimeTerms = EmploymentTerms
+    { ...fullTimeTerms
+    , employmentType = PartTime
+    , weeklyHours = WeeklyScheduledHours(24.0m)
+    }
+
+let ordinaryWeek = WeeklyScheduledHours(40.0m)
+
+let pay300k = MonthlyRemuneration
+    { baseSalary = Yen(260000)
+    , scheduledAllowances = Yen(20000)
+    , excludedAllowances = Yen(20000)
+    , variableAllowances = Yen(0)
+    }
+
+let pay110k = MonthlyRemuneration
+    { baseSalary = Yen(95000)
+    , scheduledAllowances = Yen(5000)
+    , excludedAllowances = Yen(10000)
+    , variableAllowances = Yen(0)
+    }
+
+example judgeCoverage
+    | "forty hours against an ordinary forty is three quarters and more" :
+        (fullTimeTerms, pay300k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "twenty-four hours falls short of thirty, and the four short-time conditions all hold" :
+        (shortTimeTerms, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = ShortTimeRoute, scope = HealthAndPension }
+    | "the same person at seventy-two is covered by health insurance and no longer by pension" :
+        (fullTimeTerms, pay300k, tokyoOffice, ordinaryWeek, Date("1954-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthOnly }
+    | "the same contract in an office of thirty is not covered, and the office is why" :
+        (shortTimeTerms, pay110k, smallOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired
+    | "somebody who has attained seventy-five is insured elsewhere, whatever their hours" :
+        (fullTimeTerms, pay300k, tokyoOffice, ordinaryWeek, Date("1951-01-01"), Date("2026-07-01"))
+        -> CoverageNotRequired
+
+// The pair a day apart. Both people worked the same March; one of them pays for it.
+example finalContributionMonth
+    | "leaving on the thirtieth loses coverage on the thirty-first, so March is not collected" :
+        (CoverageLost { acquiredOn = Date("2020-04-01"), lostOn = Date("2026-03-31") })
+        -> ContributionMonth(Date("2026-02-01"))
+    | "leaving on the thirty-first loses coverage on 1 April, so March is" :
+        (CoverageLost { acquiredOn = Date("2020-04-01"), lostOn = Date("2026-04-01") })
+        -> ContributionMonth(Date("2026-03-01"))
+
+let aprilRecord = MonthlyPayRecord
+    { month = ContributionMonth(Date("2026-04-01"))
+    , paidBaseDays = PaidBaseDays(30)
+    , remuneration = pay300k
+    }
+
+let regularWindow = ThreeMonthWindow
+    { first = aprilRecord
+    , second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01")) }
+    , third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")) }
+    }
+
+example decideRegularly
+    | "three months of 300,000 grade at 300,000, and it holds from September" :
+        (regularWindow)
+        -> GradeDecision { basis = RegularDetermination
+                         , standard = Yen(300000)
+                         , health = HealthGrade(22)
+                         , pension = PensionGrade(19)
+                         , appliesFrom = ContributionMonth(Date("2026-09-01"))
+                         }
+    | "a window in which no month reaches seventeen paid days is the insurer's to decide" :
+        (ThreeMonthWindow { first = MonthlyPayRecord { ...aprilRecord, paidBaseDays = PaidBaseDays(10) }
+                          , second = MonthlyPayRecord { ...aprilRecord, paidBaseDays = PaidBaseDays(5) }
+                          , third = MonthlyPayRecord { ...aprilRecord, paidBaseDays = PaidBaseDays(0) }
+                          })
+        -> NoPayableMonth
+
+let currentGrade22 = GradeDecision
+    { basis = RegularDetermination
+    , standard = Yen(300000)
+    , health = HealthGrade(22)
+    , pension = PensionGrade(19)
+    , appliesFrom = ContributionMonth(Date("2025-09-01"))
+    }
+
+let raisedPay = MonthlyRemuneration { ...pay300k, baseSalary = Yen(320000) }
+
+let raisedWindow = ThreeMonthWindow
+    { first = MonthlyPayRecord { ...aprilRecord, remuneration = raisedPay }
+    , second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01")), remuneration = raisedPay }
+    , third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")), remuneration = raisedPay }
+    }
+
+let overtimeWindow = ThreeMonthWindow
+    { first = MonthlyPayRecord { ...aprilRecord
+                               , remuneration = MonthlyRemuneration { ...pay300k, variableAllowances = Yen(60000) } }
+    , second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01"))
+                                , remuneration = MonthlyRemuneration { ...pay300k, variableAllowances = Yen(60000) } }
+    , third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01"))
+                               , remuneration = MonthlyRemuneration { ...pay300k, variableAllowances = Yen(60000) } }
+    }
+
+example judgeOccasionalRevision
+    | "a 60,000-yen raise moves the grade two steps and revises from the fourth month" :
+        (currentGrade22, Yen(300000), raisedWindow)
+        -> GradeDecision { basis = OccasionalRevision
+                         , standard = Yen(360000)
+                         , health = HealthGrade(25)
+                         , pension = PensionGrade(22)
+                         , appliesFrom = ContributionMonth(Date("2026-07-01"))
+                         }
+    | "three months of the same overtime move the average and revise nothing, because the fixed wage did not change" :
+        (currentGrade22, Yen(300000), overtimeWindow)
+        -> RevisionNotRequired
+
+fake contributionRatesOf
+    | (PrefectureCode("13"), Date("2026-07-01"))
+        -> ContributionRates { health = ContributionRate(0.0991m)
+                             , longTermCare = ContributionRate(0.0159m)
+                             , pension = ContributionRate(0.183m)
+                             }
+    | _ -> ContributionRates { health = ContributionRate(0.1000m)
+                             , longTermCare = ContributionRate(0.0159m)
+                             , pension = ContributionRate(0.183m)
+                             }
+
+example premiumFor
+    | "the halves of a 10,901-yen health premium are 5,450 and 5,451, and the 50-sen rule is why" :
+        (Yen(110000), HealthAndPension, LongTermCareInsured, PrefectureCode("13"), Date("2026-07-01"))
+        -> Premium { health = PremiumShare { employee = Yen(5450), employer = Yen(5451) }
+                   , longTermCare = PremiumShare { employee = Yen(874), employer = Yen(875) }
+                   , pension = PremiumShare { employee = Yen(10065), employer = Yen(10065) }
+                   }
+    | "under forty there is no long-term care, and over seventy no pension" :
+        (Yen(110000), HealthOnly, OutsideLongTermCare, PrefectureCode("13"), Date("2026-07-01"))
+        -> Premium { health = PremiumShare { employee = Yen(5450), employer = Yen(5451) }
+                   , longTermCare = PremiumShare { employee = Yen(0), employer = Yen(0) }
+                   , pension = PremiumShare { employee = Yen(0), employer = Yen(0) }
+                   }
