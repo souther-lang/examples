@@ -1,0 +1,423 @@
+// The year-end adjustment: what a year's income tax actually was, against what was withheld month by
+// month, and which way the difference goes.
+//
+// It is four tables and a subtraction. What makes it worth writing is that the four tables are stated
+// against three different measures — a salary, a total income, and a taxable income — and each is the
+// one before it less a deduction that is itself read from a table. Getting the measures the wrong way
+// round is the mistake, and giving them different types is the whole defence.
+//
+// The figures here are the ones in force from the 2025 tax year, after the 令和7年度税制改正 raised the
+// minimum employment-income deduction from 550,000 to 650,000 and the basic deduction from 480,000 to
+// 580,000, with a temporary uplift on top of the latter for 2025 and 2026. Every one of them carries the
+// provision it comes from, so a reader can tell what moved from what did not.
+//
+// What is on show:
+//   - Three measures of one person's money, three types. A salary is what was paid, a total income is
+//     that less the employment-income deduction, and a taxable income is that less every other
+//     deduction and rounded down to the thousand. Each behavior takes the one its table is written
+//     against, and a rule cannot be handed the wrong one.
+//   - Rounding as law rather than as presentation. Taxable income is floored to the thousand and the
+//     year's tax to the hundred, each with the provision that says so, and the reconstruction surtax
+//     multiplies between them. Three separate roundings in one computation, none of them incidental.
+//   - The deduction tables as matches, so that a reform is a compile error. Nine bands of basic
+//     deduction and seven of tax rate, each an arm — and the four dependant categories are matched
+//     against the sum example.dependents declares rather than against a string.
+//   - A table read rather than written, twice. The special spouse deduction is a two-axis grid
+//     republished with every reform, and the withholding table example.payroll reads is another, so
+//     both are injected. What is domain here is that the deduction *has* two axes, not what the cells
+//     say this year.
+//   - A difference that is not a number. Over-withheld is a refund and under-withheld is a further
+//     collection, and they are two cases because the payroll does two different things with them.
+module example.yearendadjustment exposing (
+    TaxableIncome,
+    DeclarationStatus,
+    DeclarationFiled,
+    NoDeclarationFiled,
+    SpouseAgeBand,
+    SpouseUnderSeventy,
+    SpouseSeventyOrOver,
+    SpouseClaim,
+    NoSpouse,
+    SpouseClaimed,
+    YearEndEmployment,
+    EmployedAtYearEnd,
+    LeftDuringYear,
+    employmentAtYearEnd,
+    YearEndBlockReason,
+    SalaryOverTwentyMillion,
+    NoDependantDeclaration,
+    NotEmployedAtYearEnd,
+    YearEndEligible,
+    YearEndNotApplicable,
+    Settlement,
+    Refund,
+    AdditionalCollection,
+    Settled,
+    salaryCeiling,
+    judgeYearEndEligibility,
+    employmentIncomeDeductionFor,
+    employmentIncomeFor,
+    basicDeductionFor,
+    dependantDeductionFor,
+    specialSpouseDeductionOf,
+    spouseDeductionFor,
+    taxableIncomeFrom,
+    incomeTaxOn,
+    yearEndTaxFor,
+    settleYearEnd
+)
+
+import example.employee (
+    Yen, Employee, Prospective, Employed, OnLeave, Separated,
+    PersonalIdentity, EmployeeId, Sex, Female, MyNumber,
+    PersonalName, PersonName, KanaName,
+    Residence, Address, PostalCode, PrefectureCode,
+    EmploymentTerms, OfficeId, EmploymentType, FullTime,
+    WeeklyScheduledHours, ContractTerm, Indefinite, StudentStatus, NotDaytimeStudent,
+    MonthlyRemuneration, SeparationReason, VoluntaryResignation
+)
+import example.dependents (
+    TotalIncome, DependantCategory,
+    GeneralDependant, SpecifiedDependant, ElderlyDependant, CoresidentElderlyParent,
+    dependantIncomeCeiling
+)
+
+// === The third measure ===
+
+// Why: taxable income is total income less every deduction, floored to the thousand
+// (国税通則法第118条第1項). It is the number the rate table is read with, and it is not a total income —
+// which is why it has a type of its own rather than being another TotalIncome that happens to be
+// smaller.
+data TaxableIncome = Int
+    invariant value >= 0 && Int.modBy(1000, value) == 0
+
+data DeclarationStatus = DeclarationFiled | NoDeclarationFiled
+
+// === Who the adjustment is made for ===
+
+data SalaryOverTwentyMillion = { ceiling: Yen, salary: Yen }
+
+data YearEndBlockReason =
+    SalaryOverTwentyMillion
+  | NoDependantDeclaration
+  | NotEmployedAtYearEnd
+
+data YearEndNotApplicable = { reasons: List<YearEndBlockReason> }
+    invariant List.length(reasons) >= 1
+
+// Why: somebody paid more than 20 million yen of salary in the year files their own return instead
+// (所得税法第190条第1号). Above that figure the employer's adjustment is not a shortcut anybody may take.
+let salaryCeiling = Yen(20000000)
+
+// Why: the adjustment is made for an employee who is still employed at the end of the year and who filed
+// a dependant declaration (所得税法第190条, 第194条). Somebody who left during the year has their tax
+// settled by their own return — the employer withheld against a projection of a full year they did not
+// work, so only a return can put it right.
+//
+// Reading which state somebody is in is its own operation, so it is its own behavior. The judgment below
+// takes the two-case answer rather than the whole employment record: it reads nothing else off it, and a
+// rule handed a record it barely looks at is a rule nobody can tell what depends on.
+data YearEndEmployment = EmployedAtYearEnd | LeftDuringYear
+
+behavior employmentAtYearEnd : (employment: Employee) -> EmployedAtYearEnd | LeftDuringYear
+    constructs EmployedAtYearEnd, LeftDuringYear
+
+let employmentAtYearEnd (employment) =
+    match employment with
+        | Employed | OnLeave      -> EmployedAtYearEnd
+        | Prospective | Separated -> LeftDuringYear
+
+let notEmployedReasons (employment: YearEndEmployment): List<YearEndBlockReason> =
+    match employment with
+        | EmployedAtYearEnd -> []
+        | LeftDuringYear    -> [ NotEmployedAtYearEnd ]
+
+behavior judgeYearEndEligibility : (
+    employment:  YearEndEmployment,
+    salary:      Yen,
+    declaration: DeclarationStatus
+) -> YearEndEligible | YearEndNotApplicable
+    constructs YearEndEligible, YearEndNotApplicable, SalaryOverTwentyMillion,
+               NoDependantDeclaration, NotEmployedAtYearEnd, Yen
+
+let judgeYearEndEligibility (employment, salary, declaration) = {
+    let reasons =
+           notEmployedReasons(employment)
+        ++ [ SalaryOverTwentyMillion { ceiling = salaryCeiling, salary = salary }
+           | salary > salaryCeiling ]
+        ++ (match declaration with
+                | DeclarationFiled   -> []
+                | NoDeclarationFiled -> [ NoDependantDeclaration ])
+    if YearEndNotApplicable { reasons = reasons } as blocked then blocked else YearEndEligible
+}
+
+// === Salary to total income ===
+
+// Why: the employment-income deduction, as it stands from the 2025 tax year (所得税法第28条第3項,
+// 令和7年法律第13号). The minimum guarantee moved from 550,000 to 650,000 and the band it holds to moved
+// from 1,625,000 to 1,900,000; the four bands above it are unchanged. At 1,900,000 both formulas give
+// 650,000, so the table is continuous — which is the check worth making whenever one of these moves.
+behavior employmentIncomeDeductionFor : (salary: Yen) -> Yen
+    constructs Yen
+
+let employmentIncomeDeductionFor (salary) =
+    if salary <= 1900000 then Yen(650000)
+    else if salary <= 3600000 then Yen(salary.value * 30 / 100 + 80000)
+    else if salary <= 6600000 then Yen(salary.value * 20 / 100 + 440000)
+    else if salary <= 8500000 then Yen(salary.value * 10 / 100 + 1100000)
+    else Yen(1950000)
+
+// 給与所得. The result is a TotalIncome — the type example.dependents states its own ceiling against —
+// because that is what it is, and because the spouse and dependant tests downstream read that type.
+behavior employmentIncomeFor : (salary: Yen) -> TotalIncome
+    constructs TotalIncome
+
+let employmentIncomeFor (salary) =
+    TotalIncome(salary.value - employmentIncomeDeductionFor(salary).value)
+
+// === The deductions ===
+
+// Why: the basic deduction is 580,000 yen for total income up to 23.5 million, raised from 480,000 by
+// the 2025 reform, with a temporary uplift for the 2025 and 2026 tax years that runs from 950,000 at the
+// bottom down to it (所得税法第86条, 令和7年法律第13号附則). Above 23.5 million it tapers to nothing in
+// three steps, which is the pre-existing rule and did not move. Nine arms, and a reform is a compile
+// error in each one it touches.
+behavior basicDeductionFor : (income: TotalIncome) -> Yen
+    constructs Yen
+
+let basicDeductionFor (income) =
+    if income <= 1320000 then Yen(950000)
+    else if income <= 3360000 then Yen(880000)
+    else if income <= 4890000 then Yen(680000)
+    else if income <= 6550000 then Yen(630000)
+    else if income <= 23500000 then Yen(580000)
+    else if income <= 24000000 then Yen(480000)
+    else if income <= 24500000 then Yen(320000)
+    else if income <= 25000000 then Yen(160000)
+    else Yen(0)
+
+// Why: 380,000 for an ordinary dependant, 630,000 for a specified one aged 19 to 22, 480,000 for an
+// elderly one and 580,000 for an elderly lineal ascendant living with the taxpayer
+// (所得税法第84条第1項). The categories are example.dependents' sum, so adding one there is a compile
+// error here — which is what keeps the classification and its price in step.
+behavior dependantDeductionFor : (category: DependantCategory) -> Yen
+    constructs Yen
+
+let dependantDeductionFor (category) =
+    match category with
+        | GeneralDependant        -> Yen(380000)
+        | SpecifiedDependant      -> Yen(630000)
+        | ElderlyDependant        -> Yen(480000)
+        | CoresidentElderlyParent -> Yen(580000)
+
+// Why: a spouse who has attained 70 is an elderly deductible spouse and is worth more
+// (所得税法第83条第1項第2号). The band is on the claim rather than computed here, because the age is
+// taken at the end of the year and the caller is the one holding that date.
+data SpouseAgeBand = SpouseUnderSeventy | SpouseSeventyOrOver
+
+data SpouseClaimed = { income: TotalIncome, age: SpouseAgeBand }
+data SpouseClaim = NoSpouse | SpouseClaimed
+
+// The special spouse deduction is a grid of the taxpayer's income against the spouse's, republished with
+// every reform, so it is read rather than written down — the same decision example.payroll made about
+// the withholding table. What is domain here is that the deduction has two axes and that it tapers to
+// nothing; which cell holds what this year is not.
+behavior specialSpouseDeductionOf : (taxpayerIncome: TotalIncome, spouseIncome: TotalIncome) -> Yen
+
+// Why: the spouse deduction proper applies while the spouse's total income is within the dependant
+// ceiling example.dependents owns — 580,000 from the 2025 tax year — and tapers over three bands of the
+// taxpayer's own income, ending at nothing above 10 million (所得税法第83条). Beyond the spouse's
+// ceiling the special deduction takes over (同法第83条の2), which is a different provision and a
+// different table, so it is a different call.
+behavior spouseDeductionFor : (taxpayerIncome: TotalIncome, spouse: SpouseClaim) -> Yen
+    constructs Yen
+    depends on specialSpouseDeductionOf
+
+let spouseDeductionFor (taxpayerIncome, spouse, specialSpouseDeductionOf) =
+    match spouse with
+        | NoSpouse -> Yen(0)
+        | SpouseClaimed { income, age } ->
+            if income > dependantIncomeCeiling
+            then specialSpouseDeductionOf(taxpayerIncome, income)
+            else match age with
+                | SpouseUnderSeventy ->
+                    if taxpayerIncome <= 9000000 then Yen(380000)
+                    else if taxpayerIncome <= 9500000 then Yen(260000)
+                    else if taxpayerIncome <= 10000000 then Yen(130000)
+                    else Yen(0)
+                | SpouseSeventyOrOver ->
+                    if taxpayerIncome <= 9000000 then Yen(480000)
+                    else if taxpayerIncome <= 9500000 then Yen(320000)
+                    else if taxpayerIncome <= 10000000 then Yen(160000)
+                    else Yen(0)
+
+// === The tax ===
+
+// Why: taxable income is total income less the deductions, floored to the thousand
+// (国税通則法第118条第1項), and never below zero — a person whose deductions exceed their income owes no
+// tax rather than being owed one.
+behavior taxableIncomeFrom : (income: TotalIncome, deductions: Yen) -> TaxableIncome
+    constructs TaxableIncome
+
+let taxableIncomeFrom (income, deductions) =
+    TaxableIncome(Int.max(0, income.value - deductions.value) / 1000 * 1000)
+
+// Why: the progressive rates and the deduction that flattens each band's step
+// (所得税法第89条第1項). Seven arms, and the deduction figures are what make the table a table rather
+// than seven separate computations of the bands below.
+behavior incomeTaxOn : (taxable: TaxableIncome) -> Yen
+    constructs Yen
+
+let incomeTaxOn (taxable) =
+    if taxable <= 1950000 then Yen(taxable.value * 5 / 100)
+    else if taxable <= 3300000 then Yen(taxable.value * 10 / 100 - 97500)
+    else if taxable <= 6950000 then Yen(taxable.value * 20 / 100 - 427500)
+    else if taxable <= 9000000 then Yen(taxable.value * 23 / 100 - 636000)
+    else if taxable <= 18000000 then Yen(taxable.value * 33 / 100 - 1536000)
+    else if taxable <= 40000000 then Yen(taxable.value * 40 / 100 - 2796000)
+    else Yen(taxable.value * 45 / 100 - 4796000)
+
+// Why: the housing-loan credit comes off the computed tax rather than off income, the reconstruction
+// surtax of 2.1 per cent is then added on the remainder (東日本大震災復興財源確保法第13条), and the
+// result is floored to the hundred (所得税法第190条). Three roundings in one computation, and the order
+// they happen in is the provision — flooring first would lose up to 99 yen of surtax base.
+behavior yearEndTaxFor : (taxable: TaxableIncome, housingLoanCredit: Yen) -> Yen
+    constructs Yen
+
+let yearEndTaxFor (taxable, housingLoanCredit) = {
+    let afterCredit = Int.max(0, incomeTaxOn(taxable).value - housingLoanCredit.value)
+    Yen(Decimal.toInt(Decimal.fromInt(afterCredit) * 1.021m, DOWN) / 100 * 100)
+}
+
+// === The difference ===
+
+// Why two cases and not a signed number: over-withheld money is refunded in the December pay slip and
+// under-withheld money is collected from it, and those are two different lines on the slip and two
+// different entries in the ledger. A signed integer would make the payroll ask which sign it was, which
+// is the question this answers.
+data Refund               = { amount: Yen }
+data AdditionalCollection = { amount: Yen }
+data Settlement = Refund | AdditionalCollection | Settled
+
+behavior settleYearEnd : (yearTax: Yen, withheld: Yen) -> Refund | AdditionalCollection | Settled
+    constructs Refund, AdditionalCollection, Settled, Yen
+
+let settleYearEnd (yearTax, withheld) =
+    if withheld > yearTax then Refund { amount = Yen(withheld.value - yearTax.value) }
+    else if yearTax > withheld then AdditionalCollection { amount = Yen(yearTax.value - withheld.value) }
+    else Settled
+
+// === The rows ===
+
+let hanakoEmployed = Employed
+    { identity = PersonalIdentity { id = EmployeeId("000001")
+                                  , birthday = Date("1988-05-20")
+                                  , sex = Female
+                                  , myNumber = MyNumber("123456789018")
+                                  }
+    , personalName = PersonalName { name = PersonName("山田花子"), kana = KanaName("ヤマダハナコ") }
+    , residence = Residence { address = Address { postalCode = PostalCode("100-0001")
+                                                , prefecture = PrefectureCode("13")
+                                                , line = "千代田区千代田1-1"
+                                                } }
+    , terms = EmploymentTerms { officeId = OfficeId("13-000001")
+                              , employmentType = FullTime
+                              , weeklyHours = WeeklyScheduledHours(40.0m)
+                              , contract = Indefinite
+                              , student = NotDaytimeStudent
+                              }
+    , remuneration = MonthlyRemuneration { baseSalary = Yen(260000)
+                                         , scheduledAllowances = Yen(20000)
+                                         , commutingAllowance = Yen(15000)
+                                         , excludedAllowances = Yen(5000)
+                                         , variableAllowances = Yen(0)
+                                         }
+    , hiredOn = Date("2015-04-01")
+    }
+
+example employmentAtYearEnd
+    | "somebody on the books in December is adjusted by their employer" :
+        (hanakoEmployed) -> EmployedAtYearEnd
+    | "somebody who left files their own return instead" :
+        (Separated { ...hanakoEmployed, separatedOn = Date("2026-09-30"), reason = VoluntaryResignation })
+        -> LeftDuringYear
+
+example judgeYearEndEligibility
+    | "an employee on the books at the end of the year who filed the declaration" :
+        (EmployedAtYearEnd, Yen(4200000), DeclarationFiled) -> YearEndEligible
+    | "over twenty million yen of salary is a return and not an adjustment" :
+        (EmployedAtYearEnd, Yen(21000000), DeclarationFiled) -> YearEndNotApplicable
+    | "no declaration filed, so there is nothing to adjust against" :
+        (EmployedAtYearEnd, Yen(4200000), NoDeclarationFiled) -> YearEndNotApplicable
+
+example employmentIncomeDeductionFor
+    | "at the top of the minimum-guarantee band both formulas give 650,000, which is what makes it one table" :
+        (Yen(1900000)) -> Yen(650000)
+    | "one yen above it the thirty-per-cent band takes over, and gives the same figure again" :
+        (Yen(1900001)) -> Yen(650000)
+    | "a 4.2 million salary deducts a fifth and 440,000" :
+        (Yen(4200000)) -> Yen(1280000)
+    | "above 8.5 million the deduction stops moving" :
+        (Yen(12000000)) -> Yen(1950000)
+
+example employmentIncomeFor
+    | "4.2 million of salary is 2.92 million of income" :
+        (Yen(4200000)) -> TotalIncome(2920000)
+
+example basicDeductionFor
+    | "the 2025 uplift gives 880,000 to somebody on 2.92 million of income" :
+        (TotalIncome(2920000)) -> Yen(880000)
+    | "above 23.5 million it drops to the unlifted 480,000" :
+        (TotalIncome(23600000)) -> Yen(480000)
+    | "above 25 million there is no basic deduction at all" :
+        (TotalIncome(25100000)) -> Yen(0)
+
+example dependantDeductionFor
+    | "a dependant at university is worth 630,000" : (SpecifiedDependant) -> Yen(630000)
+    | "an elderly parent under the same roof is worth 580,000" : (CoresidentElderlyParent) -> Yen(580000)
+
+fake specialSpouseDeductionOf
+    | (TotalIncome(2920000), TotalIncome(700000)) -> Yen(380000)
+    | _                                          -> Yen(0)
+
+example spouseDeductionFor
+    | "a spouse within the dependant ceiling is the deduction proper" :
+        (TotalIncome(2920000), SpouseClaimed { income = TotalIncome(500000), age = SpouseUnderSeventy })
+        -> Yen(380000)
+    | "a spouse who has attained seventy is worth a hundred thousand more" :
+        (TotalIncome(2920000), SpouseClaimed { income = TotalIncome(500000), age = SpouseSeventyOrOver })
+        -> Yen(480000)
+    | "past the ceiling it is the other provision, and the other table" :
+        (TotalIncome(2920000), SpouseClaimed { income = TotalIncome(700000), age = SpouseUnderSeventy })
+        -> Yen(380000)
+    | "a taxpayer over ten million gets nothing for a spouse, however little the spouse earns" :
+        (TotalIncome(10500000), SpouseClaimed { income = TotalIncome(0), age = SpouseUnderSeventy })
+        -> Yen(0)
+    | "no spouse, no deduction" :
+        (TotalIncome(2920000), NoSpouse) -> Yen(0)
+
+example taxableIncomeFrom
+    | "the remainder is floored to the thousand, and 999 yen of it is not tax anybody pays" :
+        (TotalIncome(2920000), Yen(1500999)) -> TaxableIncome(1419000)
+    | "deductions past the income leave nothing to tax rather than something to refund" :
+        (TotalIncome(500000), Yen(950000)) -> TaxableIncome(0)
+
+example incomeTaxOn
+    | "under 1.95 million is five per cent flat" :
+        (TaxableIncome(1419000)) -> Yen(70950)
+    | "the second band is ten per cent less 97,500, which is what keeps the step flat" :
+        (TaxableIncome(3000000)) -> Yen(202500)
+
+example yearEndTaxFor
+    | "70,950 of tax carries 2.1 per cent of surtax and is then floored to the hundred" :
+        (TaxableIncome(1419000), Yen(0)) -> Yen(72400)
+    | "the housing-loan credit comes off before the surtax, not after" :
+        (TaxableIncome(1419000), Yen(70950)) -> Yen(0)
+
+example settleYearEnd
+    | "more was withheld than was owed, so December refunds the difference" :
+        (Yen(72400), Yen(81000)) -> Refund { amount = Yen(8600) }
+    | "less was withheld, so December collects it" :
+        (Yen(72400), Yen(60000)) -> AdditionalCollection { amount = Yen(12400) }
+    | "withholding that landed exactly is neither" :
+        (Yen(72400), Yen(72400)) -> Settled
