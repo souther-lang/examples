@@ -1,0 +1,384 @@
+// The vocabulary the other seven modules speak: who the person is, on what terms they are employed,
+// what they are paid, and which state of employment they are in.
+//
+// The file is arranged by *what makes a value change*, which is the first discipline this example is
+// written under. A single Employee record holding thirty columns is what an HR database looks like and
+// what an HR domain must not: a name changes when somebody marries and a notification goes to the
+// office, working hours change when a contract is rewritten, and pay changes at a pay review — three
+// unrelated events that a single record makes look like one. So the person is four data with four
+// reasons to change, and the employment states are a sum over them.
+//
+// What is on show:
+//   - Data split by reason for change. PersonalIdentity never changes, PersonalName changes with a
+//     notification behind it, EmploymentTerms changes when the contract does, MonthlyRemuneration when
+//     pay is reviewed. The employment states spread all four.
+//   - Remuneration split into the fixed part and the variable part, because the occasional revision of
+//     a standard monthly remuneration (example.socialinsurance) is triggered by a change in the *fixed*
+//     wage and by nothing else. A single "monthly pay" field would make that rule unstatable.
+//   - The separation reason as a nested sum, read at two depths downstream: whether unemployment
+//     benefit is restricted is decided at the outer level (a voluntary resignation is restricted), and
+//     who counts as a specified-eligible recipient at the leaf (a dismissal does, a business closure
+//     does).
+//   - The Japanese attained-age rule. A person attains an age on the day *before* their birthday
+//     (年齢計算ニ関スル法律), which decides the month long-term-care premiums start and the day pension
+//     coverage ends. It is one line here and wrong in a great many payroll systems.
+//   - A check digit as a behavior rather than an invariant. My Number's twelfth digit is a mod-11 fold,
+//     and an invariant may not fold (an invariant may not recurse), so the format is the invariant and
+//     the checksum is a behavior — the same division example.inventory draws for EAN-13.
+module example.employee exposing (
+    EmployeeId,
+    OfficeId,
+    PostalCode,
+    PrefectureCode,
+    PersonName,
+    KanaName,
+    MyNumber,
+    Yen,
+    WeeklyScheduledHours,
+    Sex,
+    Male,
+    Female,
+    Office,
+    PersonalIdentity,
+    PersonalName,
+    Address,
+    Residence,
+    EmploymentType,
+    FullTime,
+    ContractEmployee,
+    PartTime,
+    Executive,
+    ContractTerm,
+    Indefinite,
+    TermUntil,
+    StudentStatus,
+    DaytimeStudent,
+    NotDaytimeStudent,
+    EmploymentTerms,
+    MonthlyRemuneration,
+    LeaveKind,
+    SickLeave,
+    MaternityLeave,
+    ChildcareLeave,
+    CaregiverLeave,
+    RenewalIntent,
+    RenewalSought,
+    RenewalNotSought,
+    VoluntaryResignation,
+    ContractExpiry,
+    MandatoryRetirement,
+    Dismissal,
+    BusinessClosure,
+    EncouragedResignation,
+    EmployerCause,
+    Death,
+    SeparationReason,
+    EmploymentCommon,
+    EmployedCommon,
+    Prospective,
+    Employed,
+    OnLeave,
+    Separated,
+    Employee,
+    ActiveEmployee,
+    totalRemuneration,
+    fixedRemuneration,
+    ageOn,
+    attainedAgeOn,
+    hire,
+    beginLeave,
+    LeaveBeforeHire,
+    returnFromLeave,
+    ReturnBeforeLeave,
+    separate,
+    SeparationBeforeHire,
+    verifyMyNumber,
+    MyNumberVerified,
+    CheckDigitMismatch
+)
+
+// === Identity ===
+
+// The company's own employee number. Six digits is what a mid-sized payroll runs on, and the format is
+// an invariant rather than a convention because every one of the eight modules keys on it.
+data EmployeeId = String
+    invariant String.matches("[0-9]{6}", value)
+
+// An office is an office of *application* — the unit the social-insurance system registers, not a
+// building. Two offices of one company file separately and may sit in different prefectures.
+data OfficeId = String
+    invariant String.matches("[0-9]{2}-[0-9]{6}", value)
+
+data PostalCode = String
+    invariant String.matches("[0-9]{3}-[0-9]{4}", value)
+
+// Why: the health-insurance premium rate of the 協会けんぽ is set per prefecture, so which prefecture an
+// office sits in is a rate input and not an address detail. The JIS X 0401 code runs 01 to 47.
+data PrefectureCode = String
+    invariant String.matches("0[1-9]|[1-3][0-9]|4[0-7]", value)
+
+data PersonName = String
+    invariant String.length(value) >= 1
+
+// Why: every social-insurance notification is filed under the katakana reading, not the kanji, because
+// that is what the authority's index is keyed on. A name with no reading cannot be filed, so the
+// reading is a required field and its script is an invariant.
+data KanaName = String
+    invariant String.matches("[ｦ-ﾟァ-ヴー 　]+", value)
+
+// Why: a My Number is twelve digits, the twelfth being a check digit. Only the *length and script* are
+// an invariant; the check digit is a fold and an invariant may not fold, so verifyMyNumber below is
+// where that rule lives.
+data MyNumber = String
+    invariant String.matches("[0-9]{12}", value)
+
+data Sex = Male | Female
+
+// Money, for the whole project. Yen has no fraction, so it is an Int and never a Decimal — the only
+// place a rate turns into yen is where a rounding mode is named, and that is inside the module that
+// owns the rate. A negative amount is not money: a shortfall and a refund are directions, carried by
+// the case that means them.
+data Yen = Int
+    invariant value >= 0
+
+// Why: the social-insurance and employment-insurance coverage tests are both stated in hours per week,
+// and a week of scheduled hours is a contract term rather than a measurement. 37.5 is an ordinary
+// value, so it is a Decimal.
+data WeeklyScheduledHours = Decimal
+    invariant value >= 0.0m && value <= 168.0m
+
+// The registered office. The insured count is here because two rules read it: the specified-office test
+// for short-time workers (example.socialinsurance) counts pension-insured heads, and the prefecture
+// decides the health rate.
+data Office =
+    { id: OfficeId
+    , prefecture: PrefectureCode
+    , insuredCount: Int
+    }
+    invariant insuredCount >= 0
+
+// === The person, split by what makes it change ===
+
+// Settled when the person joins and corrected only when it was wrong. The birthday is the input of
+// every age rule downstream, and the My Number is what the filing module puts on a notification.
+data PersonalIdentity =
+    { id: EmployeeId
+    , birthday: Date
+    , sex: Sex
+    , myNumber: MyNumber
+    }
+
+// Changes when somebody marries, and a change here is itself a notification (氏名変更届) rather than an
+// edit. That is the reason it is not part of PersonalIdentity: the two have different events behind them.
+data PersonalName =
+    { name: PersonName
+    , kana: KanaName
+    }
+
+data Address =
+    { postalCode: PostalCode
+    , prefecture: PrefectureCode
+    , line: String
+    }
+    invariant String.length(line) >= 1
+
+// Changes when somebody moves, which is again its own notification (住所変更届).
+data Residence =
+    { address: Address
+    }
+
+// === The terms, which change when the contract does ===
+
+// Why: an executive is not a worker under the Labour Standards Act, so no working-hours rule and no
+// employment insurance reaches one — while health and pension insurance do. Keeping the four apart is
+// what lets those two modules disagree about the same person without either writing an exception.
+data EmploymentType = FullTime | ContractEmployee | PartTime | Executive
+
+data TermUntil = { endsOn: Date }
+data ContractTerm = Indefinite | TermUntil
+
+// Why: a daytime student is excluded from employment insurance however many hours they work
+// (雇用保険法第6条). It is a fact about the person's schooling and not about the contract, but it is
+// read only by the coverage test, so it sits beside the hours that test also reads.
+data StudentStatus = DaytimeStudent | NotDaytimeStudent
+
+data EmploymentTerms =
+    { officeId: OfficeId
+    , employmentType: EmploymentType
+    , weeklyHours: WeeklyScheduledHours
+    , contract: ContractTerm
+    , student: StudentStatus
+    }
+
+// === What is paid, which changes at a pay review ===
+
+// Why the split: an occasional revision of the standard monthly remuneration (月額変更届) is triggered
+// by a change in the *fixed* wage and by nothing else — three months of heavy overtime do not revise a
+// grade. So the fixed part and the variable part are separate fields, and the rule downstream reads the
+// fixed part alone. A single monthlyPay field would leave that rule with nothing to read.
+data MonthlyRemuneration =
+    { baseSalary: Yen           // 基本給
+    , fixedAllowances: Yen      // 役職手当・住宅手当・通勤手当など、支給額が月ごとに動かないもの
+    , variableAllowances: Yen   // 残業手当など、月ごとに動くもの
+    }
+
+let fixedRemuneration (r: MonthlyRemuneration): Yen = r.baseSalary + r.fixedAllowances
+
+let totalRemuneration (r: MonthlyRemuneration): Yen = fixedRemuneration(r) + r.variableAllowances
+
+// === Leave and separation ===
+
+// Why: maternity leave and childcare leave exempt both the employee's and the employer's social-insurance
+// premiums (健康保険法第159条, 厚生年金保険法第81条の2); sick leave and caregiver leave do not. The
+// premium module reads this sum to decide, so the four kinds are four cases rather than a leave flag
+// with a reason string beside it.
+data SickLeave
+data MaternityLeave
+data ChildcareLeave
+data CaregiverLeave
+data LeaveKind = SickLeave | MaternityLeave | ChildcareLeave | CaregiverLeave
+
+// Why: a fixed-term contract that ends after the employee asked for a renewal makes them a specified-
+// reason recipient, and one that ends after they did not is an ordinary expiry. The difference decides
+// whether unemployment benefit is restricted, so it is a case and not a note.
+data RenewalIntent = RenewalSought | RenewalNotSought
+
+data ContractExpiry = { renewal: RenewalIntent }
+data EmployerCause = Dismissal | BusinessClosure | EncouragedResignation
+
+// The separation reason nests, and it earns the nesting because two rules read it at two depths.
+// example.employmentinsurance's benefit restriction reads the outer level — an employer cause is never
+// restricted, whichever kind it is — and the specified-eligible test reads the leaf, because a dismissal
+// and a business closure qualify while an encouraged resignation is judged on its own terms.
+data SeparationReason =
+    VoluntaryResignation | ContractExpiry | MandatoryRetirement | EmployerCause | Death
+
+// === The states of employment ===
+
+data EmploymentCommon =
+    { identity: PersonalIdentity
+    , personalName: PersonalName
+    , residence: Residence
+    , terms: EmploymentTerms
+    , remuneration: MonthlyRemuneration
+    }
+
+data EmployedCommon =
+    { ...EmploymentCommon
+    , hiredOn: Date
+    }
+
+data Prospective = { ...EmploymentCommon, hireOn: Date }
+data Employed    = { ...EmployedCommon }
+data OnLeave     = { ...EmployedCommon, leave: LeaveKind, leaveFrom: Date }
+    invariant Date.daysBetween(hiredOn, leaveFrom) >= 0
+data Separated   = { ...EmployedCommon, separatedOn: Date, reason: SeparationReason }
+    invariant Date.daysBetween(hiredOn, separatedOn) >= 0
+
+data Employee = Prospective | Employed | OnLeave | Separated
+
+// Somebody on leave is still employed: they are still insured, still accrue service, and may still
+// resign. The operations that hold for both are written against this sum rather than against Employee,
+// so a behavior cannot be handed somebody who has not started or has already left.
+data ActiveEmployee = Employed | OnLeave
+
+// === Age, and the day it is attained ===
+
+// The ordinary calendar age, which is what a tax rule means when it says "under 19" or "70 or over".
+let ageOn (birthday: Date, on: Date): Int =
+    Date.year(on) - Date.year(birthday)
+        - (if Date.month(on) * 100 + Date.day(on) < Date.month(birthday) * 100 + Date.day(birthday)
+           then 1 else 0)
+
+// Why: under 年齢計算ニ関スル法律 a person attains an age on the day *before* their birthday, and the
+// social-insurance system means that age everywhere — long-term-care premiums start in the month an
+// employee attains 40, pension coverage ends the day they attain 70, and somebody born on the first of
+// a month therefore attains it in the previous month. Shifting the birthday back one day is the whole
+// of the rule, and it is what a payroll gets wrong for exactly the people born on the first.
+let attainedAgeOn (birthday: Date, on: Date): Int =
+    ageOn(Date.addDays(0 - 1, birthday), on)
+
+// === The transitions ===
+
+behavior hire : (prospect: Prospective) -> Employed
+    constructs Employed
+
+let hire (prospect) = Employed { ...prospect, hiredOn = prospect.hireOn }
+
+behavior beginLeave : (employee: Employed, kind: LeaveKind, from: Date) -> OnLeave | LeaveBeforeHire
+    constructs OnLeave, LeaveBeforeHire
+
+let beginLeave (employee, kind, from) = {
+    // The guard discharges OnLeave's invariant, which would otherwise abort — and an abort is not
+    // something a boundary can tell anybody about. A leave dated before the hire is a data-entry error
+    // the system does report.
+    guard Date.daysBetween(employee.hiredOn, from) >= 0 else LeaveBeforeHire
+    OnLeave { ...employee, leave = kind, leaveFrom = from }
+}
+
+behavior returnFromLeave : (employee: OnLeave, on: Date) -> Employed | ReturnBeforeLeave
+    constructs Employed, ReturnBeforeLeave
+
+let returnFromLeave (employee, on) = {
+    guard Date.daysBetween(employee.leaveFrom, on) >= 0 else ReturnBeforeLeave
+    Employed { ...employee }
+}
+
+// Resigning while on leave is ordinary, so the input is the sum of both active states rather than
+// Employed alone. A prospective hire has nothing to resign from and somebody already separated cannot
+// separate twice; neither call typechecks, and no guard says so.
+//
+// The two arms are identical but for the name they bind, and the match is here only because a sum
+// cannot be spread. `employee.hiredOn` a line above reads a field every case of ActiveEmployee spreads,
+// which the language grants; `Separated { ...employee, … }` is refused with "a spread must be a data
+// value". The fields a spread would copy are exactly the ones the read already reaches, so the rule
+// could follow the read — and the arms would collapse into the one line the rule actually is. Finding F28.
+behavior separate : (employee: ActiveEmployee, on: Date, reason: SeparationReason)
+        -> Separated | SeparationBeforeHire
+    constructs Separated, SeparationBeforeHire
+
+let separate (employee, on, reason) = {
+    guard Date.daysBetween(employee.hiredOn, on) >= 0 else SeparationBeforeHire
+    match employee with
+        | Employed as e -> Separated { ...e, separatedOn = on, reason = reason }
+        | OnLeave as l  -> Separated { ...l, separatedOn = on, reason = reason }
+}
+
+// === The My Number check digit ===
+// Why: the twelfth digit is 11 − (Σ P_n × Q_n mod 11), taken as 0 when that remainder is 0 or 1, where
+// Q_n is the n-th digit counted from the eleventh and P_n is n+1 for n up to 6 and n−5 after that
+// (行政手続における特定の個人を識別するための番号の利用等に関する法律施行令第8条). A transposed pair of
+// digits is what it catches, which is the mistake a person typing a number from a card actually makes.
+
+let digitAt (ch: String): Int = String.toCode(ch) - String.toCode("0")
+
+let weightedSum (body: List<String>): Int =
+    List.sum(List.indexedMap((i, ch) -> (if i <= 5 then i + 2 else i - 4) * digitAt(ch),
+                             List.reverse(body)))
+
+let expectedCheckDigit (body: List<String>): Int = {
+    let r = Int.modBy(11, weightedSum(body))
+    if r <= 1 then 0 else 11 - r
+}
+
+behavior verifyMyNumber : (number: MyNumber) -> MyNumberVerified | CheckDigitMismatch
+    constructs MyNumberVerified, CheckDigitMismatch
+
+let verifyMyNumber (number) = {
+    let chars = String.toChars(number.value)
+    let body = List.take(11, chars)
+    let check = List.drop(11, chars)
+    // The invariant proved there are twelve digits, so the twelfth is there; List.get still answers an
+    // optional, and the absent arm is the one the type has already ruled out.
+    match List.get(0, check) with
+        | Some c -> if digitAt(c) == expectedCheckDigit(body)
+                    then MyNumberVerified
+                    else CheckDigitMismatch
+        | None   -> CheckDigitMismatch
+}
+
+example verifyMyNumber
+    | "a number whose check digit is the one the fold computes verifies" :
+        (MyNumber("123456789018")) -> MyNumberVerified
+    | "transposing two digits changes the weighted sum, so the check digit no longer agrees" :
+        (MyNumber("123456789081")) -> CheckDigitMismatch

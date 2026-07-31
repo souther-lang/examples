@@ -1,0 +1,42 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>example.souther</groupId>
+        <artifactId>souther-examples</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>hr</artifactId>
+
+    <description>
+        Japanese HR and payroll administration, and the scale test of this repository: eight Souther
+        modules under src/main/souther, compiled together in one build, with an import chain five
+        deep. example.employee holds the vocabulary the other seven speak; example.dependents decides
+        who is a dependant, under the two different definitions the social-insurance system and the
+        income-tax system each hold; example.socialinsurance the health and pension coverage, the
+        fifty-grade standard monthly remuneration table and the three ways a grade is decided;
+        example.employmentinsurance the unemployment-insurance coverage and the separation reasons;
+        example.attendance working hours, the overtime premium rates and annual leave; example.payroll
+        gross to net; example.yearendadjustment the year-end reconciliation of withheld tax; and
+        example.filing the workflow a notification goes through on its way to the authorities.
+
+        The rules are the ones Japanese labour and social-insurance law actually enforces — the
+        130万-yen dependant ceiling, the twenty-hour employment-insurance threshold, the two-grade
+        difference an occasional revision needs, the eight-tenths attendance rate annual leave needs,
+        and the spouse deduction's two-axis income matrix. Each threshold carries a Why comment saying
+        what it is for, so a reader can tell a rule that may be changed from one that may not.
+
+        The boundary is one JUnit smoke test per module and nothing else: no Spring, no jOOQ, no
+        database, no REST. Where the language could not state a rule directly, the file says so at the
+        declaration that hit it, and the README's dogfooding findings collect them.
+    </description>
+
+    <dependencies>
+        <!-- Souther 生成物のランタイムと、decoder/encoder の Result / Issues -->
+        <dependency><groupId>org.souther-lang</groupId><artifactId>souther-runtime</artifactId></dependency>
+        <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh</artifactId></dependency>
+    </dependencies>
+</project>
