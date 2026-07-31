@@ -1,0 +1,313 @@
+// Gross to net: the hourly rate an uplift is computed on, the uplifts themselves, the deductions, and
+// what is left. It is the module the other four feed into, and it imports four of them.
+//
+// The two things a payroll gets wrong are both here. The first is *which month*: social-insurance
+// premiums are withheld a month in arrears, so the premium in July's pay slip is June's premium, and a
+// system that keeps one month field cannot say which of the two it means. The second is *rounding*: an
+// uplift is settled by rounding half up and a premium by rounding half down, because one circular says
+// 50 sen is carried and the other says 50 sen is dropped. Both are one line, and both are wrong by a yen
+// in every payroll that assumes there is one rule.
+//
+// What is on show:
+//   - Two months in one pay slip, each with its own type. PayMonth is when the money moves and
+//     ContributionMonth is what the premium is for, and the behavior between them is the statute.
+//   - Two rounding rules side by side. HALF_UP for an uplift and HALF_DOWN for a premium, each named at
+//     the call with the circular that says so — the contrast is the point, and it survives only because
+//     the mode is written where the rounding happens.
+//   - A deduction that carries its own authority. Wages must be paid in full, and the only things that
+//     may be taken out are what a statute allows and what a labour-management agreement allows, so a
+//     deduction is a sum of those two and an agreed one holds the agreement it rests on. There is no
+//     value of this type that is a deduction with no basis.
+//   - An invariant that ties the slip together. Net plus every deduction is gross, stated once on the
+//     type rather than checked by whatever assembled the slip last.
+//   - The withholding table read rather than written. The monthly table for employees who filed a
+//     dependant declaration is four hundred rows by eight columns and is republished every year, so it
+//     is an injected behavior — the same decision example.socialinsurance made about premium rates.
+module example.payroll exposing (
+    PayMonth,
+    HourlyRate,
+    StatutoryKind,
+    HealthInsurancePremium,
+    LongTermCarePremium,
+    PensionPremium,
+    EmploymentInsurancePremium,
+    WithholdingIncomeTax,
+    InhabitantTax,
+    AgreementNumber,
+    DeductionName,
+    StatutoryDeduction,
+    AgreedDeduction,
+    Deduction,
+    Earnings,
+    PaySlip,
+    payMonthOf,
+    grossOf,
+    deductionAmount,
+    deductionTotal,
+    nonTaxableCommutingCeiling,
+    contributionMonthWithheldIn,
+    hourlyRateFor,
+    NoScheduledHours,
+    upliftPay,
+    TaxableAmount,
+    computeTaxableAmount,
+    withholdingTaxOf,
+    buildPaySlip,
+    DeductionsExceedGross
+)
+
+import example.employee (
+    Yen, toYen, MonthlyRemuneration, scheduledWage, totalRemuneration
+)
+import example.attendance (
+    Hours, MonthlyTally, UpliftRates, upliftRates
+)
+import example.socialinsurance (
+    ContributionMonth, monthOf, Premium, PremiumShare
+)
+
+// === The two months ===
+
+// A month of *payment*. It is not example.socialinsurance's ContributionMonth and the whole of this
+// module's first rule is the relation between them.
+data PayMonth = Date
+    invariant Date.day(value) == 1
+
+let payMonthOf (d: Date): PayMonth = PayMonth(Date.addDays(1 - Date.day(d), d))
+
+// Why: an employer may deduct the *previous* month's social-insurance premium from the wages it pays in
+// this one (健康保険法第167条第1項, 厚生年金保険法第84条第1項). So the premium on a July pay slip is
+// June's premium, and the two months are two values with two types. Every argument about a final pay
+// slip is an argument about this line: an employee who leaves at the end of June has June's premium
+// deducted from a July payment that may not exist, so it is taken from June's pay instead — and that is
+// the only month in which two premiums are deducted at once.
+behavior contributionMonthWithheldIn : (pay: PayMonth) -> ContributionMonth
+    constructs ContributionMonth
+
+let contributionMonthWithheldIn (pay) = monthOf(Date.addMonths(0 - 1, pay.value))
+
+// === The hourly rate ===
+
+// Why a Decimal and not a Yen: the rate is an intermediate, and the statute rounds the *uplift*, not the
+// rate it was computed from (昭和63年基発第150号). Keeping the rate exact and rounding once at the end is
+// the same decision example.tax makes about a consumption-tax rate — round where the value stops being a
+// working number, and only there.
+data HourlyRate = Decimal
+    invariant value >= 0.0m
+
+// Why: a monthly wage is converted to an hourly rate by dividing by the month's scheduled hours, or by
+// the yearly average of them where the months differ (労働基準法施行規則第19条第1項第4号). The base is
+// the scheduled wage, because §37(5) strips family, housing and commuting allowances out of what an
+// uplift is computed on — which is exactly the split example.employee's four allowance fields carry.
+behavior hourlyRateFor : (remuneration: MonthlyRemuneration, monthlyScheduledHours: Hours)
+        -> HourlyRate | NoScheduledHours
+    constructs HourlyRate, NoScheduledHours
+
+let hourlyRateFor (remuneration, monthlyScheduledHours) = {
+    guard monthlyScheduledHours >= 1.0m else NoScheduledHours
+    HourlyRate(Decimal.fromInt(scheduledWage(remuneration).value) / monthlyScheduledHours.value)
+}
+
+// Why: overtime is 1.25 of the rate and not 0.25, because those hours are beyond the scheduled ones and
+// the monthly wage does not already contain them; late-night is 0.25, because the hour is already paid
+// for as ordinary or as overtime and only the uplift is owed again. That is why example.attendance
+// tallies late-night hours overlapping the other buckets rather than beside them.
+//
+// Why HALF_UP: an uplift with a fraction of a yen is settled by dropping under 50 sen and carrying 50
+// sen and above (昭和63年基発第150号). It is the opposite convention from the one the same payroll
+// applies to a premium two functions below, and the two live one screen apart on purpose.
+behavior upliftPay : (rate: HourlyRate, tally: MonthlyTally, rates: UpliftRates) -> Yen
+    constructs Yen
+
+let upliftPay (rate, tally, rates) =
+    Yen(Decimal.toInt(
+        rate.value * ( tally.overtimeWithinSixty.value * (1.0m + rates.overtime)
+                     + tally.overtimeBeyondSixty.value * (1.0m + rates.extendedOvertime)
+                     + tally.lateNight.value * rates.lateNight
+                     + tally.statutoryHoliday.value * (1.0m + rates.statutoryHoliday) ),
+        HALF_UP))
+
+// === Deductions ===
+
+// Why: wages are paid in full, and the only things that may come out of them are what a statute
+// provides for and what a written labour-management agreement provides for (労働基準法第24条第1項但書).
+// So a deduction is not an amount, it is an amount with a basis — and an agreed deduction carries the
+// agreement it rests on, which means there is no value of this type that is a deduction nobody agreed
+// to. A union dues line with no agreement behind it is not representable rather than merely unlawful.
+data StatutoryKind =
+    HealthInsurancePremium
+  | LongTermCarePremium
+  | PensionPremium
+  | EmploymentInsurancePremium
+  | WithholdingIncomeTax
+  | InhabitantTax
+
+data AgreementNumber = String
+    invariant String.length(value) >= 1
+
+data DeductionName = String
+    invariant String.length(value) >= 1
+
+data StatutoryDeduction = { kind: StatutoryKind, amount: Yen }
+data AgreedDeduction    = { name: DeductionName, amount: Yen, agreement: AgreementNumber }
+data Deduction = StatutoryDeduction | AgreedDeduction
+
+let deductionAmount (d: Deduction): Yen =
+    match d with
+        | StatutoryDeduction { amount } -> amount
+        | AgreedDeduction { amount }    -> amount
+
+// The bare Int is what the pay slip's invariant needs: an invariant may not construct data, so a helper
+// it names may not either — and `Yen(...)` is a construction. So the fold answers a number and the
+// wrapping happens outside, in the two places that want a Yen.
+let deductionSum (ds: List<Deduction>): Int =
+    List.sum(List.map(d -> deductionAmount(d).value, ds))
+
+let deductionTotal (ds: List<Deduction>): Yen = Yen(deductionSum(ds))
+
+// === The taxable amount ===
+
+// Why: a commuting allowance is exempt from income tax up to 150,000 yen a month for somebody using
+// public transport (所得税法施行令第20条の2). Above that the excess is taxable, so the exemption is a
+// cap on the allowance and not a property of it — which is why the whole allowance is still in the
+// standard monthly remuneration that decides a social-insurance grade.
+let nonTaxableCommutingCeiling = Yen(150000)
+
+let nonTaxableCommuting (remuneration: MonthlyRemuneration): Yen =
+    if remuneration.commutingAllowance > nonTaxableCommutingCeiling
+    then nonTaxableCommutingCeiling
+    else remuneration.commutingAllowance
+
+// Why: withholding is computed on gross pay less the exempt part of the commuting allowance and less the
+// social-insurance premiums withheld in the same month (所得税法第183条・第74条). The premiums subtracted
+// are the ones *withheld now*, which by the arrears rule above are the previous month's — so the amount
+// somebody's tax is computed on depends on a month they had already left, if they left.
+// The amount withholding is computed on. It is a Yen and would rather be written as one, but a union
+// declared here may not hold a case another module declares (E1606) — so a behavior answering "an
+// amount, or a reason there is none" has to wrap the amount in a type of its own. Every module that
+// answers with money beside a failure ends up declaring one of these, and the behavior beside it has
+// to be renamed, since a behavior is capitalised into a class of the same name. Finding F33.
+data TaxableAmount = Yen
+
+behavior computeTaxableAmount : (
+    remuneration:  MonthlyRemuneration,
+    upliftPay:     Yen,
+    socialInsurance: Yen
+) -> TaxableAmount | DeductionsExceedGross
+    constructs TaxableAmount, Yen, DeductionsExceedGross
+
+let computeTaxableAmount (remuneration, upliftPay, socialInsurance) = {
+    let gross = totalRemuneration(remuneration) + upliftPay
+    let subtracted = nonTaxableCommuting(remuneration) + socialInsurance
+    guard gross >= subtracted else DeductionsExceedGross
+    TaxableAmount(Yen(gross.value - subtracted.value))
+}
+
+// The monthly withholding table for employees who filed a dependant declaration is four hundred rows by
+// eight columns and is republished every year, so it is read rather than written down — the same
+// decision example.socialinsurance made about premium rates. The dependant count is the column, and
+// example.dependents is what decides it.
+behavior withholdingTaxOf : (taxable: TaxableAmount, dependants: Int) -> Yen
+
+// === The pay slip ===
+
+data Earnings =
+    { fixed: Yen       // 月額として決まっている支給（所定内賃金＋通勤手当＋その他手当）
+    , uplift: Yen      // 割増賃金の合計
+    }
+
+let grossOf (e: Earnings): Yen = e.fixed + e.uplift
+
+// The slip's own arithmetic, stated once on the type. Anything that assembles a slip has to make it hold
+// rather than remember to check it, and a slip read back from a database is checked by the same clause
+// the one built here was.
+data PaySlip =
+    { month: PayMonth
+    , earnings: Earnings
+    , deductions: List<Deduction>
+    , net: Yen
+    }
+    invariant net.value + deductionSum(deductions) == earnings.fixed.value + earnings.uplift.value
+
+behavior buildPaySlip : (month: PayMonth, earnings: Earnings, deductions: List<Deduction>)
+        -> PaySlip | DeductionsExceedGross
+    constructs PaySlip, Yen, DeductionsExceedGross
+
+let buildPaySlip (month, earnings, deductions) = {
+    // Why this is a business outcome and not an abort: a month of unpaid leave with premiums still owed
+    // produces a negative net, and payroll answers it by carrying the shortfall to the following month.
+    // It is a real thing that happens, so it is a case somebody can act on.
+    guard grossOf(earnings) >= deductionTotal(deductions) else DeductionsExceedGross
+    PaySlip { month = month
+            , earnings = earnings
+            , deductions = deductions
+            , net = Yen(grossOf(earnings).value - deductionTotal(deductions).value)
+            }
+}
+
+// === The rows ===
+
+let pay300k = MonthlyRemuneration
+    { baseSalary = Yen(260000)
+    , scheduledAllowances = Yen(20000)
+    , commutingAllowance = Yen(15000)
+    , excludedAllowances = Yen(5000)
+    , variableAllowances = Yen(0)
+    }
+
+let monthlyScheduled = Hours(160.0m)
+
+example hourlyRateFor
+    | "280,000 yen of scheduled wage over 160 hours is 1,750 an hour, and the allowances §37(5) strips are not in it" :
+        (pay300k, monthlyScheduled) -> HourlyRate(1750.0m)
+    | "a month with no scheduled hours has no rate to divide into, and says so rather than aborting" :
+        (pay300k, Hours(0.0m)) -> NoScheduledHours
+
+let tenHoursOvertime = MonthlyTally
+    { ordinary = Hours(160.0m)
+    , overtimeWithinSixty = Hours(10.0m)
+    , overtimeBeyondSixty = Hours(0.0m)
+    , lateNight = Hours(2.0m)
+    , statutoryHoliday = Hours(0.0m)
+    }
+
+example upliftPay
+    | "ten hours over at 1.25 and two of them at night for a further quarter" :
+        (HourlyRate(1750.0m), tenHoursOvertime, upliftRates) -> Yen(22750)
+    | "a fraction of a yen is carried at 50 sen, which is the opposite of what a premium does" :
+        (HourlyRate(1750.5m), tenHoursOvertime, upliftRates) -> Yen(22757)
+
+example contributionMonthWithheldIn
+    | "the premium on a July pay slip is June's premium" :
+        (PayMonth(Date("2026-07-01"))) -> ContributionMonth(Date("2026-06-01"))
+
+let julyDeductions =
+    [ StatutoryDeduction { kind = HealthInsurancePremium, amount = Yen(14865) }
+    , StatutoryDeduction { kind = PensionPremium, amount = Yen(27450) }
+    , StatutoryDeduction { kind = EmploymentInsurancePremium, amount = Yen(1650) }
+    , StatutoryDeduction { kind = WithholdingIncomeTax, amount = Yen(6750) }
+    , AgreedDeduction { name = DeductionName("組合費")
+                      , amount = Yen(2000)
+                      , agreement = AgreementNumber("R08-001")
+                      }
+    ]
+
+example buildPaySlip
+    | "gross less every deduction is net, and the slip's own invariant says so" :
+        (PayMonth(Date("2026-07-01")),
+         Earnings { fixed = Yen(300000), uplift = Yen(22750) },
+         julyDeductions)
+        -> PaySlip { month = PayMonth(Date("2026-07-01"))
+                   , earnings = Earnings { fixed = Yen(300000), uplift = Yen(22750) }
+                   , deductions = julyDeductions
+                   , net = Yen(270035)
+                   }
+    | "a month of unpaid leave leaves nothing to deduct the premiums from, which is an answer" :
+        (PayMonth(Date("2026-07-01")),
+         Earnings { fixed = Yen(0), uplift = Yen(0) },
+         julyDeductions)
+        -> DeductionsExceedGross
+
+example computeTaxableAmount
+    | "gross less the exempt commuting allowance and less this month's premiums" :
+        (pay300k, Yen(22750), Yen(43965)) -> TaxableAmount(Yen(263785))

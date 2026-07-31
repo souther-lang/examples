@@ -603,14 +603,16 @@ let ordinaryWeek = WeeklyScheduledHours(40.0m)
 let pay300k = MonthlyRemuneration
     { baseSalary = Yen(260000)
     , scheduledAllowances = Yen(20000)
-    , excludedAllowances = Yen(20000)
+    , commutingAllowance = Yen(15000)
+    , excludedAllowances = Yen(5000)
     , variableAllowances = Yen(0)
     }
 
 let pay110k = MonthlyRemuneration
     { baseSalary = Yen(95000)
     , scheduledAllowances = Yen(5000)
-    , excludedAllowances = Yen(10000)
+    , commutingAllowance = Yen(8000)
+    , excludedAllowances = Yen(2000)
     , variableAllowances = Yen(0)
     }
 

@@ -220,27 +220,30 @@ data EmploymentTerms =
 
 // === What is paid, which changes at a pay review ===
 
-// Why the split: an occasional revision of the standard monthly remuneration (月額変更届) is triggered
-// by a change in the *fixed* wage and by nothing else — three months of heavy overtime do not revise a
-// grade. And the short-time-worker coverage test reads a third figure again, the scheduled wage, which
-// is the fixed wage less commuting, family and attendance allowances. Three rules, three sums over the
-// same four fields, and no rule can be stated at all against a single monthlyPay column.
+// Why the split: four rules read this money four different ways, and no two of them add up the same
+// fields. A grade is decided from everything paid in the month; an occasional revision is triggered by
+// the fixed part; the short-time coverage test reads the scheduled wage; and an overtime uplift is
+// computed on a base the statute strips family, housing and commuting allowances out of. A single
+// monthlyPay column leaves three of the four with nothing to read.
 data MonthlyRemuneration =
     { baseSalary: Yen             // 基本給
-    , scheduledAllowances: Yen    // 役職手当・住宅手当など、所定内賃金に算入される固定的手当
-    , excludedAllowances: Yen     // 通勤手当・家族手当・精皆勤手当。標準報酬月額には算入するが、
-                                  // 短時間労働者の 8.8 万円要件からは除かれる
+    , scheduledAllowances: Yen    // 役職手当など、割増賃金の基礎に算入される固定的手当
+    , commutingAllowance: Yen     // 通勤手当。標準報酬月額に算入し、割増賃金の基礎からは除外され、
+                                  // 所得税は月15万円まで非課税。三つの規則が別々に読む
+    , excludedAllowances: Yen     // 家族手当・住宅手当。割増賃金の基礎からも短時間労働者の
+                                  // 8.8 万円要件からも除かれる（労働基準法第37条第5項）
     , variableAllowances: Yen     // 残業手当など、月ごとに動くもの
     }
 
-// 所定内賃金. What the short-time-worker wage test of example.socialinsurance reads: the wage for the
-// scheduled hours, before overtime and before the allowances that test excludes by name.
+// 所定内賃金. Read twice: by the short-time-worker wage test of example.socialinsurance, and as the base
+// an overtime uplift is computed on (labour-standards §37(5) strips exactly the two fields below it).
 let scheduledWage (r: MonthlyRemuneration): Yen = r.baseSalary + r.scheduledAllowances
 
 // 固定的賃金. What the occasional-revision trigger reads: everything paid at a rate that does not move
 // with the month, commuting allowance included — a commuting allowance that changes because somebody
 // moved house is a fixed-wage change and does start a revision.
-let fixedRemuneration (r: MonthlyRemuneration): Yen = scheduledWage(r) + r.excludedAllowances
+let fixedRemuneration (r: MonthlyRemuneration): Yen =
+    scheduledWage(r) + r.commutingAllowance + r.excludedAllowances
 
 // 報酬月額. What a grade is decided from: everything paid in the month.
 let totalRemuneration (r: MonthlyRemuneration): Yen = fixedRemuneration(r) + r.variableAllowances
