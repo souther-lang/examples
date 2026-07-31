@@ -15,10 +15,9 @@
 //   - Remuneration split into the fixed part and the variable part, because the occasional revision of
 //     a standard monthly remuneration (example.socialinsurance) is triggered by a change in the *fixed*
 //     wage and by nothing else. A single "monthly pay" field would make that rule unstatable.
-//   - The separation reason as a nested sum, read at two depths downstream: whether unemployment
-//     benefit is restricted is decided at the outer level (a voluntary resignation is restricted), and
-//     who counts as a specified-eligible recipient at the leaf (a dismissal does, a business closure
-//     does).
+//   - The separation reason as a nested sum, read at two depths downstream: the benefit rules read the
+//     outer level, since every employer cause is treated alike, and the separation certificate reads the
+//     leaf, since each kind carries its own reason code.
 //   - The Japanese attained-age rule. A person attains an age on the day *before* their birthday
 //     (年齢計算ニ関スル法律), which decides the month long-term-care premiums start and the day pension
 //     coverage ends. It is one line here and wrong in a great many payroll systems.
@@ -34,6 +33,7 @@ module example.employee exposing (
     KanaName,
     MyNumber,
     Yen,
+    toYen,
     WeeklyScheduledHours,
     Sex,
     Male,
@@ -71,6 +71,7 @@ module example.employee exposing (
     BusinessClosure,
     EncouragedResignation,
     EmployerCause,
+    DismissalForMisconduct,
     Death,
     SeparationReason,
     EmploymentCommon,
@@ -141,6 +142,12 @@ data Sex = Male | Female
 // the case that means them.
 data Yen = Int
     invariant value >= 0
+
+// Why: an amount computed at a rate is settled to the yen by dropping 50 sen and carrying anything
+// above it (通貨の単位及び貨幣の発行等に関する法律第3条), which is exactly HALF_DOWN. Both insurance
+// modules deduct at a rate and both settle it this way, so the rule is written once here rather than
+// twice under two comments that could drift apart.
+let toYen (amount: Decimal): Yen = Yen(Decimal.toInt(amount, HALF_DOWN))
 
 // Why: the social-insurance and employment-insurance coverage tests are both stated in hours per week,
 // and a week of scheduled hours is a contract term rather than a measurement. 37.5 is an ordinary
@@ -259,11 +266,22 @@ data ContractExpiry = { renewal: RenewalIntent }
 data EmployerCause = Dismissal | BusinessClosure | EncouragedResignation
 
 // The separation reason nests, and it earns the nesting because two rules read it at two depths.
-// example.employmentinsurance's benefit restriction reads the outer level — an employer cause is never
-// restricted, whichever kind it is — and the specified-eligible test reads the leaf, because a dismissal
-// and a business closure qualify while an encouraged resignation is judged on its own terms.
+// example.employmentinsurance's benefit rules read the outer level — every employer cause makes a
+// specified-eligible recipient and none of them is restricted, whichever kind it is — while
+// example.filing reads the leaf, because the separation certificate carries a different reason code for
+// a dismissal, a closure and an encouraged resignation.
+//
+// Why a dismissal for serious misconduct is not under EmployerCause: it is legally a separation for a
+// grave reason attributable to the worker (雇用保険法第33条第1項), which is the opposite end of the
+// benefit rules from the rest of that group. Putting it inside would make "an employer cause is never
+// restricted" false, and the outer level would stop being readable on its own.
 data SeparationReason =
-    VoluntaryResignation | ContractExpiry | MandatoryRetirement | EmployerCause | Death
+    VoluntaryResignation
+  | ContractExpiry
+  | MandatoryRetirement
+  | EmployerCause
+  | DismissalForMisconduct
+  | Death
 
 // === The states of employment ===
 

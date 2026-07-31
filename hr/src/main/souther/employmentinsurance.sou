@@ -1,0 +1,500 @@
+// Employment insurance: who is insured, what the premium is, and what somebody who leaves gets.
+//
+// The coverage test is four conditions and no arithmetic, which makes it the small module here. What it
+// carries instead is the *benefit* side, and that is where the statute puts a table: how many days of
+// basic allowance somebody is entitled to depends on why they left, how old they are, and how long they
+// were insured — five bands by five bands, twice.
+//
+// What is on show:
+//   - A five-by-five statutory matrix as a nested match, so adding a band is a compile error in the
+//     places that have to answer for it rather than a claim that quietly returns the wrong number of
+//     days. It is the same argument example.pipeline makes for the ten Salesforce stages, at the size
+//     where it starts to hurt.
+//   - The table's holes, which the type cannot state. Twenty insured years cannot have accrued before
+//     the age of thirty and a general recipient cannot be entitled with under a year, so two cells of
+//     the printed table are blank — and exhaustiveness asks for an arm for each of them anyway, with
+//     nothing to write there that says the combination cannot arise. Finding F30.
+//   - A condition derived rather than asked for. "Expected to be employed for 31 days or more" is read
+//     off the contract term, because an indefinite contract always is and a fixed one says when it
+//     ends — so there is no separate field for somebody to fill in inconsistently.
+//   - The separation reason read at the outer level. Every employer cause makes a specified-eligible
+//     recipient and none of them is restricted; only the dismissal that is the worker's own fault is,
+//     and it sits outside that group in example.employee for exactly this reason.
+module example.employmentinsurance exposing (
+    InsuredMonths,
+    InsuredHistory,
+    BenefitDays,
+    BusinessCategory,
+    GeneralBusiness,
+    AgricultureForestryFisheryOrSake,
+    ConstructionBusiness,
+    InsuranceRate,
+    InsuranceRates,
+    InsuredCategory,
+    GeneralInsured,
+    ElderlyInsured,
+    CoverageExclusion,
+    WeeklyHoursUnderTwenty,
+    EmploymentUnderThirtyOneDays,
+    DaytimeStudentExcluded,
+    OfficerExcluded,
+    NotInsured,
+    InsuredStatus,
+    SeparationCategory,
+    SpecifiedEligibleRecipient,
+    SpecifiedReasonRecipient,
+    GeneralRecipient,
+    NoClaimant,
+    BenefitRestriction,
+    NoRestriction,
+    RestrictedOneMonth,
+    RestrictedThreeMonths,
+    AgeBand,
+    UnderThirty,
+    ThirtyToThirtyFour,
+    ThirtyFiveToFortyFour,
+    FortyFiveToFiftyNine,
+    SixtyToSixtyFour,
+    ElderlyJobSeeker,
+    InsuredPeriodBand,
+    UnderOneYear,
+    OneToFiveYears,
+    FiveToTenYears,
+    TenToTwentyYears,
+    TwentyYearsOrMore,
+    weeklyHoursFloor,
+    judgeInsuredStatus,
+    judgeInsuredCategory,
+    classifySeparation,
+    judgeBenefitRestriction,
+    judgeBenefitEntitlement,
+    Entitled,
+    InsufficientInsuredPeriod,
+    bandOfAge,
+    bandOfInsuredPeriod,
+    prescribedBenefitDays,
+    insuranceRatesOf,
+    employeePremiumFor
+)
+
+import example.employee (
+    Yen, toYen, OfficeId, EmploymentTerms, EmploymentType, FullTime, ContractEmployee, PartTime, Executive,
+    ContractTerm, Indefinite, TermUntil, StudentStatus, DaytimeStudent, NotDaytimeStudent,
+    MonthlyRemuneration, WeeklyScheduledHours,
+    SeparationReason, VoluntaryResignation, ContractExpiry, MandatoryRetirement,
+    EmployerCause, Dismissal, BusinessClosure, EncouragedResignation, DismissalForMisconduct, Death,
+    RenewalIntent, RenewalSought, RenewalNotSought,
+    attainedAgeOn, totalRemuneration
+)
+
+// === Measures ===
+
+data InsuredMonths = Int
+    invariant value >= 0
+
+// Why: the entitlement test looks back two years for an ordinary recipient and one year for a specified
+// one, so the two counts are different numbers and both have to be carried. The invariant is the one
+// relation between them that always holds, and stating it here means neither rule below has to check it.
+data InsuredHistory =
+    { monthsInTwoYears: InsuredMonths
+    , monthsInOneYear: InsuredMonths
+    }
+    invariant monthsInOneYear <= monthsInTwoYears
+
+// Why: the basic allowance runs from 90 days to 330 (雇用保険法第22条・第23条). A number outside that is
+// not a prescribed period, so the bound is on the type rather than in whatever read the table last.
+data BenefitDays = Int
+    invariant value >= 90 && value <= 330
+
+// Why: the premium rate is set by the business the office is in — construction and the primary
+// industries pay more, because they lay people off more (雇用保険法第12条). Which business it is decides
+// a rate, so it is a case rather than a code somebody looks up elsewhere.
+data BusinessCategory = GeneralBusiness | AgricultureForestryFisheryOrSake | ConstructionBusiness
+
+data InsuranceRate = Decimal
+    invariant value >= 0.0m && value <= 1.0m
+
+// The two sides are not halves here. The employer pays roughly two thirds, because the employment-
+// stabilisation and human-resources-development levies are the employer's alone.
+data InsuranceRates =
+    { employee: InsuranceRate
+    , employer: InsuranceRate
+    }
+
+// === Coverage ===
+
+data WeeklyHoursUnderTwenty      = { hours: WeeklyScheduledHours }
+data EmploymentUnderThirtyOneDays = { endsOn: Date }
+
+data CoverageExclusion =
+    WeeklyHoursUnderTwenty
+  | EmploymentUnderThirtyOneDays
+  | DaytimeStudentExcluded
+  | OfficerExcluded
+
+data NotInsured = { reasons: List<CoverageExclusion> }
+    invariant List.length(reasons) >= 1
+
+data InsuredStatus = { category: InsuredCategory }
+
+// Why: somebody scheduled for 20 hours a week or more and expected to be employed for 31 days or more
+// is insured (雇用保険法第6条第1号・第2号). A daytime student is excluded whatever their hours
+// (同条第4号), and an officer of a company is not a worker at all, so neither is reached by the first
+// two conditions. The 2028 reduction of the hours floor to ten is legislated and not yet in force; when
+// it commences it is this one value that moves.
+//
+// Naming the limit costs the reader of it a construction authority: a value is elaborated where it is
+// named, so `judgeInsuredStatus` below declares `constructs WeeklyScheduledHours` although it originates
+// no such value and only compares against this one. A called *behavior*'s construction set stays its
+// own — judgeInsuredCategory's GeneralInsured is not declared here — so the asymmetry is between a
+// behavior and a value, not between reading and building. `constructs` is for telling a behavior that
+// creates a value from one that passes an existing one through, and a limit written down makes every
+// rule that reads it look like the former. Finding F31.
+let weeklyHoursFloor = WeeklyScheduledHours(20.0m)
+
+// Derived rather than asked for: an indefinite contract is always expected to run past 31 days, and a
+// fixed one says when it ends. A separate "expected days" field would be a second place for the same
+// fact to be recorded, and the two would disagree. The answer is a 0-or-1-element list rather than a
+// Bool, because the reason that comes out of it names the date the contract ends.
+let contractEnd (contract: ContractTerm, on: Date): List<Date> =
+    match contract with
+        | Indefinite           -> []
+        | TermUntil { endsOn } -> [ endsOn | Date.daysBetween(on, endsOn) + 1 < 31 ]
+
+let isOfficer (t: EmploymentType): Bool =
+    match t with
+        | Executive                              -> true
+        | FullTime | ContractEmployee | PartTime -> false
+
+let isDaytimeStudent (s: StudentStatus): Bool =
+    match s with
+        | DaytimeStudent    -> true
+        | NotDaytimeStudent -> false
+
+// Why: an officer is excluded on their own, so the hours and the contract are not asked of one. Listing
+// every reason still means listing every reason that applies to the person in front of you, and telling
+// an officer their hours are short would be answering a question nobody asked.
+let coverageExclusions (terms: EmploymentTerms, on: Date): List<CoverageExclusion> =
+    if isOfficer(terms.employmentType)
+    then [ OfficerExcluded ]
+    else [ WeeklyHoursUnderTwenty { hours = terms.weeklyHours }
+         | terms.weeklyHours.value < weeklyHoursFloor.value ]
+      ++ List.map(d -> EmploymentUnderThirtyOneDays { endsOn = d }, contractEnd(terms.contract, on))
+      ++ [ DaytimeStudentExcluded | isDaytimeStudent(terms.student) ]
+
+// Why: somebody insured from the age of 65 is an elderly insured person, whose benefit is a lump-sum
+// job-seeker's allowance rather than the daily basic allowance (雇用保険法第37条の2). The age is the
+// attained one, as everywhere else.
+data InsuredCategory = GeneralInsured | ElderlyInsured
+
+behavior judgeInsuredCategory : (birthday: Date, on: Date) -> GeneralInsured | ElderlyInsured
+    constructs GeneralInsured, ElderlyInsured
+
+let judgeInsuredCategory (birthday, on) =
+    if attainedAgeOn(birthday, on) >= 65 then ElderlyInsured else GeneralInsured
+
+behavior judgeInsuredStatus : (terms: EmploymentTerms, birthday: Date, on: Date)
+        -> InsuredStatus | NotInsured
+    constructs InsuredStatus, NotInsured, OfficerExcluded, WeeklyHoursUnderTwenty,
+               EmploymentUnderThirtyOneDays, DaytimeStudentExcluded,
+               WeeklyScheduledHours   // 下限値を名前で読むだけで要る。Finding F31
+
+// judgeInsuredCategory depends on nothing, so it is called by name rather than injected — the seam a
+// `depends on` marks is the outside world, and an age is not outside anything.
+let judgeInsuredStatus (terms, birthday, on) =
+    if NotInsured { reasons = coverageExclusions(terms, on) } as excluded
+    then excluded
+    else InsuredStatus { category = judgeInsuredCategory(birthday, on) }
+
+// === The premium ===
+
+// The rates move every April and differ by business, so they are read rather than written down. Like
+// example.socialinsurance's, this is a two-argument injected behavior: which business, and when.
+behavior insuranceRatesOf : (category: BusinessCategory, on: Date) -> InsuranceRates
+    constructs InsuranceRates
+
+// Why: the employee's share is the whole monthly wage at the employee rate, settled to the yen by the
+// same 50-sen rule every other deduction follows — which is why toYen lives in example.employee rather
+// than in either insurance module.
+behavior employeePremiumFor : (
+    remuneration: MonthlyRemuneration,
+    category:     BusinessCategory,
+    on:           Date
+) -> Yen
+    depends on insuranceRatesOf
+
+let employeePremiumFor (remuneration, category, on, insuranceRatesOf) =
+    toYen(Decimal.fromInt(totalRemuneration(remuneration).value)
+          * insuranceRatesOf(category, on).employee.value)
+
+// === Why somebody left, and what that makes them ===
+
+// Why: a specified-eligible recipient is somebody who lost their job for the employer's reasons —
+// bankruptcy, dismissal, being pressed to resign (雇用保険法第23条第2項). A specified-reason recipient
+// is somebody whose fixed-term contract was not renewed although they wanted it to be, or who left for a
+// reason the statute accepts as justified (同法第13条第3項). Everybody else is an ordinary recipient.
+data SeparationCategory =
+    SpecifiedEligibleRecipient | SpecifiedReasonRecipient | GeneralRecipient
+
+// Death is not a benefit question. Nobody claims the basic allowance, and the money that is owed is a
+// different provision entirely — so it is a case beside the three rather than a fourth kind of them.
+behavior classifySeparation : (reason: SeparationReason) -> SeparationCategory | NoClaimant
+    constructs SpecifiedEligibleRecipient, SpecifiedReasonRecipient, GeneralRecipient, NoClaimant
+
+let classifySeparation (reason) =
+    match reason with
+        // The outer level is enough here: bankruptcy, dismissal and an encouraged resignation are one
+        // group to the benefit rules. Which of the three it was is read by example.filing, because the
+        // separation certificate carries a different code for each.
+        | EmployerCause          -> SpecifiedEligibleRecipient
+        | ContractExpiry { renewal } ->
+            match renewal with
+                | RenewalSought    -> SpecifiedReasonRecipient
+                | RenewalNotSought -> GeneralRecipient
+        | VoluntaryResignation   -> GeneralRecipient
+        | MandatoryRetirement    -> GeneralRecipient
+        | DismissalForMisconduct -> GeneralRecipient
+        | Death                  -> NoClaimant
+
+// Why: a voluntary resignation carries a one-month restriction, cut from two by the April 2025
+// amendment; a dismissal for a grave reason attributable to the worker carries three
+// (雇用保険法第33条第1項). Retirement at the mandatory age and the end of a fixed term carry none — a
+// person who could not have stayed did not choose to leave.
+data BenefitRestriction = NoRestriction | RestrictedOneMonth | RestrictedThreeMonths
+
+behavior judgeBenefitRestriction : (reason: SeparationReason)
+        -> NoRestriction | RestrictedOneMonth | RestrictedThreeMonths
+    constructs NoRestriction, RestrictedOneMonth, RestrictedThreeMonths
+
+let judgeBenefitRestriction (reason) =
+    match reason with
+        | VoluntaryResignation   -> RestrictedOneMonth
+        | DismissalForMisconduct -> RestrictedThreeMonths
+        | EmployerCause | ContractExpiry | MandatoryRetirement | Death -> NoRestriction
+
+// === Entitlement ===
+
+data InsufficientInsuredPeriod = { required: InsuredMonths, actual: InsuredMonths }
+
+// Why: an ordinary recipient needs 12 months of insured period in the two years before leaving; a
+// specified-eligible or specified-reason recipient needs 6 in the one year before (雇用保険法第13条).
+// The two windows are why InsuredHistory carries two counts rather than one.
+behavior judgeBenefitEntitlement : (category: SeparationCategory, history: InsuredHistory)
+        -> Entitled | InsufficientInsuredPeriod
+    constructs Entitled, InsufficientInsuredPeriod, InsuredMonths
+
+let judgeBenefitEntitlement (category, history) =
+    match category with
+        | GeneralRecipient ->
+            if history.monthsInTwoYears >= 12
+            then Entitled
+            else InsufficientInsuredPeriod { required = InsuredMonths(12)
+                                           , actual = history.monthsInTwoYears }
+        | SpecifiedEligibleRecipient | SpecifiedReasonRecipient ->
+            if history.monthsInOneYear >= 6
+            then Entitled
+            else InsufficientInsuredPeriod { required = InsuredMonths(6)
+                                           , actual = history.monthsInOneYear }
+
+// === The prescribed number of days ===
+
+data AgeBand =
+    UnderThirty | ThirtyToThirtyFour | ThirtyFiveToFortyFour | FortyFiveToFiftyNine | SixtyToSixtyFour
+
+data InsuredPeriodBand =
+    UnderOneYear | OneToFiveYears | FiveToTenYears | TenToTwentyYears | TwentyYearsOrMore
+
+// Somebody of 65 or over is not on this table at all: they draw the lump-sum job-seeker's allowance
+// instead, which is a number of days of the basic allowance rather than a period of entitlement. So the
+// banding answers with them by name rather than with a band that would be a lie.
+behavior bandOfAge : (birthday: Date, on: Date) -> AgeBand | ElderlyJobSeeker
+    constructs UnderThirty, ThirtyToThirtyFour, ThirtyFiveToFortyFour, FortyFiveToFiftyNine,
+               SixtyToSixtyFour, ElderlyJobSeeker
+
+let bandOfAge (birthday, on) = {
+    let age = attainedAgeOn(birthday, on)
+    if age < 30 then UnderThirty
+    else if age < 35 then ThirtyToThirtyFour
+    else if age < 45 then ThirtyFiveToFortyFour
+    else if age < 60 then FortyFiveToFiftyNine
+    else if age < 65 then SixtyToSixtyFour
+    else ElderlyJobSeeker
+}
+
+behavior bandOfInsuredPeriod : (months: InsuredMonths) -> InsuredPeriodBand
+    constructs UnderOneYear, OneToFiveYears, FiveToTenYears, TenToTwentyYears, TwentyYearsOrMore
+
+let bandOfInsuredPeriod (months) =
+    if months < 12 then UnderOneYear
+    else if months < 60 then OneToFiveYears
+    else if months < 120 then FiveToTenYears
+    else if months < 240 then TenToTwentyYears
+    else TwentyYearsOrMore
+
+// 特定受給資格者及び特定理由離職者の所定給付日数（雇用保険法第23条）. Five age bands by five period
+// bands, written as a nested match so that adding a band is a compile error in the five places that have
+// to answer for it. A lookup keyed on two integers would answer the same and say nothing when the table
+// changed under it.
+//
+// Two of the twenty-five cells are blank in the printed table. Twenty insured years cannot have accrued
+// before the age of thirty, so the under-thirty row stops at ten-to-twenty — and exhaustiveness asks for
+// the arm regardless, with nothing to write there that says the combination cannot arise. It answers the
+// cell above it, which is the least wrong number available. Finding F30.
+let specifiedBenefitDays (age: AgeBand, period: InsuredPeriodBand): BenefitDays =
+    match age with
+        | UnderThirty ->
+            match period with
+                | UnderOneYear      -> BenefitDays(90)
+                | OneToFiveYears    -> BenefitDays(90)
+                | FiveToTenYears    -> BenefitDays(120)
+                | TenToTwentyYears  -> BenefitDays(180)
+                | TwentyYearsOrMore -> BenefitDays(180)   // 表に欄なし。Finding F30
+        | ThirtyToThirtyFour ->
+            match period with
+                | UnderOneYear      -> BenefitDays(90)
+                | OneToFiveYears    -> BenefitDays(120)
+                | FiveToTenYears    -> BenefitDays(180)
+                | TenToTwentyYears  -> BenefitDays(210)
+                | TwentyYearsOrMore -> BenefitDays(240)
+        | ThirtyFiveToFortyFour ->
+            match period with
+                | UnderOneYear      -> BenefitDays(90)
+                | OneToFiveYears    -> BenefitDays(150)
+                | FiveToTenYears    -> BenefitDays(180)
+                | TenToTwentyYears  -> BenefitDays(240)
+                | TwentyYearsOrMore -> BenefitDays(270)
+        | FortyFiveToFiftyNine ->
+            match period with
+                | UnderOneYear      -> BenefitDays(90)
+                | OneToFiveYears    -> BenefitDays(180)
+                | FiveToTenYears    -> BenefitDays(240)
+                | TenToTwentyYears  -> BenefitDays(270)
+                | TwentyYearsOrMore -> BenefitDays(330)
+        | SixtyToSixtyFour ->
+            match period with
+                | UnderOneYear      -> BenefitDays(90)
+                | OneToFiveYears    -> BenefitDays(150)
+                | FiveToTenYears    -> BenefitDays(180)
+                | TenToTwentyYears  -> BenefitDays(210)
+                | TwentyYearsOrMore -> BenefitDays(240)
+
+// 一般の受給資格者の所定給付日数. Age does not enter it, which is the whole difference the specified
+// categories buy. The under-a-year cell is the second blank: an ordinary recipient with under twelve
+// months is not entitled at all, so judgeBenefitEntitlement has already turned them away by the time
+// this is asked. Finding F30 again.
+let generalBenefitDays (period: InsuredPeriodBand): BenefitDays =
+    match period with
+        | UnderOneYear      -> BenefitDays(90)    // 表に欄なし。Finding F30
+        | OneToFiveYears    -> BenefitDays(90)
+        | FiveToTenYears    -> BenefitDays(90)
+        | TenToTwentyYears  -> BenefitDays(120)
+        | TwentyYearsOrMore -> BenefitDays(150)
+
+// Why: a specified-reason recipient is given the specified-eligible table rather than the ordinary one.
+// It is a transitional measure that has been extended more than once and is currently in force to the
+// end of March 2027 (雇用保険法附則第4条), so the two categories sharing an arm here is a date-limited
+// fact rather than a permanent one.
+behavior prescribedBenefitDays : (
+    category: SeparationCategory,
+    age:      AgeBand,
+    period:   InsuredPeriodBand
+) -> BenefitDays
+    constructs BenefitDays
+
+let prescribedBenefitDays (category, age, period) =
+    match category with
+        | SpecifiedEligibleRecipient | SpecifiedReasonRecipient -> specifiedBenefitDays(age, period)
+        | GeneralRecipient                                      -> generalBenefitDays(period)
+
+// === The rows ===
+
+let fullTimeTerms = EmploymentTerms
+    { officeId = OfficeId("13-000001")
+    , employmentType = FullTime
+    , weeklyHours = WeeklyScheduledHours(40.0m)
+    , contract = Indefinite
+    , student = NotDaytimeStudent
+    }
+
+let studentTerms = EmploymentTerms
+    { ...fullTimeTerms
+    , employmentType = PartTime
+    , weeklyHours = WeeklyScheduledHours(16.0m)
+    , student = DaytimeStudent
+    }
+
+let shortContractTerms = EmploymentTerms
+    { ...fullTimeTerms
+    , employmentType = ContractEmployee
+    , contract = TermUntil { endsOn = Date("2026-07-20") }
+    }
+
+let officerTerms = EmploymentTerms { ...fullTimeTerms, employmentType = Executive }
+
+example judgeInsuredStatus
+    | "forty hours on an indefinite contract is insured" :
+        (fullTimeTerms, Date("1990-04-01"), Date("2026-07-01"))
+        -> InsuredStatus { category = GeneralInsured }
+    | "a daytime student on sixteen hours fails both conditions, and hears both" :
+        (studentTerms, Date("1990-04-01"), Date("2026-07-01"))
+        -> NotInsured
+    | "a contract with nineteen days left to run is not an expectation of thirty-one" :
+        (shortContractTerms, Date("1990-04-01"), Date("2026-07-01"))
+        -> NotInsured
+    | "an officer is excluded on their own, and is not told their hours are short" :
+        (officerTerms, Date("1990-04-01"), Date("2026-07-01"))
+        -> NotInsured
+
+example classifySeparation
+    | "a dismissal is an employer cause, and the benefit rules do not ask which kind" :
+        (Dismissal) -> SpecifiedEligibleRecipient
+    | "a fixed term that ended although renewal was wanted is a specified reason" :
+        (ContractExpiry { renewal = RenewalSought }) -> SpecifiedReasonRecipient
+    | "the same expiry with no renewal wanted is an ordinary one" :
+        (ContractExpiry { renewal = RenewalNotSought }) -> GeneralRecipient
+    | "a death leaves nobody to claim" :
+        (Death) -> NoClaimant
+
+example judgeBenefitRestriction
+    | "resigning is restricted for one month since the 2025 amendment" :
+        (VoluntaryResignation) -> RestrictedOneMonth
+    | "a dismissal the worker brought on themselves is restricted for three" :
+        (DismissalForMisconduct) -> RestrictedThreeMonths
+    | "reaching the mandatory retirement age is not a choice, so nothing is restricted" :
+        (MandatoryRetirement) -> NoRestriction
+
+example judgeBenefitEntitlement
+    | "eleven months in two years is not enough for an ordinary recipient" :
+        (GeneralRecipient, InsuredHistory { monthsInTwoYears = InsuredMonths(11)
+                                          , monthsInOneYear = InsuredMonths(11) })
+        -> InsufficientInsuredPeriod { required = InsuredMonths(12), actual = InsuredMonths(11) }
+    | "the same eleven months is enough for somebody who was dismissed" :
+        (SpecifiedEligibleRecipient, InsuredHistory { monthsInTwoYears = InsuredMonths(11)
+                                                    , monthsInOneYear = InsuredMonths(11) })
+        -> Entitled
+
+example prescribedBenefitDays
+    | "a fifty-year-old dismissed after twenty-two years draws the longest period there is" :
+        (SpecifiedEligibleRecipient, FortyFiveToFiftyNine, TwentyYearsOrMore) -> BenefitDays(330)
+    | "the same person resigning draws a hundred and fifty days, and age does not enter it" :
+        (GeneralRecipient, FortyFiveToFiftyNine, TwentyYearsOrMore) -> BenefitDays(150)
+    | "a specified-reason recipient reads the specified table, for now" :
+        (SpecifiedReasonRecipient, ThirtyFiveToFortyFour, FiveToTenYears) -> BenefitDays(180)
+
+fake insuranceRatesOf
+    | (GeneralBusiness, Date("2026-07-01"))
+        -> InsuranceRates { employee = InsuranceRate(0.0055m), employer = InsuranceRate(0.0090m) }
+    | _ -> InsuranceRates { employee = InsuranceRate(0.0065m), employer = InsuranceRate(0.0105m) }
+
+let pay300k = MonthlyRemuneration
+    { baseSalary = Yen(260000)
+    , scheduledAllowances = Yen(20000)
+    , excludedAllowances = Yen(20000)
+    , variableAllowances = Yen(0)
+    }
+
+example employeePremiumFor
+    | "300,000 yen at 5.5 per thousand is 1,650 yen, commuting allowance and all" :
+        (pay300k, GeneralBusiness, Date("2026-07-01")) -> Yen(1650)
+    | "construction pays more, and it is the whole wage that is charged" :
+        (pay300k, ConstructionBusiness, Date("2026-07-01")) -> Yen(1950)

@@ -99,7 +99,7 @@ import example.employee (
     ActiveEmployee, Employed, OnLeave,
     LeaveKind, SickLeave, MaternityLeave, ChildcareLeave, CaregiverLeave,
     OfficeId, ContractTerm, Indefinite, TermUntil,
-    attainedAgeOn, scheduledWage, fixedRemuneration, totalRemuneration
+    attainedAgeOn, scheduledWage, fixedRemuneration, totalRemuneration, toYen
 )
 
 // === Grades and months ===
@@ -523,8 +523,8 @@ data Premium =
 let shareOf (standard: Yen, rate: ContributionRate): PremiumShare = {
     let exact = Decimal.fromInt(standard.value) * rate.value
     let total = Decimal.toInt(exact, DOWN)
-    let employee = Decimal.toInt(exact * 0.5m, HALF_DOWN)
-    PremiumShare { employee = Yen(employee), employer = Yen(total - employee) }
+    let employee = toYen(exact * 0.5m)
+    PremiumShare { employee = employee, employer = Yen(total - employee.value) }
 }
 
 let noShare = PremiumShare { employee = Yen(0), employer = Yen(0) }
