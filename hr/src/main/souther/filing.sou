@@ -1,0 +1,371 @@
+// The notification: what the other seven modules decided, on its way to the authority that has to be
+// told. Every determination upstream ends in a form with a deadline, and this is where those two facts
+// meet — which form, and by when.
+//
+// It is also where the separation reason is finally read at the leaf. example.employmentinsurance reads
+// the outer level, because every employer cause is one group to the benefit rules; the separation
+// certificate writes a different code for a dismissal, a closure and an encouraged resignation, so the
+// nesting example.employee declared earns itself here.
+//
+// What is on show:
+//   - Six spread layers and a state per stage, so a transition takes the exact state it advances from.
+//     There is no status column and no check that a filing was reviewed before it was transmitted: a
+//     receipt number exists only on a filing that has one, and the call that would transmit a draft does
+//     not typecheck.
+//   - Deadlines computed rather than tabulated. Five days from the event, ten days from the day after
+//     it, the tenth of the following month, the tenth of July — each is date arithmetic from the event,
+//     so the answer is a date somebody can be told rather than a rule they have to apply themselves.
+//   - A deadline that is honestly absent. The occasional revision is filed "promptly" and no statute
+//     names a day, so the answer is a case and not a date far in the future that a report would treat as
+//     a real one.
+//   - The upstream sum read as the form it implies. Which notification a grade determination produces is
+//     a match over example.socialinsurance's DeterminationBasis, so a fourth way of deciding a grade
+//     would be a compile error here rather than a filing nobody produced.
+module example.filing exposing (
+    NotificationKind,
+    CoverageAcquisition,
+    CoverageLoss,
+    RegularDeterminationFiling,
+    OccasionalRevisionFiling,
+    DependantChange,
+    NameChange,
+    AddressChange,
+    EmploymentInsuranceAcquisition,
+    SeparationCertificate,
+    ReceiptNumber,
+    DocumentId,
+    SeparationCode,
+    ReturnReason,
+    MissingDocument,
+    InconsistentWithRecord,
+    WrongOffice,
+    FilingCommon,
+    SubmittedCommon,
+    ReviewedCommon,
+    FiledCommon,
+    Drafted,
+    Submitted,
+    Reviewed,
+    Filed,
+    Accepted,
+    Returned,
+    Filing,
+    FilingDeadline,
+    NoStatutoryDeadline,
+    WithinDeadline,
+    Overdue,
+    notificationForDetermination,
+    deadlineFor,
+    judgeFilingTimeliness,
+    separationCodeFor,
+    NoSeparationCertificate,
+    prepare,
+    submit,
+    SubmissionBeforePreparation,
+    review,
+    ReviewBeforeSubmission,
+    transmit,
+    TransmissionBeforeReview,
+    accept,
+    returnForCorrection,
+    correct
+)
+
+import example.employee (
+    EmployeeId,
+    SeparationReason, VoluntaryResignation, ContractExpiry, MandatoryRetirement,
+    EmployerCause, Dismissal, BusinessClosure, EncouragedResignation, DismissalForMisconduct, Death,
+    RenewalIntent, RenewalSought, RenewalNotSought
+)
+import example.socialinsurance (
+    DeterminationBasis, OnAcquisition, RegularDetermination, OccasionalRevision
+)
+
+// === Which form ===
+
+data NotificationKind =
+    CoverageAcquisition               // 健康保険・厚生年金保険 被保険者資格取得届
+  | CoverageLoss                      // 健康保険・厚生年金保険 被保険者資格喪失届
+  | RegularDeterminationFiling        // 被保険者報酬月額算定基礎届
+  | OccasionalRevisionFiling          // 被保険者報酬月額変更届
+  | DependantChange                   // 健康保険 被扶養者(異動)届
+  | NameChange                        // 被保険者氏名変更届
+  | AddressChange                     // 被保険者住所変更届
+  | EmploymentInsuranceAcquisition    // 雇用保険 被保険者資格取得届
+  | SeparationCertificate             // 雇用保険 被保険者離職証明書
+
+// Why: the three ways of deciding a standard monthly remuneration produce three different forms, which
+// is the reason example.socialinsurance keeps the basis on the determination rather than inferring it
+// from the effective month. A fourth way of deciding a grade would be a compile error here.
+behavior notificationForDetermination : (basis: DeterminationBasis) -> NotificationKind
+    constructs CoverageAcquisition, RegularDeterminationFiling, OccasionalRevisionFiling
+
+let notificationForDetermination (basis) =
+    match basis with
+        | OnAcquisition        -> CoverageAcquisition
+        | RegularDetermination -> RegularDeterminationFiling
+        | OccasionalRevision   -> OccasionalRevisionFiling
+
+// === By when ===
+
+let monthStart (d: Date): Date = Date.addDays(1 - Date.day(d), d)
+
+// Why: the health and pension notifications are due within five days of the fact
+// (健康保険法施行規則第24条・第29条), the employment-insurance acquisition by the tenth of the month
+// after the one the fact falls in (雇用保険法施行規則第6条), the separation certificate within ten days
+// of the day after leaving (同規則第7条), and the regular determination by 10 July
+// (健康保険法施行規則第25条). The occasional revision is filed "promptly" and no provision names a day,
+// which is a real answer and gets a case of its own rather than a date nobody can be held to.
+// The answer is a date and would rather be written as one, but a member of an output union has to be a
+// data this module declares — a primitive is refused here exactly as an imported case is
+// (example.payroll hit the same wall with a Yen). So the date is wrapped, and every behavior in this
+// repository that answers "a plain value, or a reason there is none" ends up declaring one of these.
+// Finding F33.
+data FilingDeadline = Date
+
+behavior deadlineFor : (kind: NotificationKind, eventOn: Date) -> FilingDeadline | NoStatutoryDeadline
+    constructs FilingDeadline, NoStatutoryDeadline
+
+let deadlineFor (kind, eventOn) =
+    match kind with
+        | CoverageAcquisition | CoverageLoss | DependantChange | NameChange | AddressChange ->
+            FilingDeadline(Date.addDays(5, eventOn))
+        | EmploymentInsuranceAcquisition ->
+            // 翌月10日. The tenth of the month after the event's, reached by walking from that month's
+            // first day rather than by writing a date down.
+            FilingDeadline(Date.addDays(9, Date.addMonths(1, monthStart(eventOn))))
+        | SeparationCertificate ->
+            // 離職の日の翌日から10日以内.
+            FilingDeadline(Date.addDays(10, Date.addDays(1, eventOn)))
+        | RegularDeterminationFiling ->
+            // 7月10日. July of the event's own year, counted in months from the month it fell in.
+            FilingDeadline(Date.addDays(9, Date.addMonths(7 - Date.month(eventOn), monthStart(eventOn))))
+        | OccasionalRevisionFiling -> NoStatutoryDeadline
+
+data Overdue = { deadline: Date, filedOn: Date, daysLate: Int }
+
+behavior judgeFilingTimeliness : (deadline: Date, filedOn: Date) -> WithinDeadline | Overdue
+    constructs WithinDeadline, Overdue
+
+let judgeFilingTimeliness (deadline, filedOn) = {
+    guard Date.daysBetween(filedOn, deadline) < 0 else WithinDeadline
+    Overdue { deadline = deadline
+            , filedOn = filedOn
+            , daysLate = Date.daysBetween(deadline, filedOn)
+            }
+}
+
+// === The separation code ===
+
+// Why: the separation certificate carries a two-character code that decides how the claim is treated,
+// and it distinguishes what the benefit rules do not. 1A is a dismissal, 1B a closure and 3A an
+// encouraged resignation — all three specified-eligible, all three coded apart — while 2A and 2D are the
+// two ways a fixed term can end and differ only in whether renewal was wanted. This is the read that
+// makes EmployerCause worth being a level of its own.
+data SeparationCode = String
+    invariant String.matches("[0-9][A-E]", value)
+
+behavior separationCodeFor : (reason: SeparationReason) -> SeparationCode | NoSeparationCertificate
+    constructs SeparationCode, NoSeparationCertificate
+
+let separationCodeFor (reason) =
+    match reason with
+        | EmployerCause as cause ->
+            match cause with
+                | Dismissal             -> SeparationCode("1A")
+                | BusinessClosure       -> SeparationCode("1B")
+                | EncouragedResignation -> SeparationCode("3A")
+        | ContractExpiry { renewal } ->
+            match renewal with
+                | RenewalSought    -> SeparationCode("2A")
+                | RenewalNotSought -> SeparationCode("2D")
+        | VoluntaryResignation   -> SeparationCode("4D")
+        | MandatoryRetirement    -> SeparationCode("5E")
+        | DismissalForMisconduct -> SeparationCode("1A")
+        // Why: a death is notified by the loss form alone. There is no claim to make and nobody to hand
+        // a certificate to, so the answer is that there is no certificate rather than a code for one.
+        | Death                  -> NoSeparationCertificate
+
+// === The states of a filing ===
+
+data ReceiptNumber = String
+    invariant String.matches("[0-9]{16}", value)
+
+data DocumentId = String
+    invariant String.length(value) >= 1
+
+data ReturnReason = MissingDocument | InconsistentWithRecord | WrongOffice
+
+// Six layers, because a filing accumulates six commitments and each one is what the next stage needs to
+// exist. It is what makes `correct` honest: a returned filing goes back to a draft that has no receipt
+// number rather than to one holding a stale one.
+data FilingCommon =
+    { kind: NotificationKind
+    , subject: EmployeeId
+    , eventOn: Date
+    , preparedOn: Date
+    }
+
+data SubmittedCommon =
+    { ...FilingCommon
+    , submittedOn: Date
+    }
+    invariant Date.daysBetween(preparedOn, submittedOn) >= 0
+
+data ReviewedCommon =
+    { ...SubmittedCommon
+    , reviewedOn: Date
+    , reviewer: EmployeeId
+    }
+    invariant Date.daysBetween(submittedOn, reviewedOn) >= 0
+
+data FiledCommon =
+    { ...ReviewedCommon
+    , filedOn: Date
+    , receipt: ReceiptNumber
+    }
+    invariant Date.daysBetween(reviewedOn, filedOn) >= 0
+
+data Drafted   = { ...FilingCommon }
+data Submitted = { ...SubmittedCommon }
+data Reviewed  = { ...ReviewedCommon }
+data Filed     = { ...FiledCommon }
+data Accepted  = { ...FiledCommon, acceptedOn: Date, document: DocumentId }
+data Returned  = { ...FiledCommon, returnedOn: Date, reason: ReturnReason }
+
+data Filing = Drafted | Submitted | Reviewed | Filed | Accepted | Returned
+
+// === The transitions ===
+
+behavior prepare : (kind: NotificationKind, subject: EmployeeId, eventOn: Date, on: Date) -> Drafted
+    constructs Drafted
+
+let prepare (kind, subject, eventOn, on) =
+    Drafted { kind = kind, subject = subject, eventOn = eventOn, preparedOn = on }
+
+behavior submit : (draft: Drafted, on: Date) -> Submitted | SubmissionBeforePreparation
+    constructs Submitted, SubmissionBeforePreparation
+
+let submit (draft, on) = {
+    guard Date.daysBetween(draft.preparedOn, on) >= 0 else SubmissionBeforePreparation
+    Submitted { ...draft, submittedOn = on }
+}
+
+behavior review : (filing: Submitted, reviewer: EmployeeId, on: Date)
+        -> Reviewed | ReviewBeforeSubmission
+    constructs Reviewed, ReviewBeforeSubmission
+
+let review (filing, reviewer, on) = {
+    guard Date.daysBetween(filing.submittedOn, on) >= 0 else ReviewBeforeSubmission
+    Reviewed { ...filing, reviewedOn = on, reviewer = reviewer }
+}
+
+// The receipt number comes back from the electronic filing gateway, so it arrives as an argument rather
+// than being minted here. A filing with a receipt number is one that reached the authority, and there is
+// no other way to hold one.
+behavior transmit : (filing: Reviewed, receipt: ReceiptNumber, on: Date)
+        -> Filed | TransmissionBeforeReview
+    constructs Filed, TransmissionBeforeReview
+
+let transmit (filing, receipt, on) = {
+    guard Date.daysBetween(filing.reviewedOn, on) >= 0 else TransmissionBeforeReview
+    Filed { ...filing, filedOn = on, receipt = receipt }
+}
+
+behavior accept : (filing: Filed, document: DocumentId, on: Date) -> Accepted
+    constructs Accepted
+
+let accept (filing, document, on) = Accepted { ...filing, acceptedOn = on, document = document }
+
+behavior returnForCorrection : (filing: Filed, reason: ReturnReason, on: Date) -> Returned
+    constructs Returned
+
+let returnForCorrection (filing, reason, on) = Returned { ...filing, returnedOn = on, reason = reason }
+
+// Why a Drafted and not a Submitted: a returned filing is corrected and goes round again from the
+// beginning, so it loses its receipt number, its review and its submission — and the type says so rather
+// than a nulling-out somebody has to remember. A filing that was accepted has no correction path at all,
+// which is also what the types say by omission.
+behavior correct : (filing: Returned, on: Date) -> Drafted
+    constructs Drafted
+
+let correct (filing, on) =
+    Drafted { kind = filing.kind
+            , subject = filing.subject
+            , eventOn = filing.eventOn
+            , preparedOn = on
+            }
+
+// === The rows ===
+
+let acquisitionDraft = Drafted
+    { kind = CoverageAcquisition
+    , subject = EmployeeId("000001")
+    , eventOn = Date("2026-04-01")
+    , preparedOn = Date("2026-04-02")
+    }
+
+example notificationForDetermination
+    | "a grade decided on acquisition is the acquisition form" :
+        (OnAcquisition) -> CoverageAcquisition
+    | "one decided from April to June is the regular determination form" :
+        (RegularDetermination) -> RegularDeterminationFiling
+    | "one decided from a fixed-wage change is the revision form" :
+        (OccasionalRevision) -> OccasionalRevisionFiling
+
+example deadlineFor
+    | "five days from the day somebody joined" :
+        (CoverageAcquisition, Date("2026-04-01")) -> FilingDeadline(Date("2026-04-06"))
+    | "the employment-insurance form is due the tenth of the following month, not five days later" :
+        (EmploymentInsuranceAcquisition, Date("2026-04-01")) -> FilingDeadline(Date("2026-05-10"))
+    | "ten days from the day after leaving" :
+        (SeparationCertificate, Date("2026-09-30")) -> FilingDeadline(Date("2026-10-11"))
+    | "the regular determination is due on 10 July, whichever of April to June it was computed from" :
+        (RegularDeterminationFiling, Date("2026-04-01")) -> FilingDeadline(Date("2026-07-10"))
+    | "the revision is filed promptly, and no provision names a day" :
+        (OccasionalRevisionFiling, Date("2026-04-01")) -> NoStatutoryDeadline
+
+example judgeFilingTimeliness
+    | "the day before the deadline is in time" :
+        (Date("2026-04-06"), Date("2026-04-05")) -> WithinDeadline
+    | "the deadline itself is in time" :
+        (Date("2026-04-06"), Date("2026-04-06")) -> WithinDeadline
+    | "the day after it is two days late by the time it is filed on the eighth" :
+        (Date("2026-04-06"), Date("2026-04-08"))
+        -> Overdue { deadline = Date("2026-04-06"), filedOn = Date("2026-04-08"), daysLate = 2 }
+
+example separationCodeFor
+    | "a dismissal is 1A" : (Dismissal) -> SeparationCode("1A")
+    | "a closure is 1B, which the benefit rules never had to tell apart from a dismissal" :
+        (BusinessClosure) -> SeparationCode("1B")
+    | "being pressed to resign is 3A" : (EncouragedResignation) -> SeparationCode("3A")
+    | "a fixed term the employee wanted renewed is 2A" :
+        (ContractExpiry { renewal = RenewalSought }) -> SeparationCode("2A")
+    | "the same term they did not want renewed is 2D" :
+        (ContractExpiry { renewal = RenewalNotSought }) -> SeparationCode("2D")
+    | "resigning is 4D and reaching the retirement age is 5E" :
+        (MandatoryRetirement) -> SeparationCode("5E")
+    | "a death is notified by the loss form alone" : (Death) -> NoSeparationCertificate
+
+example submit
+    | "a draft submitted the day it was prepared" :
+        (acquisitionDraft, Date("2026-04-02"))
+        -> Submitted { ...acquisitionDraft, submittedOn = Date("2026-04-02") }
+    | "a submission dated before the draft existed is reported rather than stored" :
+        (acquisitionDraft, Date("2026-04-01")) -> SubmissionBeforePreparation
+
+let returnedFiling = Returned
+    { ...acquisitionDraft
+    , submittedOn = Date("2026-04-02")
+    , reviewedOn = Date("2026-04-03")
+    , reviewer = EmployeeId("000009")
+    , filedOn = Date("2026-04-03")
+    , receipt = ReceiptNumber("1234567890123456")
+    , returnedOn = Date("2026-04-10")
+    , reason = MissingDocument
+    }
+
+example correct
+    | "a returned filing goes back to a draft, and the receipt number does not come with it" :
+        (returnedFiling, Date("2026-04-11"))
+        -> Drafted { ...acquisitionDraft, preparedOn = Date("2026-04-11") }
