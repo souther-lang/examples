@@ -10,9 +10,10 @@
 //
 // What is on show:
 //   - A fifty-row statutory table as data rather than as a fifty-arm match. The grades and their lower
-//     bounds are read from a list, and the lookup is a fold — which is what a table this size wants. The
-//     table's own rules are on the type: fifty rows, no repeated grade. That it is *sorted* is not
-//     statable, because sortedness is a fold and an invariant may not fold. Finding F29.
+//     bounds are read from a list, and the lookup is a fold — which is what a table this size wants. All
+//     three of the table's rules are on the type, ascendingness included: it is a fold over neighbouring
+//     pairs rather than a quantifier over elements, and an invariant may name a total helper, so the
+//     property the lookup depends on is the property the type states.
 //   - The pension grades derived from the health grades rather than written twice. Pension grade 1 is
 //     health grade 4 and pension grade 32 is health grade 35, so the whole of the second table is a
 //     clamp — which is also what the law says it is.
@@ -141,13 +142,32 @@ data GradeRow =
     }
 
 // Why: the rows are contiguous and ascending, so a lookup is "the last row whose lower bound the
-// remuneration reaches" and nothing else has to be stored. Fifty rows and no repeated grade are on the
-// type; that the rows *ascend* is not, because sortedness is a fold over neighbouring pairs and an
-// invariant may not fold (§invariant-expressions). The one property the lookup actually depends on is
-// the one that cannot be written down. Finding F29.
+// remuneration reaches" and nothing else has to be stored — which makes ascendingness the one property
+// the lookup below actually depends on, and therefore the one worth stating. It is a fold over
+// neighbouring pairs rather than a quantifier over elements, so it is written as one: `List.fold` is
+// total and an invariant may name a total helper, so the pair carried through the accumulator does the
+// work `List.all` would do for a per-element rule.
 data GradeTable = List<GradeRow>
     invariant fiftyRows = List.length(value) == 50
     invariant distinctGrades = List.allUniqueBy(.grade, value)
+    invariant ascendingBounds = ascendingFrom(value)
+
+// The step of that fold, carrying the previous row's lower bound beside the verdict so far. The bound is
+// carried as a bare Int rather than as a Yen, because a helper an invariant names may not construct data
+// and the fold's seed would be a construction — the accumulator drops to the base type at the seed and
+// nowhere else.
+let stillAscending (carried: (Int, Bool), r: GradeRow): Bool = {
+    let (previous, ascending) = carried
+    ascending && previous <= r.lowerBound.value
+}
+
+let ascendingStep (carried: (Int, Bool), r: GradeRow): (Int, Bool) =
+    (r.lowerBound.value, stillAscending(carried, r))
+
+let ascendingFrom (rows: List<GradeRow>): Bool = {
+    let (last, ascending) = List.fold((carried, r) -> ascendingStep(carried, r), (0, true), rows)
+    ascending
+}
 
 let gradeRow (g: Int, standard: Int, lowerBound: Int): GradeRow =
     GradeRow { grade = HealthGrade(g), standard = Yen(standard), lowerBound = Yen(lowerBound) }

@@ -118,14 +118,6 @@ must be a data value — so the behavior opens the sum with a two-arm `match` wh
 name they bind. The fields a spread would copy are exactly the ones the read already reaches, so letting
 the spread follow the read would collapse the two arms into the one line the rule actually is.
 
-**F29. An invariant cannot say that a list is sorted.**
-`socialinsurance.sou`'s fifty-row grade table is looked up as "the last row whose lower bound the
-remuneration reaches", which is correct only because the rows ascend. `List.length(value) == 50` and
-`List.allUniqueBy(.grade, value)` are both statable as invariants; ascendingness is not, because it folds
-over neighbouring pairs and an invariant may not fold. The one property the lookup depends on is the one
-that cannot be written down. A total `List.isSortedBy` in the standard library would be admissible in an
-invariant exactly as `allUniqueBy` already is.
-
 **F30. A table with a hole has no way to say the hole is unreachable.**
 `employmentinsurance.sou` writes the benefit-days matrix as a nested match over two banded sums, which is
 what makes adding a band a compile error. Two of the twenty-five cells are blank in the printed table —
@@ -169,6 +161,14 @@ depends on itself and says nothing about what that means: [Examples[name=example
 — an internal failure rather than a diagnostic, and one that appeared only when the eighth module joined
 the build; seven of these files compile with the row written the short way. The four rates are restated
 locally as a workaround, which is the one thing in this example a reader should not copy.
+
+**F35. A construction inside a helper an invariant names is reported as an arbitrary Java call.**
+`socialinsurance.sou` states its grade table's ascendingness as a fold, and the fold wanted a `Yen(0)`
+seed. An invariant may not construct data and neither may a helper it names, which is the rule — but the
+diagnostic is `ARBITRARY JAVA CALL E1401`, "`Yen` is not a behavior or a builtin", hinting that a
+behavior should be declared and implemented from Java. The same helper compiles when a *behavior* names
+it, so the refusal is the invariant's and the message says nothing about invariants. The accumulator
+drops to the base type at the seed as a workaround.
 
 ## Running
 
