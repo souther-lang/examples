@@ -1,0 +1,417 @@
+// Who counts as somebody's dependant — asked twice, of the same person, and answered differently.
+//
+// Japan runs two dependant tests that share a word and nothing else. The social-insurance one asks
+// about *revenue* — everything coming in, commuting allowance and unemployment benefit included — and
+// admits a relative up to the third degree, with a cohabitation requirement for some of them. The
+// income-tax one asks about *income*, which is revenue after the employment-income deduction, admits
+// blood relatives to the sixth degree, and excludes both spouses and anyone under sixteen because they
+// are covered by other provisions. A spouse earning 1.2 million yen is a dependant for health insurance
+// and not for tax, and that pair of answers is the whole reason this module exists.
+//
+// What is on show:
+//   - Two measures of one thing kept apart by their types. AnnualRevenue and TotalIncome both wrap Int
+//     and do not compare with each other, so the rule that reads revenue cannot be handed income. A
+//     single "annualEarnings" field would let exactly that happen, and it is the mistake this domain
+//     actually makes.
+//   - Every failing reason reported, not the first. A dependant application is refused with a list of
+//     what is wrong with it, because the person filling the form has to fix all of them. `guard` returns
+//     one departure and stops, so the reasons are built as a value and the "at least one reason" rule is
+//     the blocked case's own invariant, attempted rather than restated.
+//   - The state that carries what its rule needs. Living apart has a remittance and living together has
+//     none, so Cohabitation is a sum with the figure on the case that uses it — the support test cannot
+//     be written against a person whose remittance is unknown, because there is no such value.
+//   - A ratio written as the multiplication it implies. "Less than half the insured person's revenue" is
+//     `revenue * 2 < insuredRevenue` and never a division, so a zero-revenue insured person is refused
+//     rather than aborting the computation.
+//   - The category as law and the amount as tax policy. Which category a dependant falls in is decided
+//     here; what that category is worth is decided in example.yearendadjustment, because the two change
+//     for different reasons — the categories have stood for decades and the amounts moved in 2025.
+module example.dependents exposing (
+    AnnualRevenue,
+    TotalIncome,
+    KinshipDegree,
+    KinshipKind,
+    ByBlood,
+    ByAffinity,
+    ImmediateRelative,
+    Spouse,
+    Child,
+    Grandchild,
+    Sibling,
+    LinealAscendant,
+    OtherRelative,
+    Relationship,
+    LivingTogether,
+    LivingApart,
+    Cohabitation,
+    DisabilityStatus,
+    Disabled,
+    NotDisabled,
+    DependantPerson,
+    RelativeTie,
+    Dependant,
+    InsuranceDependant,
+    InsuranceBlockReason,
+    OutsideKinshipRange,
+    CohabitationRequired,
+    RevenueOverCeiling,
+    RevenueOverHalfOfInsured,
+    RevenueOverRemittance,
+    CoveredByLatterStageMedical,
+    InsuranceDependencyBlocked,
+    DependantCategory,
+    GeneralDependant,
+    SpecifiedDependant,
+    ElderlyDependant,
+    CoresidentElderlyParent,
+    TaxDependant,
+    TaxBlockReason,
+    OutsideTaxKinshipRange,
+    NotSharingLivelihood,
+    IncomeOverTaxCeiling,
+    SpouseIsDeductedSeparately,
+    UnderSixteen,
+    TaxDependencyBlocked,
+    dependantIncomeCeiling,
+    qualifyAsInsuranceDependant,
+    classifyTaxDependant
+)
+
+import example.employee ( PersonalName, PersonName, KanaName, Yen, attainedAgeOn )
+
+// === The two measures ===
+
+// Why: the social-insurance test counts *revenue* — gross pay, commuting allowance, unemployment
+// benefit, a pension, everything arriving over the coming twelve months, taxable or not. It is a
+// forecast rather than a settled figure, which is why it is not the tax measure and never can be.
+data AnnualRevenue = Int
+    invariant value >= 0
+
+// Why: the income-tax test counts *total income*, which is revenue less the deduction that applies to
+// the kind of revenue it is — for a salary, the employment-income deduction. The two are different
+// numbers for the same person and neither is computable from the other, since somebody may have income
+// of more than one kind. So a dependant carries both, and each rule reads its own.
+data TotalIncome = Int
+    invariant value >= 0
+
+// === The relationship ===
+
+data KinshipDegree = Int
+    invariant value >= 1 && value <= 6
+
+// Why: the tax test admits blood relatives to the sixth degree and relatives by marriage to the third,
+// so which kind it is decides the bound. The social-insurance test does not distinguish them.
+data KinshipKind = ByBlood | ByAffinity
+
+// The relations that need no cohabitation. They are named one by one rather than reduced to a degree,
+// because that is how the statute names them and because a sibling and an uncle are both second-degree
+// while only one of them is here.
+data ImmediateRelative = Spouse | Child | Grandchild | Sibling | LinealAscendant
+
+data OtherRelative = { kind: KinshipKind, degree: KinshipDegree }
+
+// The relationship nests, and it earns the nesting because two rules read it at two depths. The
+// cohabitation requirement reads the outer level and never asks which immediate relation it is; the
+// tax kinship bound reads the leaf, because only OtherRelative has a degree to compare.
+data Relationship = ImmediateRelative | OtherRelative
+
+// Why: a dependant living apart qualifies only if the insured person's remittance exceeds their
+// revenue, so the amount remitted is part of what living apart *is*. Putting it on the case means the
+// support test cannot be written against a person whose remittance nobody recorded — there is no value
+// of this type that is apart and has no figure.
+data LivingApart = { annualRemittance: Yen }
+data Cohabitation = LivingTogether | LivingApart
+
+data DisabilityStatus = Disabled | NotDisabled
+
+// === The dependant ===
+
+// The person, which changes when they have a birthday or their disability is certified.
+data DependantPerson =
+    { name: PersonalName
+    , birthday: Date
+    , disability: DisabilityStatus
+    }
+
+// The tie to the insured person, which changes when somebody marries or moves out.
+data RelativeTie =
+    { relationship: Relationship
+    , cohabitation: Cohabitation
+    }
+
+// The record a notification is filed from. The two judgments below take the parts they read rather
+// than this whole value: the social-insurance rule never sees the tax income and the tax rule never
+// sees the revenue, which is what keeps the two measures from being handed to the wrong rule.
+data Dependant =
+    { person: DependantPerson
+    , tie: RelativeTie
+    , revenue: AnnualRevenue
+    , income: TotalIncome
+    }
+
+// === Reading the relationship ===
+
+let withinInsuranceKinship (r: Relationship): Bool =
+    match r with
+        | ImmediateRelative        -> true
+        | OtherRelative { degree } -> degree <= 3
+
+let withinTaxKinship (r: Relationship): Bool =
+    match r with
+        | ImmediateRelative -> true
+        | OtherRelative { kind, degree } ->
+            match kind with
+                | ByBlood    -> degree <= 6
+                | ByAffinity -> degree <= 3
+
+// Why: a spouse, a child, a grandchild, a sibling and a lineal ascendant are dependants wherever they
+// live; every other relative within the third degree must share the household
+// (健康保険法第3条第7項第2号・第3号). It is the one place the statute treats the named relations as a
+// group, which is what makes ImmediateRelative worth being a level of its own.
+let cohabitationRequired (r: Relationship): Bool =
+    match r with
+        | ImmediateRelative -> false
+        | OtherRelative     -> true
+
+let livesApart (c: Cohabitation): Bool =
+    match c with
+        | LivingTogether -> false
+        | LivingApart    -> true
+
+let isDisabled (d: DisabilityStatus): Bool =
+    match d with
+        | Disabled    -> true
+        | NotDisabled -> false
+
+// Why: the revenue ceiling is 1.3 million yen, raised to 1.8 million for somebody who has attained 60
+// or is disabled (健康保険法施行規則, 昭和52年保発第9号). Both are "less than", not "at most" — 1.3
+// million exactly does not qualify, which is why the comparison below is `>=` and not `>`.
+let insuranceRevenueCeiling (person: DependantPerson, on: Date): AnnualRevenue =
+    if attainedAgeOn(person.birthday, on) >= 60 || isDisabled(person.disability)
+    then AnnualRevenue(1800000)
+    else AnnualRevenue(1300000)
+
+// === The social-insurance judgment ===
+
+data RevenueOverCeiling         = { ceiling: AnnualRevenue, revenue: AnnualRevenue }
+data RevenueOverHalfOfInsured   = { insuredRevenue: AnnualRevenue, revenue: AnnualRevenue }
+data RevenueOverRemittance      = { remittance: Yen, revenue: AnnualRevenue }
+
+data InsuranceBlockReason =
+    OutsideKinshipRange
+  | CohabitationRequired
+  | CoveredByLatterStageMedical
+  | RevenueOverCeiling
+  | RevenueOverHalfOfInsured
+  | RevenueOverRemittance
+
+// What says an application was refused is that there is a reason it was, and that is this case's own
+// invariant. The behavior attempts the construction, so the emptiness test is stated once, where the
+// rule is declared, rather than as a guard beside every use.
+data InsuranceDependencyBlocked = { reasons: List<InsuranceBlockReason> }
+    invariant List.length(reasons) >= 1
+
+// The verdict says which ceiling it was judged against, because 1.3 and 1.8 million are different
+// answers to "how much may they earn next year" and that is the question the household actually asks.
+data InsuranceDependant = { appliedCeiling: AnnualRevenue }
+
+// Why: living together, the dependant's revenue must be under half the insured person's; living apart,
+// under the remittance received (昭和52年保発第9号). Half is written as the multiplication it implies,
+// because a division would abort on an insured person with no revenue instead of refusing the
+// application — and somebody with no revenue supports nobody, which is the answer wanted.
+//
+// The circular in fact allows an exception where the insured person is plainly the one supporting the
+// household even above the half. That is discretion exercised by the insurer on the papers, not a rule
+// a model can decide, so this states the bound and leaves the exception to the human who has it.
+let supportBlockers (c: Cohabitation, revenue: AnnualRevenue, insuredRevenue: AnnualRevenue)
+        : List<InsuranceBlockReason> =
+    match c with
+        | LivingTogether ->
+            [ RevenueOverHalfOfInsured { insuredRevenue = insuredRevenue, revenue = revenue }
+            | revenue.value * 2 >= insuredRevenue.value ]
+        | LivingApart { annualRemittance } ->
+            [ RevenueOverRemittance { remittance = annualRemittance, revenue = revenue }
+            | revenue.value >= annualRemittance.value ]
+
+let insuranceBlockers (person: DependantPerson, tie: RelativeTie, revenue: AnnualRevenue,
+                       insuredRevenue: AnnualRevenue, on: Date): List<InsuranceBlockReason> =
+       [ OutsideKinshipRange | Bool.not(withinInsuranceKinship(tie.relationship)) ]
+    ++ [ CohabitationRequired
+       | cohabitationRequired(tie.relationship) && livesApart(tie.cohabitation) ]
+    // Why: somebody who has attained 75 is insured by the latter-stage elderly medical system in their
+    // own right and cannot be anybody's dependant (高齢者の医療の確保に関する法律第50条). The age is the
+    // attained one, so a person born on the first of a month leaves a month earlier than a reader of the
+    // birthday alone would expect.
+    ++ [ CoveredByLatterStageMedical | attainedAgeOn(person.birthday, on) >= 75 ]
+    ++ [ RevenueOverCeiling { ceiling = insuranceRevenueCeiling(person, on), revenue = revenue }
+       | revenue >= insuranceRevenueCeiling(person, on) ]
+    ++ supportBlockers(tie.cohabitation, revenue, insuredRevenue)
+
+behavior qualifyAsInsuranceDependant : (
+    person:         DependantPerson,
+    tie:            RelativeTie,
+    revenue:        AnnualRevenue,
+    insuredRevenue: AnnualRevenue,
+    on:             Date
+) -> InsuranceDependant | InsuranceDependencyBlocked
+    constructs InsuranceDependant, InsuranceDependencyBlocked, AnnualRevenue,
+               OutsideKinshipRange, CohabitationRequired, CoveredByLatterStageMedical,
+               RevenueOverCeiling, RevenueOverHalfOfInsured, RevenueOverRemittance
+
+let qualifyAsInsuranceDependant (person, tie, revenue, insuredRevenue, on) =
+    if InsuranceDependencyBlocked
+        { reasons = insuranceBlockers(person, tie, revenue, insuredRevenue, on) } as blocked
+    then blocked
+    else InsuranceDependant { appliedCeiling = insuranceRevenueCeiling(person, on) }
+
+// === The income-tax judgment ===
+
+// Why: the categories are the ones the Income Tax Act names — a dependant aged 19 to 22 is a specified
+// dependant, one who has attained 70 an elderly dependant, and an elderly lineal ascendant living with
+// the taxpayer a coresident elderly parent. What each is worth is example.yearendadjustment's business:
+// these four have stood since the 1980s and the amounts beside them moved in 2025, so they are not one
+// declaration.
+data DependantCategory =
+    GeneralDependant | SpecifiedDependant | ElderlyDependant | CoresidentElderlyParent
+
+data IncomeOverTaxCeiling = { ceiling: TotalIncome, income: TotalIncome }
+
+data TaxBlockReason =
+    OutsideTaxKinshipRange
+  | NotSharingLivelihood
+  | SpouseIsDeductedSeparately
+  | UnderSixteen
+  | IncomeOverTaxCeiling
+
+data TaxDependencyBlocked = { reasons: List<TaxBlockReason> }
+    invariant List.length(reasons) >= 1
+
+data TaxDependant = { category: DependantCategory }
+
+// Why: the total-income ceiling for a dependant relative is 580,000 yen from the 2025 tax year, raised
+// from 480,000 by the 令和7年度税制改正 alongside the minimum employment-income deduction going from
+// 550,000 to 650,000 — which is what moved the salary threshold everybody quotes from 1.03 to 1.23
+// million yen. It is published rather than kept, because example.yearendadjustment states the spouse
+// rules against the same figure and a limit two modules read is owned by one of them.
+let dependantIncomeCeiling = TotalIncome(580000)
+
+// Why: "sharing a livelihood" does not mean living together. A student in another city whose parent
+// remits money to them shares their parent's livelihood (所得税基本通達2-47), so what the tax rule reads
+// off the cohabitation is whether anything is actually sent — which is the same field the
+// social-insurance support test reads, asked a different question.
+let sharesLivelihood (c: Cohabitation): Bool =
+    match c with
+        | LivingTogether                   -> true
+        | LivingApart { annualRemittance } -> annualRemittance >= 1
+
+let isSpouse (r: Relationship): Bool =
+    match r with
+        | ImmediateRelative as i ->
+            match i with
+                | Spouse -> true
+                | Child | Grandchild | Sibling | LinealAscendant -> false
+        | OtherRelative -> false
+
+let isLinealAscendant (r: Relationship): Bool =
+    match r with
+        | ImmediateRelative as i ->
+            match i with
+                | LinealAscendant -> true
+                | Spouse | Child | Grandchild | Sibling -> false
+        | OtherRelative -> false
+
+let taxBlockers (person: DependantPerson, tie: RelativeTie, income: TotalIncome, on: Date)
+        : List<TaxBlockReason> =
+       [ OutsideTaxKinshipRange | Bool.not(withinTaxKinship(tie.relationship)) ]
+    ++ [ NotSharingLivelihood | Bool.not(sharesLivelihood(tie.cohabitation)) ]
+    // Why: a spouse is never a dependant relative. They are deducted under the spouse deduction and the
+    // special spouse deduction instead, which are a two-axis matrix over both people's incomes rather
+    // than a flat amount (所得税法第83条・第83条の2). Refusing them here is what keeps that matrix in
+    // one place.
+    ++ [ SpouseIsDeductedSeparately | isSpouse(tie.relationship) ]
+    // Why: the dependant deduction was withdrawn below sixteen in 2011 when the child allowance
+    // replaced it. Such a dependant is still declared — the local inhabitant tax exemption reads it —
+    // but it earns no national deduction, so it is a refusal with a reason and not a category.
+    ++ [ UnderSixteen | attainedAgeOn(person.birthday, on) < 16 ]
+    ++ [ IncomeOverTaxCeiling { ceiling = dependantIncomeCeiling, income = income }
+       | income > dependantIncomeCeiling ]
+
+let taxCategoryOf (person: DependantPerson, tie: RelativeTie, on: Date): DependantCategory = {
+    let age = attainedAgeOn(person.birthday, on)
+    if age >= 70 && isLinealAscendant(tie.relationship)
+        && Bool.not(livesApart(tie.cohabitation))
+    then CoresidentElderlyParent
+    else if age >= 70 then ElderlyDependant
+    else if age >= 19 && age <= 22 then SpecifiedDependant
+    else GeneralDependant
+}
+
+behavior classifyTaxDependant : (
+    person: DependantPerson,
+    tie:    RelativeTie,
+    income: TotalIncome,
+    on:     Date
+) -> TaxDependant | TaxDependencyBlocked
+    constructs TaxDependant, TaxDependencyBlocked, TotalIncome,
+               OutsideTaxKinshipRange, NotSharingLivelihood, SpouseIsDeductedSeparately,
+               UnderSixteen, IncomeOverTaxCeiling,
+               GeneralDependant, SpecifiedDependant, ElderlyDependant, CoresidentElderlyParent
+
+let classifyTaxDependant (person, tie, income, on) =
+    if TaxDependencyBlocked { reasons = taxBlockers(person, tie, income, on) } as blocked
+    then blocked
+    else TaxDependant { category = taxCategoryOf(person, tie, on) }
+
+// === The people the rows are about ===
+// One household: a spouse who works part time, a child at university, and a mother living in another
+// city on a remittance. The same three answer the two tests differently, which is the point.
+
+let hanako = DependantPerson
+    { name = PersonalName { name = PersonName("山田花子"), kana = KanaName("ヤマダハナコ") }
+    , birthday = Date("1988-05-20")
+    , disability = NotDisabled
+    }
+
+let taro = DependantPerson
+    { name = PersonalName { name = PersonName("山田太郎"), kana = KanaName("ヤマダタロウ") }
+    , birthday = Date("2005-09-03")
+    , disability = NotDisabled
+    }
+
+let kiyoko = DependantPerson
+    { name = PersonalName { name = PersonName("山田清子"), kana = KanaName("ヤマダキヨコ") }
+    , birthday = Date("1952-01-01")
+    , disability = NotDisabled
+    }
+
+let spouseAtHome = RelativeTie { relationship = Spouse, cohabitation = LivingTogether }
+let childAtHome  = RelativeTie { relationship = Child, cohabitation = LivingTogether }
+let motherApart  = RelativeTie
+    { relationship = LinealAscendant
+    , cohabitation = LivingApart { annualRemittance = Yen(1200000) }
+    }
+
+example qualifyAsInsuranceDependant
+    | "a spouse earning 1.2 million against a 6 million earner is under both bounds" :
+        (hanako, spouseAtHome, AnnualRevenue(1200000), AnnualRevenue(6000000), Date("2026-07-01"))
+        -> InsuranceDependant { appliedCeiling = AnnualRevenue(1300000) }
+    | "1.3 million exactly is not under 1.3 million, and that is the whole of the rule" :
+        (hanako, spouseAtHome, AnnualRevenue(1300000), AnnualRevenue(6000000), Date("2026-07-01"))
+        -> InsuranceDependencyBlocked
+    | "a mother who has attained 75 is insured in her own right, whatever she earns" :
+        (kiyoko, motherApart, AnnualRevenue(900000), AnnualRevenue(6000000), Date("2027-02-01"))
+        -> InsuranceDependencyBlocked
+    | "living apart, a remittance smaller than the revenue supports nobody" :
+        (kiyoko, motherApart, AnnualRevenue(1250000), AnnualRevenue(6000000), Date("2026-07-01"))
+        -> InsuranceDependencyBlocked
+
+example classifyTaxDependant
+    | "a child of twenty-one with no income is a specified dependant" :
+        (taro, childAtHome, TotalIncome(0), Date("2026-12-31"))
+        -> TaxDependant { category = SpecifiedDependant }
+    | "the same spouse the health insurance took is refused here, and says why" :
+        (hanako, spouseAtHome, TotalIncome(650000), Date("2026-12-31"))
+        -> TaxDependencyBlocked
+    | "a mother living apart on a remittance shares the livelihood, and is elderly but not coresident" :
+        (kiyoko, motherApart, TotalIncome(0), Date("2026-12-31"))
+        -> TaxDependant { category = ElderlyDependant }
