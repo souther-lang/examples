@@ -10,10 +10,10 @@
 //     places that have to answer for it rather than a claim that quietly returns the wrong number of
 //     days. It is the same argument example.pipeline makes for the ten Salesforce stages, at the size
 //     where it starts to hurt.
-//   - The table's holes, which the type cannot state. Twenty insured years cannot have accrued before
-//     the age of thirty and a general recipient cannot be entitled with under a year, so two cells of
-//     the printed table are blank — and exhaustiveness asks for an arm for each of them anyway, with
-//     nothing to write there that says the combination cannot arise. Finding F30 (souther#239).
+//   - The table's holes, written as holes. Twenty insured years cannot have accrued before the age of
+//     thirty and a general recipient cannot be entitled with under a year, so two cells of the printed
+//     table are blank — and exhaustiveness asks for an arm for each of them anyway. Each answers
+//     `unreachable` with the reason, so no number is made there and reaching it aborts.
 //   - A condition derived rather than asked for. "Expected to be employed for 31 days or more" is read
 //     off the contract term, because an indefinite contract always is and a fixed one says when it
 //     ends — so there is no separate field for somebody to fill in inconsistently.
@@ -329,8 +329,9 @@ let bandOfInsuredPeriod (months) =
 //
 // Two of the twenty-five cells are blank in the printed table. Twenty insured years cannot have accrued
 // before the age of thirty, so the under-thirty row stops at ten-to-twenty — and exhaustiveness asks for
-// the arm regardless, with nothing to write there that says the combination cannot arise. It answers the
-// cell above it, which is the least wrong number available. Finding F30 (souther#239).
+// the arm regardless. It answers `unreachable`, which makes no value: the age band and the period band
+// are computed by separate rules from separate inputs, so nothing this signature sees relates them, and
+// the arm states the fact it relies on rather than handing a report the 180 days of the row above.
 let specifiedBenefitDays (age: AgeBand, period: InsuredPeriodBand): BenefitDays =
     match age with
         | UnderThirty ->
@@ -339,7 +340,8 @@ let specifiedBenefitDays (age: AgeBand, period: InsuredPeriodBand): BenefitDays 
                 | OneToFiveYears    -> BenefitDays(90)
                 | FiveToTenYears    -> BenefitDays(120)
                 | TenToTwentyYears  -> BenefitDays(180)
-                | TwentyYearsOrMore -> BenefitDays(180)   // 表に欄なし。souther#239 (souther#239)
+                | TwentyYearsOrMore ->
+                    unreachable "twenty insured years cannot have accrued before the age of thirty"
         | ThirtyToThirtyFour ->
             match period with
                 | UnderOneYear      -> BenefitDays(90)
@@ -372,10 +374,12 @@ let specifiedBenefitDays (age: AgeBand, period: InsuredPeriodBand): BenefitDays 
 // 一般の受給資格者の所定給付日数. Age does not enter it, which is the whole difference the specified
 // categories buy. The under-a-year cell is the second blank: an ordinary recipient with under twelve
 // months is not entitled at all, so judgeBenefitEntitlement has already turned them away by the time
-// this is asked. Finding F30 again (souther#239).
+// this is asked. That is a premise about the order the caller applies its rules in, and no parameter
+// here carries it, so the arm writes it down and aborts if it ever fails to hold.
 let generalBenefitDays (period: InsuredPeriodBand): BenefitDays =
     match period with
-        | UnderOneYear      -> BenefitDays(90)    // 表に欄なし。souther#239 (souther#239)
+        | UnderOneYear      ->
+            unreachable "an ordinary recipient with under a year is not entitled, and was turned away already"
         | OneToFiveYears    -> BenefitDays(90)
         | FiveToTenYears    -> BenefitDays(90)
         | TenToTwentyYears  -> BenefitDays(120)

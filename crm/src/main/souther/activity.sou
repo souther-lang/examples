@@ -322,10 +322,11 @@ let lastActivityOn (activities, today) = {
     guard List.length(activities) >= 1 else NeverTouched
     // The guard has already made the empty case impossible, but List.max answers with an optional and the
     // match still has to state both arms: a guard cannot inform what an Option-returning call knows. The
-    // None arm here is unreachable and has to be written anyway.
+    // None arm says that rather than answering NeverTouched a second time — the guard is what NeverTouched
+    // means, and a list with a maximum reaching this arm would be the model being wrong about itself.
     match List.max(List.map(a -> dateOf(a), activities)) with
         | Some last -> Recency { lastOn = last, daysSince = Date.daysBetween(last, today) }
-        | None      -> NeverTouched
+        | None      -> unreachable "the guard has made the list non-empty, so its maximum is a value"
 }
 
 // === staleAccounts: the freshest touch per account ===
