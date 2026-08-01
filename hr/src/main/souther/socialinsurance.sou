@@ -155,8 +155,7 @@ data GradeTable = List<GradeRow>
 // The step of that fold, carrying the previous row's lower bound beside the verdict so far. The bound is
 // carried as a bare Int rather than as a Yen, because a helper an invariant names may not construct data
 // and the fold's seed would be a construction — the accumulator drops to the base type at the seed and
-// nowhere else. The diagnostic for that refusal names an arbitrary Java call rather than the rule it is
-// enforcing, which is Finding F35 (souther#244).
+// nowhere else.
 let stillAscending (carried: (Int, Bool), r: GradeRow): Bool = {
     let (previous, ascending) = carried
     ascending && previous <= r.lowerBound.value

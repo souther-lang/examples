@@ -250,23 +250,6 @@ let pay300k = MonthlyRemuneration
 
 let monthlyScheduled = Hours(160.0m)
 
-// The uplift rates restated rather than named. `example.attendance` publishes them as `upliftRates` and
-// the rows below want exactly that value — but naming an imported value in an `example` row aborts the
-// compiler once this module set is large enough:
-//
-//   java.lang.IllegalStateException: the query DerivedDef[named=example.attendance.upliftRates]
-//   depends on itself and says nothing about what that means: [Examples[name=example.payroll, sourceId=4]]
-//
-// It is not a diagnostic but an internal failure, and it appeared only when the eighth module joined the
-// build — seven of these files compile with the row written the short way. Restating the four figures
-// here is the workaround, and it is the one thing in this example that a reader should not copy. Finding F34 (souther#243).
-let statutoryUplifts = UpliftRates
-    { overtime = 0.25m
-    , extendedOvertime = 0.50m
-    , lateNight = 0.25m
-    , statutoryHoliday = 0.35m
-    }
-
 example hourlyRateFor
     | "280,000 yen of scheduled wage over 160 hours is 1,750 an hour, and the allowances §37(5) strips are not in it" :
         (pay300k, monthlyScheduled) -> HourlyRate(1750.0m)
@@ -283,9 +266,9 @@ let tenHoursOvertime = MonthlyTally
 
 example upliftPay
     | "ten hours over at 1.25 and two of them at night for a further quarter" :
-        (HourlyRate(1750.0m), tenHoursOvertime, statutoryUplifts) -> Yen(22750)
+        (HourlyRate(1750.0m), tenHoursOvertime, upliftRates) -> Yen(22750)
     | "a fraction of a yen is carried at 50 sen, which is the opposite of what a premium does" :
-        (HourlyRate(1750.5m), tenHoursOvertime, statutoryUplifts) -> Yen(22757)
+        (HourlyRate(1750.5m), tenHoursOvertime, upliftRates) -> Yen(22757)
 
 example contributionMonthWithheldIn
     | "the premium on a July pay slip is June's premium" :
