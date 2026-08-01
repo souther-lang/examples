@@ -50,7 +50,6 @@ module example.filing exposing (
     Accepted,
     Returned,
     Filing,
-    FilingDeadline,
     NoStatutoryDeadline,
     WithinDeadline,
     Overdue,
@@ -116,30 +115,23 @@ let monthStart (d: Date): Date = Date.addDays(1 - Date.day(d), d)
 // of the day after leaving (同規則第7条), and the regular determination by 10 July
 // (健康保険法施行規則第25条). The occasional revision is filed "promptly" and no provision names a day,
 // which is a real answer and gets a case of its own rather than a date nobody can be held to.
-// The answer is a date and would rather be written as one, but a member of an output union has to be a
-// data this module declares — a primitive is refused here exactly as an imported case is
-// (example.payroll hit the same wall with a Yen). So the date is wrapped, and every behavior in this
-// repository that answers "a plain value, or a reason there is none" ends up declaring one of these.
-// Finding F33 (souther#242).
-data FilingDeadline = Date
-
-behavior deadlineFor : (kind: NotificationKind, eventOn: Date) -> FilingDeadline | NoStatutoryDeadline
-    constructs FilingDeadline, NoStatutoryDeadline
+behavior deadlineFor : (kind: NotificationKind, eventOn: Date) -> Date | NoStatutoryDeadline
+    constructs NoStatutoryDeadline
 
 let deadlineFor (kind, eventOn) =
     match kind with
         | CoverageAcquisition | CoverageLoss | DependantChange | NameChange | AddressChange ->
-            FilingDeadline(Date.addDays(5, eventOn))
+            Date.addDays(5, eventOn)
         | EmploymentInsuranceAcquisition ->
             // 翌月10日. The tenth of the month after the event's, reached by walking from that month's
             // first day rather than by writing a date down.
-            FilingDeadline(Date.addDays(9, Date.addMonths(1, monthStart(eventOn))))
+            Date.addDays(9, Date.addMonths(1, monthStart(eventOn)))
         | SeparationCertificate ->
             // 離職の日の翌日から10日以内.
-            FilingDeadline(Date.addDays(10, Date.addDays(1, eventOn)))
+            Date.addDays(10, Date.addDays(1, eventOn))
         | RegularDeterminationFiling ->
             // 7月10日. July of the event's own year, counted in months from the month it fell in.
-            FilingDeadline(Date.addDays(9, Date.addMonths(7 - Date.month(eventOn), monthStart(eventOn))))
+            Date.addDays(9, Date.addMonths(7 - Date.month(eventOn), monthStart(eventOn)))
         | OccasionalRevisionFiling -> NoStatutoryDeadline
 
 data Overdue = { deadline: Date, filedOn: Date, daysLate: Int }
@@ -315,13 +307,13 @@ example notificationForDetermination
 
 example deadlineFor
     | "five days from the day somebody joined" :
-        (CoverageAcquisition, Date("2026-04-01")) -> FilingDeadline(Date("2026-04-06"))
+        (CoverageAcquisition, Date("2026-04-01")) -> Date("2026-04-06")
     | "the employment-insurance form is due the tenth of the following month, not five days later" :
-        (EmploymentInsuranceAcquisition, Date("2026-04-01")) -> FilingDeadline(Date("2026-05-10"))
+        (EmploymentInsuranceAcquisition, Date("2026-04-01")) -> Date("2026-05-10")
     | "ten days from the day after leaving" :
-        (SeparationCertificate, Date("2026-09-30")) -> FilingDeadline(Date("2026-10-11"))
+        (SeparationCertificate, Date("2026-09-30")) -> Date("2026-10-11")
     | "the regular determination is due on 10 July, whichever of April to June it was computed from" :
-        (RegularDeterminationFiling, Date("2026-04-01")) -> FilingDeadline(Date("2026-07-10"))
+        (RegularDeterminationFiling, Date("2026-04-01")) -> Date("2026-07-10")
     | "the revision is filed promptly, and no provision names a day" :
         (OccasionalRevisionFiling, Date("2026-04-01")) -> NoStatutoryDeadline
 
