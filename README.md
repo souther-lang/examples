@@ -108,7 +108,7 @@ A finding the compiler fixes is removed from here rather than kept as a resolved
 rewritten to the form it was asking for, and the commit that does it tells the story; git history is
 where that log belongs, not this file.
 
-The seven below are open, and all seven came out of `hr` — the first example large enough for the
+The six below are open, and all six came out of `hr` — the first example large enough for the
 scale of a model to be the thing under test, and each is filed upstream under the number on its
 heading.
 
@@ -140,15 +140,6 @@ written down makes every rule that reads it look like the former.
 them has no sum to take — `souther.list` declares `let sum (xs: List<Int>)`. The fold with a `0.0m` seed
 is written out instead. `List.max` and `List.min` are already stated over any ordered element; the same
 treatment for the two numeric folds would remove the workaround.
-
-**F33 (souther#242). An output union's member must be a data the module declares.**
-`payroll.sou` wanted `computeTaxableAmount : (…) -> Yen | DeductionsExceedGross` and `filing.sou` wanted
-`deadlineFor : (…) -> Date | NoStatutoryDeadline`. Both are refused: an imported case may not join a union
-declared here (E1606), and neither may a primitive. So each declares a wrapper — `TaxableAmount` and
-`FilingDeadline` — for the value alone, and `payroll`'s behavior had to be renamed as well, since a
-behavior is capitalised into a class of the same name as its wrapper. Every behavior that answers "a plain
-value, or a reason there is none" pays this, and core already has the shape it needs in `Int |
-DivisionByZero`.
 
 **F34 (souther#243). Naming an imported value in an `example` row aborts the compiler.**
 `payroll.sou`'s rows want `example.attendance`'s published `upliftRates`, which is what the rule is

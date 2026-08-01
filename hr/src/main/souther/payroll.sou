@@ -49,8 +49,7 @@ module example.payroll exposing (
     hourlyRateFor,
     NoScheduledHours,
     upliftPay,
-    TaxableAmount,
-    computeTaxableAmount,
+    taxableAmount,
     withholdingTaxOf,
     buildPaySlip,
     DeductionsExceedGross
@@ -182,32 +181,26 @@ let nonTaxableCommuting (remuneration: MonthlyRemuneration): Yen =
 // social-insurance premiums withheld in the same month (所得税法第183条・第74条). The premiums subtracted
 // are the ones *withheld now*, which by the arrears rule above are the previous month's — so the amount
 // somebody's tax is computed on depends on a month they had already left, if they left.
-// The amount withholding is computed on. It is a Yen and would rather be written as one, but a union
-// declared here may not hold a case another module declares (E1606) — so a behavior answering "an
-// amount, or a reason there is none" has to wrap the amount in a type of its own. Every module that
-// answers with money beside a failure ends up declaring one of these, and the behavior beside it has
-// to be renamed, since a behavior is capitalised into a class of the same name. Finding F33 (souther#242).
-data TaxableAmount = Yen
-
-behavior computeTaxableAmount : (
+// The amount withholding is computed on is a Yen, and it is answered as one.
+behavior taxableAmount : (
     remuneration:  MonthlyRemuneration,
     upliftPay:     Yen,
     socialInsurance: Yen
-) -> TaxableAmount | DeductionsExceedGross
-    constructs TaxableAmount, Yen, DeductionsExceedGross
+) -> Yen | DeductionsExceedGross
+    constructs Yen, DeductionsExceedGross
 
-let computeTaxableAmount (remuneration, upliftPay, socialInsurance) = {
+let taxableAmount (remuneration, upliftPay, socialInsurance) = {
     let gross = totalRemuneration(remuneration) + upliftPay
     let subtracted = nonTaxableCommuting(remuneration) + socialInsurance
     guard gross >= subtracted else DeductionsExceedGross
-    TaxableAmount(Yen(gross.value - subtracted.value))
+    Yen(gross.value - subtracted.value)
 }
 
 // The monthly withholding table for employees who filed a dependant declaration is four hundred rows by
 // eight columns and is republished every year, so it is read rather than written down — the same
 // decision example.socialinsurance made about premium rates. The dependant count is the column, and
 // example.dependents is what decides it.
-behavior withholdingTaxOf : (taxable: TaxableAmount, dependants: Int) -> Yen
+behavior withholdingTaxOf : (taxable: Yen, dependants: Int) -> Yen
 
 // === The pay slip ===
 
@@ -325,6 +318,6 @@ example buildPaySlip
          julyDeductions)
         -> DeductionsExceedGross
 
-example computeTaxableAmount
+example taxableAmount
     | "gross less the exempt commuting allowance and less this month's premiums" :
-        (pay300k, Yen(22750), Yen(43965)) -> TaxableAmount(Yen(263785))
+        (pay300k, Yen(22750), Yen(43965)) -> Yen(263785)

@@ -77,14 +77,23 @@ class PaySlipBoundaryTest {
      * The withholding table, implemented from plain Java. Its two arguments are the amount and the number
      * of dependants — the column of the published monthly table — and the amount it answers with is built
      * through {@code Yen}'s decoder, because an implementation is not granted a constructor.
+     *
+     * <p>{@code taxableAmount} answers {@code Yen | DeductionsExceedGross}, and {@code Yen} belongs to
+     * {@code example.employee}, so a class this module emitted cannot be given the union's interface.
+     * It arrives as {@code YenCase} — the bridge case {@code example.payroll} emits — while the failure
+     * this module declares arrives as itself. Both are permitted, so the {@code switch} needs no
+     * {@code default}.
      */
     @Test
     void theWithholdingTableIsReadFromOutsideTheModel() {
         WithholdingTaxOf table = new FlatRateTable();
-        TaxableAmount taxable = assertInstanceOf(TaxableAmount.class,
-                ComputeTaxableAmount.of().apply(remuneration(), yen(22_750), yen(43_965)));
+        Yen taxable = switch (TaxableAmount.of().apply(remuneration(), yen(22_750), yen(43_965))) {
+            case YenCase amount -> amount.value();
+            case DeductionsExceedGross refused ->
+                    throw new AssertionError("these deductions do not exceed the gross: " + refused);
+        };
 
-        assertEquals(263_785L, taxable.value().value());
+        assertEquals(263_785L, taxable.value());
         assertEquals(13_189L, table.apply(taxable, 1L).value(),
                 "five per cent of the taxable amount, which is not the real table and is not the point");
     }
@@ -97,8 +106,8 @@ class PaySlipBoundaryTest {
     static final class FlatRateTable extends WithholdingTaxOf {
 
         @Override
-        public Yen apply(TaxableAmount taxable, Long dependants) {
-            return decode(Yen.decoder(), taxable.value().value() * 5 / 100);
+        public Yen apply(Yen taxable, Long dependants) {
+            return decode(Yen.decoder(), taxable.value() * 5 / 100);
         }
     }
 
