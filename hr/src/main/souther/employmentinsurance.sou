@@ -142,14 +142,6 @@ data InsuredStatus = { category: InsuredCategory }
 // (同条第4号), and an officer of a company is not a worker at all, so neither is reached by the first
 // two conditions. The 2028 reduction of the hours floor to ten is legislated and not yet in force; when
 // it commences it is this one value that moves.
-//
-// Naming the limit costs the reader of it a construction authority: a value is elaborated where it is
-// named, so `judgeInsuredStatus` below declares `constructs WeeklyScheduledHours` although it originates
-// no such value and only compares against this one. A called *behavior*'s construction set stays its
-// own — judgeInsuredCategory's GeneralInsured is not declared here — so the asymmetry is between a
-// behavior and a value, not between reading and building. `constructs` is for telling a behavior that
-// creates a value from one that passes an existing one through, and a limit written down makes every
-// rule that reads it look like the former. Finding F31 (souther#240).
 let weeklyHoursFloor = WeeklyScheduledHours(20.0m)
 
 // Derived rather than asked for: an indefinite contract is always expected to run past 31 days, and a
@@ -196,8 +188,7 @@ let judgeInsuredCategory (birthday, on) =
 behavior judgeInsuredStatus : (terms: EmploymentTerms, birthday: Date, on: Date)
         -> InsuredStatus | NotInsured
     constructs InsuredStatus, NotInsured, OfficerExcluded, WeeklyHoursUnderTwenty,
-               EmploymentUnderThirtyOneDays, DaytimeStudentExcluded,
-               WeeklyScheduledHours   // 下限値を名前で読むだけで要る。souther#240
+               EmploymentUnderThirtyOneDays, DaytimeStudentExcluded
 
 // judgeInsuredCategory depends on nothing, so it is called by name rather than injected — the seam a
 // `depends on` marks is the outside world, and an age is not outside anything.

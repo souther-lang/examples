@@ -352,7 +352,7 @@ behavior classifyTaxDependant : (
     income: TotalIncome,
     on:     Date
 ) -> TaxDependant | TaxDependencyBlocked
-    constructs TaxDependant, TaxDependencyBlocked, TotalIncome,
+    constructs TaxDependant, TaxDependencyBlocked,
                OutsideTaxKinshipRange, NotSharingLivelihood, SpouseIsDeductedSeparately,
                UnderSixteen, IncomeOverTaxCeiling,
                GeneralDependant, SpecifiedDependant, ElderlyDependant, CoresidentElderlyParent

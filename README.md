@@ -108,7 +108,7 @@ A finding the compiler fixes is removed from here rather than kept as a resolved
 rewritten to the form it was asking for, and the commit that does it tells the story; git history is
 where that log belongs, not this file.
 
-The five below are open, and all five came out of `hr` — the first example large enough for the
+The four below are open, and all four came out of `hr` — the first example large enough for the
 scale of a model to be the thing under test, and each is filed upstream under the number on its
 heading.
 
@@ -126,14 +126,6 @@ twenty insured years cannot have accrued before the age of thirty, and an ordina
 year is not entitled at all — and exhaustiveness asks for an arm for each of them with nothing to write
 there that says so. Both answer with the neighbouring cell, which is the least wrong number available. An
 arm that declares itself unreachable — a surface form for `Never` — is what the table wants.
-
-**F31 (souther#240). A named limit costs its reader a construction authority.**
-`weeklyHoursFloor` in `employmentinsurance.sou` is a `let` value, so it is elaborated where it is named,
-so `judgeInsuredStatus` has to declare `constructs WeeklyScheduledHours` although it originates no such
-value and only compares against this one. A called *behavior*'s construction set stays its own, so the
-asymmetry is between a behavior and a value rather than between building and reading. `constructs` is
-meant to tell a behavior that creates a value from one that passes an existing one through, and a limit
-written down makes every rule that reads it look like the former.
 
 **F34 (souther#243). Naming an imported value in an `example` row aborts the compiler.**
 `payroll.sou`'s rows want `example.attendance`'s published `upliftRates`, which is what the rule is
