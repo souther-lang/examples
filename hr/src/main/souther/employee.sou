@@ -361,21 +361,15 @@ let returnFromLeave (employee, on) = {
 // Employed alone. A prospective hire has nothing to resign from and somebody already separated cannot
 // separate twice; neither call typechecks, and no guard says so.
 //
-// The two arms are identical but for the name they bind, and the match is here only because a sum
-// cannot be spread. `employee.hiredOn` a line above reads a field every case of ActiveEmployee spreads,
-// which the language grants; `Separated { ...employee, … }` is refused with "a spread must be a data
-// value". The fields a spread would copy are exactly the ones the read already reaches, so the rule
-// could follow the read — and the arms would collapse into the one line the rule actually is.
-// Finding F28 (souther#237).
+// The guard reads `employee.hiredOn` off the sum and the construction spreads the same shared part, so
+// what the behavior states is the rule and nothing about which active state the employee was in.
 behavior separate : (employee: ActiveEmployee, on: Date, reason: SeparationReason)
         -> Separated | SeparationBeforeHire
     constructs Separated, SeparationBeforeHire
 
 let separate (employee, on, reason) = {
     guard Date.daysBetween(employee.hiredOn, on) >= 0 else SeparationBeforeHire
-    match employee with
-        | Employed as e -> Separated { ...e, separatedOn = on, reason = reason }
-        | OnLeave as l  -> Separated { ...l, separatedOn = on, reason = reason }
+    Separated { ...employee, separatedOn = on, reason = reason }
 }
 
 // === The My Number check digit ===

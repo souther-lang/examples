@@ -108,15 +108,7 @@ A finding the compiler fixes is removed from here rather than kept as a resolved
 rewritten to the form it was asking for, and the commit that does it tells the story; git history is
 where that log belongs, not this file.
 
-One is open. It came out of `hr` — the first example large enough for the scale of a model to be the
-thing under test — and is filed upstream under the number on its heading.
-
-**F28 (souther#237). A sum every case of which spreads a common data can be read through but not spread from.**
-`employee.sou`'s `separate` reads `employee.hiredOn` straight off `ActiveEmployee`, which the language
-grants because both cases spread `EmployedCommon`. `Separated { ...employee, … }` is refused — a spread
-must be a data value — so the behavior opens the sum with a two-arm `match` whose arms differ only in the
-name they bind. The fields a spread would copy are exactly the ones the read already reaches, so letting
-the spread follow the read would collapse the two arms into the one line the rule actually is.
+None are open.
 
 ## Running
 
