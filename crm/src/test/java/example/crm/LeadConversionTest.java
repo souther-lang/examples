@@ -285,7 +285,7 @@ class LeadConversionTest {
                 "domain", domain,
                 "industry", "Manufacturing",
                 "employees", 999,
-                "type", Map.of("type", "Customer", "since", LocalDate.parse("2024-04-01")),
+                "accountType", Map.of("type", "Customer", "since", LocalDate.parse("2024-04-01")),
                 "owner", "u-001",
                 "currency", "JPY");
     }
