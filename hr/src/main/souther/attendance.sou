@@ -162,12 +162,11 @@ let holidayOn (d: DailyAttendance): Hours =
         | StatutoryHoliday                -> d.worked
         | OrdinaryDay | PrescribedHoliday -> Hours(0.0m)
 
-// Why the fold rather than `List.sum`: the standard library declares `sum` and `product` over
-// `List<Int>` only, so a list of Decimal has no sum to take and the fold with a `0.0m` seed is written
-// out instead. Hours are a Decimal because half an hour is an hour anybody works.
-// Finding F32 (souther#241).
+// `Hours` is a newtype, so it is summed by the Decimal it wraps and constructed once at the end;
+// the wrapper declares no addition of its own. Hours are a Decimal because half an hour is an hour
+// anybody works.
 let sumHours (f: (DailyAttendance) -> Hours, days: List<DailyAttendance>): Hours =
-    Hours(List.fold((acc, d) -> acc + f(d).value, 0.0m, days))
+    Hours(List.sum(List.map(d -> f(d).value, days)))
 
 // Why: the sixty-hour threshold is monthly, so it cannot be applied a day at a time — a month of
 // six-hour days and one of sixty-hour weeks reach it differently. The split is made once, on the total.

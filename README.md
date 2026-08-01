@@ -108,7 +108,7 @@ A finding the compiler fixes is removed from here rather than kept as a resolved
 rewritten to the form it was asking for, and the commit that does it tells the story; git history is
 where that log belongs, not this file.
 
-The six below are open, and all six came out of `hr` — the first example large enough for the
+The five below are open, and all five came out of `hr` — the first example large enough for the
 scale of a model to be the thing under test, and each is filed upstream under the number on its
 heading.
 
@@ -134,12 +134,6 @@ value and only compares against this one. A called *behavior*'s construction set
 asymmetry is between a behavior and a value rather than between building and reading. `constructs` is
 meant to tell a behavior that creates a value from one that passes an existing one through, and a limit
 written down makes every rule that reads it look like the former.
-
-**F32 (souther#241). `List.sum` and `List.product` are declared over `List<Int>` only.**
-`attendance.sou` keeps hours as `Decimal`, because half an hour is an hour anybody works, and a list of
-them has no sum to take — `souther.list` declares `let sum (xs: List<Int>)`. The fold with a `0.0m` seed
-is written out instead. `List.max` and `List.min` are already stated over any ordered element; the same
-treatment for the two numeric folds would remove the workaround.
 
 **F34 (souther#243). Naming an imported value in an `example` row aborts the compiler.**
 `payroll.sou`'s rows want `example.attendance`'s published `upliftRates`, which is what the rule is

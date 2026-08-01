@@ -196,9 +196,6 @@ let lineNet (r: LineRequest): Decimal =
 let lineList (r: LineRequest): Decimal =
     Decimal.round(Decimal.fromInt(r.quantity) * r.listPrice, 2, HALF_UP)
 
-let sumOf (xs: List<Decimal>): Decimal =
-    List.fold((acc, x) -> Decimal.add(acc, x), 0.0m, xs)
-
 let withinLineCaps (lines: List<LineRequest>): Bool =
     List.all(r -> Decimal.compare(r.discount, 0.5m) <= 0
               && Decimal.compare(r.discount, 0.0m) >= 0, lines)
@@ -206,8 +203,8 @@ let withinLineCaps (lines: List<LineRequest>): Bool =
 // The blended cap: the discount across the whole quote is at most 40%, which is the same as saying the total
 // is at least 60% of list. No division, so no zero to guard and no rounding mode to choose.
 let withinBlendedCap (lines: List<LineRequest>): Bool =
-    Decimal.compare(sumOf(List.map(r -> lineNet(r), lines)),
-                    sumOf(List.map(r -> lineList(r), lines)) * 0.6m) >= 0
+    Decimal.compare(List.sum(List.map(r -> lineNet(r), lines)),
+                    List.sum(List.map(r -> lineList(r), lines)) * 0.6m) >= 0
 
 let toLine (r: LineRequest): QuoteLine =
     QuoteLine { product = r.product
@@ -245,8 +242,8 @@ let buildQuote (number, opp, lines, issuedOn, validity) = {
           , opportunityId = opp.id
           , accountId = opp.accountId
           , lines = quoteLines
-          , subtotal = Amount(sumOf(List.map(r -> lineList(r), lines)))
-          , total = Amount(sumOf(List.map(r -> lineNet(r), lines)))
+          , subtotal = Amount(List.sum(List.map(r -> lineList(r), lines)))
+          , total = Amount(List.sum(List.map(r -> lineNet(r), lines)))
           , issuedOn = issuedOn
           , expiresOn = Date.addDays(days.value, issuedOn)
           , approval = NotSubmitted

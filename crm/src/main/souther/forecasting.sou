@@ -194,8 +194,7 @@ let weightedForecast (owner, opps, fiscalYearStartMonth) = {
     Forecast { owner = owner
              , periods = List.sort(Map.keys(byPeriod))
              , byPeriod = Map.map((period, weighted) -> Amount(weighted), byPeriod)
-             , total = Amount(List.fold((acc, w) -> Decimal.add(acc, w), 0.0m,
-                                                Map.values(byPeriod)))
+             , total = Amount(List.sum(Map.values(byPeriod)))
              , dealCount = List.length(opps)
              }
 }
@@ -282,8 +281,8 @@ behavior commitNumber : (opps: List<OpenOpportunity>) -> Amount
     constructs Amount
 
 let commitNumber (opps) =
-    Amount(List.fold((acc, opp) -> Decimal.add(acc, opp.amount.value), 0.0m,
-                             List.filter(opp -> isCommit(opp), opps)))
+    Amount(List.sum(List.map(opp -> opp.amount.value,
+                             List.filter(opp -> isCommit(opp), opps))))
 
 // === quotaFor and attainment ===
 // Quotas live in the compensation system, which is administered by a different team on a different cycle, so
@@ -378,8 +377,7 @@ let dealsAtRisk (opps, stale, staleAfter) = {
     let (risky, healthy) =
         List.partition(opp -> isCommit(opp) && staleDaysOf(opp, stale) >= staleAfter, opps)
     RiskReport { atRisk = List.map(opp -> opp.id, risky)
-               , atRiskAmount = Amount(List.fold((acc, opp) -> Decimal.add(acc, opp.amount.value),
-                                                         0.0m, risky))
+               , atRiskAmount = Amount(List.sum(List.map(opp -> opp.amount.value, risky)))
                , healthy = List.length(healthy)
                }
 }
@@ -407,9 +405,8 @@ let rollupTeam (manager, forecasts) = {
     Forecast { owner = manager
              , periods = List.sort(Map.keys(byPeriod))
              , byPeriod = Map.map((period, total) -> Amount(total), byPeriod)
-             , total = Amount(List.fold((acc, w) -> Decimal.add(acc, w), 0.0m,
-                                                Map.values(byPeriod)))
-             , dealCount = List.fold((acc, one) -> acc + one.dealCount, 0, forecasts)
+             , total = Amount(List.sum(Map.values(byPeriod)))
+             , dealCount = List.sum(List.map(one -> one.dealCount, forecasts))
              }
 }
 
