@@ -232,7 +232,7 @@ let planCalendar (shipments) = {
     // the accumulator is annotated here. That is what a local type annotation is for: the fold's
     // step would pin the types at the call, but the binding is read before the step is.
     let perDay: Map<Date, Int> = fold((acc, s) -> Map.upsert(s.dispatchOn, 1, n -> n + 1, acc),
-                                      Map.empty(), shipments)
+                                      Map.empty, shipments)
     ShipmentCalendar {
         perDay = perDay,
         days = List.sort(Map.keys(perDay)),

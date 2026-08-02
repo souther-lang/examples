@@ -190,7 +190,7 @@ behavior weightedForecast : (owner: UserId, opps: List<OpenOpportunity>, fiscalY
 let weightedForecast (owner, opps, fiscalYearStartMonth) = {
     guard fiscalYearStartMonth >= 1 && fiscalYearStartMonth <= 12 else InvalidFiscalYearStart
     let byPeriod: Map<FiscalPeriod, Decimal> =
-        List.fold((acc, opp) -> addToPeriod(acc, opp, fiscalYearStartMonth), Map.empty(), opps)
+        List.fold((acc, opp) -> addToPeriod(acc, opp, fiscalYearStartMonth), Map.empty, opps)
     Forecast { owner = owner
              , periods = List.sort(Map.keys(byPeriod))
              , byPeriod = Map.map((period, weighted) -> Amount(weighted), byPeriod)
@@ -255,11 +255,11 @@ let categoryRollupOf (opps) = {
     let money: Map<ForecastCategory, Decimal> =
         List.fold((acc, opp) -> Map.upsert(categoryOf(opp), amountOfAny(opp),
                                            running -> Decimal.add(running, amountOfAny(opp)), acc),
-                  Map.empty(), opps)
+                  Map.empty, opps)
     CategoryRollup
         { byCategory = Map.map((category, total) -> Amount(total), money)
         , countByCategory = List.fold((acc, opp) -> Map.upsert(categoryOf(opp), 1, n -> n + 1, acc),
-                                      Map.empty(), opps)
+                                      Map.empty, opps)
         }
 }
 
@@ -401,7 +401,7 @@ behavior rollupTeam : (manager: UserId, forecasts: List<Forecast>) -> Forecast
 
 let rollupTeam (manager, forecasts) = {
     let byPeriod: Map<FiscalPeriod, Decimal> =
-        List.fold((acc, one) -> mergeForecast(acc, one), Map.empty(), forecasts)
+        List.fold((acc, one) -> mergeForecast(acc, one), Map.empty, forecasts)
     Forecast { owner = manager
              , periods = List.sort(Map.keys(byPeriod))
              , byPeriod = Map.map((period, total) -> Amount(total), byPeriod)
@@ -417,7 +417,7 @@ let rollupTeam (manager, forecasts) = {
 let wonByOwner (won: List<ClosedWon>): Map<UserId, Decimal> =
     List.fold((acc, w) -> Map.upsert(w.owner, w.wonAmount.value,
                                      running -> Decimal.add(running, w.wonAmount.value), acc),
-              Map.empty(), won)
+              Map.empty, won)
 
 behavior topPerformers : (won: List<ClosedWon>, n: Int) -> Leaderboard
     constructs Leaderboard
