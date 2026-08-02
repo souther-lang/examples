@@ -1,6 +1,11 @@
 package example.forecasting;
 
+import example.crm.ConversionRate;
+import example.crm.CurrencyCode;
+import example.crm.RateTable;
 import example.crm.UserId;
+import example.org.RoleName;
+import example.org.RoleNode;
 import example.pipeline.Prospecting;
 
 import net.unit8.raoh.Err;
@@ -40,7 +45,7 @@ class ForecastTest {
                 user("u-001"),
                 List.of(deal("006000000000001", "1000000.00", "2026-09-30"),
                         deal("006000000000002", "2000000.00", "2026-12-31")),
-                1L));
+                1L, yenRates()));
 
         Map<String, Object> encoded = Forecast.encoder().encode(forecast);
         @SuppressWarnings("unchecked")
@@ -58,7 +63,7 @@ class ForecastTest {
     @Test
     void anAprilFiscalYearMovesTheSameDealToAnotherQuarter() {
         Forecast forecast = assertInstanceOf(Forecast.class, WeightedForecast.of().apply(
-                user("u-001"), List.of(deal("006000000000001", "1000000.00", "2026-09-30")), 4L));
+                user("u-001"), List.of(deal("006000000000001", "1000000.00", "2026-09-30")), 4L, yenRates()));
 
         @SuppressWarnings("unchecked")
         Map<String, Object> byPeriod = (Map<String, Object>) Forecast.encoder().encode(forecast).get("byPeriod");
@@ -68,13 +73,13 @@ class ForecastTest {
     @Test
     void aThirteenthMonthIsRefused() {
         assertInstanceOf(InvalidFiscalYearStart.class,
-                WeightedForecast.of().apply(user("u-001"), List.of(), 13L));
+                WeightedForecast.of().apply(user("u-001"), List.of(), 13L, yenRates()));
     }
 
     @Test
     void aQuarterWithNoDealsHasNoForecastRatherThanZero() {
         Forecast forecast = assertInstanceOf(Forecast.class, WeightedForecast.of().apply(
-                user("u-001"), List.of(deal("006000000000001", "1000000.00", "2026-09-30")), 1L));
+                user("u-001"), List.of(deal("006000000000001", "1000000.00", "2026-09-30")), 1L, yenRates()));
 
         assertInstanceOf(NoForecastForPeriod.class,
                 QuotaGap.of().apply(forecast, quota("100000.00"), period("FY26-Q4")));
@@ -89,7 +94,7 @@ class ForecastTest {
         AttainmentFor attainment = AttainmentFor.bind(new CompPlan());
 
         Forecast forecast = assertInstanceOf(Forecast.class, WeightedForecast.of().apply(
-                user("u-001"), List.of(deal("006000000000001", "1500000.00", "2026-09-30")), 1L));
+                user("u-001"), List.of(deal("006000000000001", "1500000.00", "2026-09-30")), 1L, yenRates()));
 
         OnTrack onTrack = assertInstanceOf(OnTrack.class,
                 attainment.apply(user("u-001"), forecast, period("FY26-Q3")));
@@ -103,15 +108,17 @@ class ForecastTest {
     }
 
     @Test
-    void aManagersForecastIsTheRepsSummedRatherThanOneOfThem() {
+    void aManagersForecastIsTheTeamUnderThemSummedRatherThanOneOfThem() {
         // This is the assertion Map.union would have failed: both reps have a Q3, and a left-biased union
-        // would have kept one figure and dropped the other without saying so.
+        // would have kept one figure and dropped the other without saying so. Which reps count is not a
+        // list handed in at the call — it is the subtree under the manager in the role hierarchy.
         Forecast one = assertInstanceOf(Forecast.class, WeightedForecast.of().apply(
-                user("u-001"), List.of(deal("006000000000001", "1000000.00", "2026-09-30")), 1L));
+                user("u-001"), List.of(deal("006000000000001", "1000000.00", "2026-09-30")), 1L, yenRates()));
         Forecast two = assertInstanceOf(Forecast.class, WeightedForecast.of().apply(
-                user("u-002"), List.of(deal("006000000000002", "3000000.00", "2026-09-30")), 1L));
+                user("u-002"), List.of(deal("006000000000002", "3000000.00", "2026-09-30")), 1L, yenRates()));
 
-        Forecast team = RollupTeam.of().apply(user("u-manager"), List.of(one, two));
+        Forecast team = assertInstanceOf(Forecast.class, RollupThrough.of().apply(team(),
+                Map.of(user("u-001"), one, user("u-002"), two)));
         Map<String, Object> encoded = Forecast.encoder().encode(team);
 
         @SuppressWarnings("unchecked")
@@ -120,6 +127,26 @@ class ForecastTest {
                 "100000 + 300000, not one of them");
         assertEquals("u-manager", encoded.get("owner"));
         assertEquals(2L, ((Number) encoded.get("dealCount")).longValue());
+    }
+
+    /** A deal sold in dollars is worth what the rate table says before it joins the total, and one in a
+     *  currency the table does not price stops the forecast rather than quietly leaving. */
+    @Test
+    void aDealInAnotherCurrencyIsConvertedBeforeItIsAdded() {
+        Forecast forecast = assertInstanceOf(Forecast.class, WeightedForecast.of().apply(
+                user("u-001"),
+                List.of(deal("006000000000001", "1000000.00", "2026-09-30"),
+                        deal("006000000000003", "1000.00", "2026-09-30", "USD")),
+                1L, yenRates()));
+
+        Map<String, Object> encoded = Forecast.encoder().encode(forecast);
+        assertEquals("JPY", encoded.get("currency"));
+        assertEquals(0, ((BigDecimal) encoded.get("total")).compareTo(new BigDecimal("115000")),
+                "100000 yen-side plus 1000 USD at 150, weighted at ten per cent");
+
+        assertInstanceOf(UnconvertibleCurrency.class, WeightedForecast.of().apply(
+                user("u-001"), List.of(deal("006000000000004", "1000.00", "2026-09-30", "EUR")),
+                1L, yenRates()));
     }
 
     @Test
@@ -148,15 +175,35 @@ class ForecastTest {
     // --- fixtures ---------------------------------------------------------------------------------
 
     private static Prospecting deal(String id, String amount, String closeDate) {
+        return deal(id, amount, closeDate, "JPY");
+    }
+
+    private static Prospecting deal(String id, String amount, String closeDate, String currency) {
         return ok(Prospecting.decoder().decode(Map.of(
                 "id", id,
                 "accountId", "001000000000100",
                 "name", "Acme Corp — New Business",
                 "owner", "u-001",
                 "amount", new BigDecimal(amount),
-                "currency", "JPY",
+                "currency", currency,
                 "closeDate", LocalDate.parse(closeDate),
                 "openedOn", LocalDate.parse("2026-07-20")), Path.ROOT));
+    }
+
+    /** Yen is the reporting currency and sits in the table at one, which {@code RateTable}'s invariant
+     *  requires — so a yen deal takes the same path in as a dollar one. */
+    private static RateTable yenRates() {
+        return ok(RateTable.decoder().decode(Map.of(
+                "base", "JPY",
+                "rates", Map.of("JPY", BigDecimal.ONE, "USD", new BigDecimal("150.0"))), Path.ROOT));
+    }
+
+    /** A manager with the two reps reporting to them. */
+    private static RoleNode team() {
+        return ok(RoleNode.decoder().decode(Map.of(
+                "role", "Manager", "holder", "u-manager", "reports", List.of(
+                        Map.of("role", "Rep", "holder", "u-001", "reports", List.of()),
+                        Map.of("role", "Rep", "holder", "u-002", "reports", List.of()))), Path.ROOT));
     }
 
     private static UserId user(String id) {

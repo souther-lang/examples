@@ -17,8 +17,12 @@
 //     who needs 30% off takes 30% off one line and nothing off the rest. Stated, again, without dividing.
 //   - `ApprovalState` as a four-case sum where Salesforce has a flag and three nullable columns, one of
 //     whose cases — approved automatically — has nobody to name.
-//   - An injected behavior whose success value belongs to another module, so the implementation builds it
-//     through that module's decoder rather than through a constructor this declaration could grant.
+//   - **Approval as a chain rather than a person.** How far up a discount has to go is a rule, and who is
+//     up there is the org chart, so the two are read from different places: the discount picks a level,
+//     and example.org's hierarchy names the people at it. A quote past thirty-five per cent is signed by
+//     the manager, then the vice president, then the chief financial officer, in that order — and the
+//     pending state carries the whole line with the person it is waiting on, so approving does not end the
+//     approval, it advances it.
 //   - An expiry window and an approval read as one expression, because both are cases and neither is a
 //     boolean anybody can misread.
 //
@@ -38,6 +42,10 @@ module example.quoting exposing (
     SalesManager,
     RegionalVp,
     Cfo,
+    ApprovalChain,
+    SubmitterNotInHierarchy,
+    NoAuthorityAbove,
+    approvalChainFor,
     NotSubmitted,
     AutoApproved,
     PendingApproval,
@@ -54,7 +62,6 @@ module example.quoting exposing (
     NeedsApproval,
     QuoteExpired,
     DiscountExposure,
-    approverFor,
     buildQuote,
     approvalNeeded,
     submitForApproval,
@@ -64,6 +71,7 @@ module example.quoting exposing (
     discountExposureOf
 )
 import example.crm ( AccountId, UserId, Amount )
+import example.org ( RoleNode, RoleName, ReportingChain, NotInHierarchy, chainTo )
 import example.pipeline ( OpportunityId, QuoteNumber, PerceptionAnalysis )
 
 // === Values ===
@@ -140,7 +148,15 @@ data LineRequest =
 
 data ApproverRole = SalesManager | RegionalVp | Cfo
 
-data PendingApproval = { submittedOn: Date, role: ApproverRole, approver: UserId }
+// Waiting on somebody, and knowing who comes after them. `awaiting` is the person the quote is with now
+// and `remaining` is who it goes to when they sign — so approving moves the quote along the chain rather
+// than ending the approval, and the state never has to be reconstructed from the role a second time.
+data PendingApproval =
+    { submittedOn: Date
+    , role: ApproverRole
+    , awaiting: UserId
+    , remaining: List<UserId>
+    }
 data ApprovedQuote   = { approvedOn: Date, approver: UserId }
 data RejectedQuote   = { rejectedOn: Date, approver: UserId, note: RejectionNote }
 
@@ -327,24 +343,61 @@ example approvalNeeded
         (quoteAt(DiscountRate(0.40m), Amount(6000.00m)))
         -> NeedsApproval { role = Cfo, worstDiscount = DiscountRate(0.40m) }
 
-// === approverFor: who holds that authority ===
-// An org's approval matrix is administered outside the model — it changes when somebody is promoted, not when
-// the rules change — so resolving a role to a person is injected. Its success value is crm's UserId, which the
-// implementation builds through crm's public decoder — the path a value arriving from outside takes, invariant
-// and all. That is the ordinary shape for an injected behavior returning another context's type.
-behavior approverFor : (role: ApproverRole) -> UserId
+// === approvalChainFor: who has to sign, in order ===
+// The discount says how far up the quote has to go; the org chart says who is up there. Neither knows the
+// other, and joining them here is the whole of an approval matrix — a table that in most systems is
+// maintained by hand and goes stale the week somebody is promoted.
+//
+// A role is a number of levels above the submitter, so the chain is example.org's reporting line read
+// backwards from the rep and cut to that many people. Salesforce ships this as "approve up N levels" and
+// it is the one part of the matrix that never needs re-entering.
+//
+// Two things can go wrong and neither is a failure of the rules. The submitter may not be in the tree at
+// all, which is a stale user record; or there may not be enough people above them, which is what happens
+// when the chief executive discounts something. An output union is built from this module's own cases, so
+// example.org's `NotInHierarchy` is answered here as `SubmitterNotInHierarchy` rather than passed through.
+data ApprovalChain = { role: ApproverRole, approvers: List<UserId> }
+data SubmitterNotInHierarchy = { submitter: UserId }
+data NoAuthorityAbove = { submitter: UserId, needed: Int, available: Int }
+
+let levelsFor (role: ApproverRole): Int =
+    match role with
+        | SalesManager -> 1
+        | RegionalVp   -> 2
+        | Cfo          -> 3
+
+behavior approvalChainFor : (root: RoleNode, submitter: UserId, role: ApproverRole)
+        -> ApprovalChain | SubmitterNotInHierarchy | NoAuthorityAbove
+    constructs ApprovalChain, SubmitterNotInHierarchy, NoAuthorityAbove
+
+// `chainTo` answers root-first and ends at the submitter, so reversing it and dropping the submitter
+// leaves the people above them, nearest first — which is the order they sign in.
+let approvalChainFor (root, submitter, role) =
+    match chainTo(root, submitter) with
+        | NotInHierarchy -> SubmitterNotInHierarchy { submitter = submitter }
+        | ReportingChain as line -> {
+            let above = List.drop(1, List.reverse(line.steps))
+            let needed = levelsFor(role)
+            guard List.length(above) >= needed
+                else NoAuthorityAbove { submitter = submitter, needed = needed
+                                      , available = List.length(above) }
+            ApprovalChain { role = role, approvers = List.take(needed, above) }
+        }
 
 // === submitForApproval ===
 // Every state says what submitting means from there, which is what an exhaustive match over an attribute
 // buys: there is no state in which submitting quietly does nothing.
-behavior submitForApproval : (quote: Quote, on: Date) -> Quote | AlreadySubmitted | NothingToApprove
-    depends on approverFor
+behavior submitForApproval : (quote: Quote, on: Date, chain: ApprovalChain)
+        -> Quote | AlreadySubmitted | NothingToApprove
     // The role and the worst discount are what `approvalNeeded` built, carried through.
     constructs Quote, PendingApproval, AutoApproved, AlreadySubmitted, NothingToApprove
 
 // Whether this quote needs approving is `approvalNeeded`'s answer, so this behavior asks it rather than
 // reading the matrix a second time: a behavior whose own requirement set is empty is called by name.
-let submitForApproval (quote, on, approverFor) =
+//
+// The chain comes in already built, because who signs is settled before the quote moves and reading it at
+// submission would let the answer change between deciding it and recording it.
+let submitForApproval (quote, on, chain) =
     match quote.approval with
         | PendingApproval -> AlreadySubmitted
         | Decided         -> AlreadySubmitted
@@ -352,47 +405,98 @@ let submitForApproval (quote, on, approverFor) =
         | NotSubmitted    ->
             match approvalNeeded(quote) with
                 | WithinAuthority     -> Quote { ...quote, approval = AutoApproved }
-                | NeedsApproval as n  -> Quote { ...quote
-                                               , approval = PendingApproval { submittedOn = on
-                                                                            , role = n.role
-                                                                            , approver = approverFor(n.role) } }
+                | NeedsApproval as n  ->
+                    match List.get(0, chain.approvers) with
+                        | None -> Quote { ...quote, approval = AutoApproved }
+                        | Some first ->
+                            Quote { ...quote
+                                  , approval = PendingApproval { submittedOn = on
+                                                               , role = n.role
+                                                               , awaiting = first
+                                                               , remaining =
+                                                                   List.drop(1, chain.approvers) } }
 
-// The fake is the org chart, and the `_` row is what makes an unrouted role impossible to forget.
-fake approverFor
-    | (SalesManager) -> UserId("u-manager")
-    | (RegionalVp)   -> UserId("u-vp")
-    | _              -> UserId("u-cfo")
+let acmeOrg = RoleNode { role = RoleName("CFO"), holder = UserId("u-cfo"), reports =
+    [ RoleNode { role = RoleName("VP Sales"), holder = UserId("u-vp"), reports =
+        [ RoleNode { role = RoleName("Manager"), holder = UserId("u-manager"), reports =
+            [ RoleNode { role = RoleName("Rep"), holder = UserId("u-rep"), reports = [] } ] } ] } ] }
+
+example approvalChainFor
+    | "a manager-level discount is signed by the one person above the rep" :
+        (acmeOrg, UserId("u-rep"), SalesManager)
+        -> ApprovalChain { role = SalesManager, approvers = [ UserId("u-manager") ] }
+    | "a vice-president-level discount is signed by the manager first, then the vice president" :
+        (acmeOrg, UserId("u-rep"), RegionalVp)
+        -> ApprovalChain { role = RegionalVp, approvers = [ UserId("u-manager"), UserId("u-vp") ] }
+    | "the chief financial officer's level reaches the top of this org" :
+        (acmeOrg, UserId("u-rep"), Cfo)
+        -> ApprovalChain { role = Cfo, approvers =
+            [ UserId("u-manager"), UserId("u-vp"), UserId("u-cfo") ] }
+    | "the vice president has nobody three levels above them" :
+        (acmeOrg, UserId("u-vp"), Cfo)
+        -> NoAuthorityAbove { submitter = UserId("u-vp"), needed = 3, available = 1 }
+    | "somebody who left the org chart cannot have a chain built for them" :
+        (acmeOrg, UserId("u-ghost"), SalesManager)
+        -> SubmitterNotInHierarchy { submitter = UserId("u-ghost") }
+
+let vpChain = ApprovalChain { role = RegionalVp,
+                              approvers = [ UserId("u-manager"), UserId("u-vp") ] }
 
 example submitForApproval
-    | "a quote past the rep's authority goes to the role that holds it, and to the person in that role" :
-        (vpQuote, Date("2026-08-12"))
+    | "a quote past the rep's authority goes to the first person on the chain, and keeps the rest" :
+        (vpQuote, Date("2026-08-12"), vpChain)
         -> Quote
     | "a quote already waiting on somebody is not submitted twice" :
         (Quote { ...vpQuote
                , approval = PendingApproval { submittedOn = Date("2026-08-11"), role = RegionalVp
-                                            , approver = UserId("u-vp") }
-               }, Date("2026-08-12"))
+                                            , awaiting = UserId("u-manager")
+                                            , remaining = [ UserId("u-vp") ] }
+               }, Date("2026-08-12"), vpChain)
         -> AlreadySubmitted
     | "a quote inside the rep's own authority has nobody to submit it to" :
-        (Quote { ...repQuote, approval = AutoApproved }, Date("2026-08-12"))
+        (Quote { ...repQuote, approval = AutoApproved }, Date("2026-08-12"), vpChain)
         -> NothingToApprove
 
 // === decideApproval ===
 // A rejection with no reason is a thing approvers do and a thing the model refuses: the note is required, and
 // the requirement is a case rather than an abort because it is a form somebody has to fill in again.
+//
+// An approval, on the other hand, is not necessarily the end. If somebody is still on the chain the quote
+// stays pending and moves to them; only the last signature approves it. Reading that off `remaining` is why
+// the pending state carries the rest of the chain — working it out again from the role would ask the org
+// chart a second time and could get a different answer, which is how a quote ends up approved by two people
+// out of three.
+//
+// A rejection anywhere stops it. One "no" is a decision, and asking the next person up would be asking them
+// to overrule somebody who has already said no, which is a conversation and not a workflow.
 behavior decideApproval : (quote: Quote, approver: UserId, on: Date, verdict: Verdict, note: String)
-        -> Quote | NotPending | RejectionNoteMissing
-    constructs Quote, ApprovedQuote, RejectedQuote, RejectionNote, NotPending, RejectionNoteMissing
+        -> Quote | NotPending | RejectionNoteMissing | NotTheirDecision
+    constructs Quote, ApprovedQuote, RejectedQuote, PendingApproval, RejectionNote, NotPending,
+               RejectionNoteMissing, NotTheirDecision
+
+// Somebody further up the chain cannot sign early. The quote is with one person, and it says who.
+data NotTheirDecision = { awaiting: UserId, offered: UserId }
+
+let advance (quote: Quote, pending: PendingApproval, approver: UserId, on: Date): Quote =
+    match List.get(0, pending.remaining) with
+        | None -> Quote { ...quote
+                        , approval = ApprovedQuote { approvedOn = on, approver = approver } }
+        | Some next -> Quote { ...quote
+                             , approval = PendingApproval { ...pending
+                                                          , awaiting = next
+                                                          , remaining =
+                                                              List.drop(1, pending.remaining) } }
 
 let decideApproval (quote, approver, on, verdict, note) =
     match quote.approval with
         | NotSubmitted    -> NotPending
         | AutoApproved    -> NotPending
         | Decided         -> NotPending
-        | PendingApproval ->
+        | PendingApproval as pending -> {
+            guard pending.awaiting == approver
+                else NotTheirDecision { awaiting = pending.awaiting, offered = approver }
             match verdict with
-                | Approve -> Quote { ...quote
-                                   , approval = ApprovedQuote { approvedOn = on, approver = approver } }
+                | Approve -> advance(quote, pending, approver, on)
                 | Reject  -> {
                     guard RejectionNote(String.trim(note)) as reason else RejectionNoteMissing
 
@@ -401,6 +505,41 @@ let decideApproval (quote, approver, on, verdict, note) =
                                                      , approver = approver
                                                      , note = reason } }
                 }
+          }
+
+let waitingOnManager = Quote { ...vpQuote
+                             , approval = PendingApproval { submittedOn = Date("2026-08-11")
+                                                          , role = RegionalVp
+                                                          , awaiting = UserId("u-manager")
+                                                          , remaining = [ UserId("u-vp") ] }
+                             }
+
+example decideApproval
+    | "the first signature moves the quote to the next person, it does not approve it" :
+        (waitingOnManager, UserId("u-manager"), Date("2026-08-12"), Approve, "")
+        -> Quote { ...vpQuote
+                 , approval = PendingApproval { submittedOn = Date("2026-08-11"), role = RegionalVp
+                                              , awaiting = UserId("u-vp"), remaining = [ ] } }
+    | "the last signature is the one that approves it" :
+        (Quote { ...vpQuote
+               , approval = PendingApproval { submittedOn = Date("2026-08-11"), role = RegionalVp
+                                            , awaiting = UserId("u-vp"), remaining = [ ] } }
+        , UserId("u-vp"), Date("2026-08-12"), Approve, "")
+        -> Quote { ...vpQuote
+                 , approval = ApprovedQuote { approvedOn = Date("2026-08-12")
+                                            , approver = UserId("u-vp") } }
+    | "the vice president cannot sign before the manager has" :
+        (waitingOnManager, UserId("u-vp"), Date("2026-08-12"), Approve, "")
+        -> NotTheirDecision { awaiting = UserId("u-manager"), offered = UserId("u-vp") }
+    | "one no ends it, and the rest of the chain is never asked" :
+        (waitingOnManager, UserId("u-manager"), Date("2026-08-12"), Reject, "margin too thin")
+        -> Quote { ...vpQuote
+                 , approval = RejectedQuote { rejectedOn = Date("2026-08-12")
+                                            , approver = UserId("u-manager")
+                                            , note = RejectionNote("margin too thin") } }
+    | "a rejection still needs a reason" :
+        (waitingOnManager, UserId("u-manager"), Date("2026-08-12"), Reject, "   ")
+        -> RejectionNoteMissing
 
 // === acceptQuote ===
 // Only an approved, unexpired quote is accepted, and both halves are one expression. The outer match reaches
