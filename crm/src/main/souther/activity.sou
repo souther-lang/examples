@@ -355,7 +355,7 @@ behavior staleAccounts : (activities: List<Activity>, today: Date, staleAfter: C
 let staleAccounts (activities, today, staleAfter) = {
     let pairs: List<(AccountId, Date)> = List.concatMap(a -> accountDatesOf(a), activities)
     let since: Map<AccountId, Int> =
-        List.fold((acc, pair) -> upsertRecency(acc, pair, today), Map.empty(), pairs)
+        List.fold((acc, pair) -> upsertRecency(acc, pair, today), Map.empty, pairs)
     StaleReport { daysSince = since
                 , stale = List.sort(Map.keys(Map.filter((k, days) -> days >= staleAfter.value, since)))
                 }
@@ -376,7 +376,7 @@ behavior multiThreaded : (meetings: List<Meeting>) -> Coverage
 
 let multiThreaded (meetings) = {
     let everyone: Set<ContactId> =
-        List.fold((acc, m) -> Set.union(acc, m.attendees.value), Set.empty(), meetings)
+        List.fold((acc, m) -> Set.union(acc, m.attendees.value), Set.empty, meetings)
     Coverage { contacts = everyone
              , count = Set.size(everyone)
              , singleThreaded = Set.size(everyone) <= 1
@@ -453,7 +453,7 @@ let dayLoadOf (activities, owner) = {
     let minutes: Map<Date, Int> =
         List.fold((acc, m) -> Map.upsert(DateTime.toDate(m.startAt), m.minutes.value,
                                          sofar -> sofar + m.minutes.value, acc),
-                  Map.empty(), mine)
+                  Map.empty, mine)
     DayLoad { minutesPerDay = minutes
             , busiestMinutes = Option.withDefault(0, List.max(Map.values(minutes)))
             }

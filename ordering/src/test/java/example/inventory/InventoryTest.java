@@ -57,4 +57,38 @@ class InventoryTest {
         org.junit.jupiter.api.Assertions.assertThrows(souther.runtime.ConstraintViolation.class,
                 () -> BaySlots.of().apply("A", 100L));
     }
+
+    /** The unit survives the boundary. {@code Eaches} and {@code Cases} are separate generated types,
+     *  so the Java that drives the warehouse cannot hand one where the other belongs either — and
+     *  each still encodes to the bare number a newtype is. */
+    @Test
+    void aQuantityCarriesItsUnitAcrossTheBoundary() {
+        Object shipped = ToCases.of().apply(eaches(24), packSize(12));
+
+        Shippable whole = assertInstanceOf(Shippable.class, shipped);
+        assertEquals(2L, Shippable.encoder().encode(whole).get("cases"));
+        assertEquals(24L, Eaches.encoder().encode(ToEaches.of().apply(cases(2), packSize(12))));
+    }
+
+    /** A quantity that is not a multiple of the pack leaves a remainder, and the remainder is counted
+     *  in units — the failure case says which unit without anybody having to ask. */
+    @Test
+    void aRemainderIsReportedInUnits() {
+        Object shipped = ToCases.of().apply(eaches(25), packSize(12));
+
+        PartialCase partial = assertInstanceOf(PartialCase.class, shipped);
+        assertEquals(1L, PartialCase.encoder().encode(partial).get("leftover"));
+    }
+
+    private Eaches eaches(long n) {
+        return ((Ok<Eaches>) Eaches.decoder().decode(n, Path.ROOT)).value();
+    }
+
+    private Cases cases(long n) {
+        return ((Ok<Cases>) Cases.decoder().decode(n, Path.ROOT)).value();
+    }
+
+    private PackSize packSize(long n) {
+        return ((Ok<PackSize>) PackSize.decoder().decode(n, Path.ROOT)).value();
+    }
 }

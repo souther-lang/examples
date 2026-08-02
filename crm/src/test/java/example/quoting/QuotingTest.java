@@ -1,6 +1,7 @@
 package example.quoting;
 
 import example.crm.UserId;
+import example.org.RoleNode;
 import example.pipeline.AssessPerception;
 import example.pipeline.IdentifyDecisionMakers;
 import example.pipeline.NeedsAnalysis;
@@ -111,70 +112,113 @@ class QuotingTest {
     }
 
     @Test
-    void submittingResolvesTheRoleToAPersonThroughTheInjectedLookup() {
-        // approverFor's success value is crm's UserId, which quoting cannot construct — so the implementation
-        // builds it through crm's decoder. That is the ordinary shape when an injected behavior answers with
-        // another context's type.
-        SubmitForApproval submit = SubmitForApproval.bind(new OrgChart());
-
+    void submittingSendsTheQuoteToTheFirstPersonOnTheChain() {
+        // Who signs is not a table: the discount picks a level and the role hierarchy names the people at
+        // it, so a promotion changes the answer without anything here being re-entered.
         Quote needsVp = assertInstanceOf(Quote.class, BuildQuote.of().apply(
                 quoteNumber(), discovered(), List.of(line("SW-1001", 10, "1000.00", "0.30")),
                 LocalDate.parse("2026-08-10"), 30L));
 
-        Quote submitted = assertInstanceOf(Quote.class, submit.apply(needsVp, LocalDate.parse("2026-08-12")));
+        ApprovalChain chain = assertInstanceOf(ApprovalChain.class,
+                ApprovalChainFor.of().apply(orgChart(), user("u-rep"), regionalVp()));
+        assertEquals(List.of("u-manager", "u-vp"),
+                ((List<?>) ApprovalChain.encoder().encode(chain).get("approvers")));
+
+        Quote submitted = assertInstanceOf(Quote.class, SubmitForApproval.of()
+                .apply(needsVp, LocalDate.parse("2026-08-12"), chain));
         Map<?, ?> approval = (Map<?, ?>) Quote.encoder().encode(submitted).get("approval");
         assertEquals("PendingApproval", approval.get("type"));
-        assertEquals("u-vp", approval.get("approver"));
+        assertEquals("u-manager", approval.get("awaiting"), "the nearest approver signs first");
+        assertEquals(List.of("u-vp"), approval.get("remaining"));
 
         // Submitting it again is a case, not a second submission.
-        assertInstanceOf(AlreadySubmitted.class, submit.apply(submitted, LocalDate.parse("2026-08-13")));
+        assertInstanceOf(AlreadySubmitted.class, SubmitForApproval.of()
+                .apply(submitted, LocalDate.parse("2026-08-13"), chain));
 
         // A quote inside the rep's own authority has nobody to send it to.
         Quote small = assertInstanceOf(Quote.class, BuildQuote.of().apply(
                 quoteNumber(), discovered(), List.of(line("SW-1001", 10, "1000.00", "0.05")),
                 LocalDate.parse("2026-08-10"), 30L));
-        Quote auto = assertInstanceOf(Quote.class, submit.apply(small, LocalDate.parse("2026-08-12")));
+        Quote auto = assertInstanceOf(Quote.class, SubmitForApproval.of()
+                .apply(small, LocalDate.parse("2026-08-12"), chain));
         assertEquals("AutoApproved",
                 ((Map<?, ?>) Quote.encoder().encode(auto).get("approval")).get("type"));
     }
 
+    /** Two signatures, in order, and only the second one approves anything. */
     @Test
-    void aRejectionWithNoReasonIsRefusedAndAcceptingNeedsAnApproval() {
-        SubmitForApproval submit = SubmitForApproval.bind(new OrgChart());
-        Quote pending = assertInstanceOf(Quote.class, submit.apply(
-                assertInstanceOf(Quote.class, BuildQuote.of().apply(
-                        quoteNumber(), discovered(), List.of(line("SW-1001", 10, "1000.00", "0.30")),
-                        LocalDate.parse("2026-08-10"), 30L)),
-                LocalDate.parse("2026-08-12")));
+    void everySignatureOnTheChainIsNeededBeforeTheQuoteIsApproved() {
+        Quote pending = pendingVpQuote();
 
-        assertInstanceOf(RejectionNoteMissing.class, DecideApproval.of().apply(
-                pending, user("u-vp"), LocalDate.parse("2026-08-13"), reject(), "   "));
+        assertInstanceOf(NotTheirDecision.class, DecideApproval.of().apply(
+                pending, user("u-vp"), LocalDate.parse("2026-08-13"), approve(), ""));
 
-        Quote rejected = assertInstanceOf(Quote.class, DecideApproval.of().apply(
-                pending, user("u-vp"), LocalDate.parse("2026-08-13"), reject(), "margin too thin"));
+        Quote afterManager = assertInstanceOf(Quote.class, DecideApproval.of().apply(
+                pending, user("u-manager"), LocalDate.parse("2026-08-13"), approve(), ""));
+        Map<?, ?> stillPending = (Map<?, ?>) Quote.encoder().encode(afterManager).get("approval");
+        assertEquals("PendingApproval", stillPending.get("type"));
+        assertEquals("u-vp", stillPending.get("awaiting"));
+
         assertInstanceOf(ApprovalMissing.class,
-                AcceptQuote.of().apply(rejected, LocalDate.parse("2026-08-20")));
+                AcceptQuote.of().apply(afterManager, LocalDate.parse("2026-08-20")));
 
         Quote approved = assertInstanceOf(Quote.class, DecideApproval.of().apply(
-                pending, user("u-vp"), LocalDate.parse("2026-08-13"), approve(), ""));
+                afterManager, user("u-vp"), LocalDate.parse("2026-08-14"), approve(), ""));
         AcceptedQuote accepted = assertInstanceOf(AcceptedQuote.class,
                 AcceptQuote.of().apply(approved, LocalDate.parse("2026-08-20")));
         assertEquals(0, ((BigDecimal) AcceptedQuote.encoder().encode(accepted).get("total"))
                 .compareTo(new BigDecimal("7000")));
     }
 
-    /** The org's approval matrix, which is configuration rather than domain. */
-    static final class OrgChart extends ApproverFor {
+    @Test
+    void aRejectionWithNoReasonIsRefusedAndOneNoEndsIt() {
+        Quote pending = pendingVpQuote();
 
-        @Override
-        public UserId apply(ApproverRole role) {
-            String id = switch (role) {
-                case SalesManager _ -> "u-manager";
-                case RegionalVp _ -> "u-vp";
-                case Cfo _ -> "u-cfo";
-            };
-            return ok(UserId.decoder().decode(id, Path.ROOT));
-        }
+        assertInstanceOf(RejectionNoteMissing.class, DecideApproval.of().apply(
+                pending, user("u-manager"), LocalDate.parse("2026-08-13"), reject(), "   "));
+
+        Quote rejected = assertInstanceOf(Quote.class, DecideApproval.of().apply(
+                pending, user("u-manager"), LocalDate.parse("2026-08-13"), reject(), "margin too thin"));
+        assertInstanceOf(ApprovalMissing.class,
+                AcceptQuote.of().apply(rejected, LocalDate.parse("2026-08-20")));
+    }
+
+    /** A rep with nobody far enough above them cannot have a chain built, and that is an answer rather
+     *  than an empty list somebody would read as "no approval needed". */
+    @Test
+    void aChainThatCannotBeBuiltSaysSo() {
+        assertInstanceOf(NoAuthorityAbove.class,
+                ApprovalChainFor.of().apply(orgChart(), user("u-vp"), cfo()));
+        assertInstanceOf(SubmitterNotInHierarchy.class,
+                ApprovalChainFor.of().apply(orgChart(), user("u-ghost"), regionalVp()));
+    }
+
+    private Quote pendingVpQuote() {
+        ApprovalChain chain = assertInstanceOf(ApprovalChain.class,
+                ApprovalChainFor.of().apply(orgChart(), user("u-rep"), regionalVp()));
+        return assertInstanceOf(Quote.class, SubmitForApproval.of().apply(
+                assertInstanceOf(Quote.class, BuildQuote.of().apply(
+                        quoteNumber(), discovered(), List.of(line("SW-1001", 10, "1000.00", "0.30")),
+                        LocalDate.parse("2026-08-10"), 30L)),
+                LocalDate.parse("2026-08-12"), chain));
+    }
+
+    /** The org chart the chain is read off: a rep under a manager under a vice president under the CFO. */
+    private static RoleNode orgChart() {
+        return ok(RoleNode.decoder().decode(Map.of(
+                "role", "CFO", "holder", "u-cfo", "reports", List.of(
+                        Map.of("role", "VP Sales", "holder", "u-vp", "reports", List.of(
+                                Map.of("role", "Manager", "holder", "u-manager", "reports", List.of(
+                                        Map.of("role", "Rep", "holder", "u-rep",
+                                                "reports", List.of()))))))), Path.ROOT));
+    }
+
+    private static ApproverRole regionalVp() {
+        return ok(ApproverRole.decoder().decode("RegionalVp", Path.ROOT));
+    }
+
+    private static ApproverRole cfo() {
+        return ok(ApproverRole.decoder().decode("Cfo", Path.ROOT));
     }
 
     // --- fixtures: the state is earned by walking the pipeline --------------------------------------

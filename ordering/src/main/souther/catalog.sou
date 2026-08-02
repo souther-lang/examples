@@ -1,0 +1,172 @@
+// The product structure, and the first self-referential `data` in this repository. A kit is made of
+// parts, and a part may be a kit — so `Component` holds a `List<Component>`, which is the shape
+// ADR-0038 was written for and which nothing here had used until now.
+//
+// What the recursion costs and what it buys:
+//   - A recursive helper declares its return type (`let needFrom (…): Map<Sku, Int>`). A
+//     non-recursive one still infers it; the annotation is the price of the cycle, because the
+//     result cannot be read back through a self-call.
+//   - Recursion is total by default, and every call here passes an element of `c.parts` — a
+//     sub-term of an argument, so it is strictly smaller and the walk bottoms out. Recursing on a
+//     computed value instead would need `partial`, and nothing here does.
+//   - The derived codec traverses it. A nested `{"sku":…,"parts":[{…}]}` decodes to a `Component`
+//     whose parts are `Component`s, and `CatalogTest` sends one three levels deep through
+//     `decoder()` and back.
+//   - An invariant may not recurse, so `quantity >= 1` is stated of this node and of no other. That
+//     every quantity down the tree holds it is true anyway — each node ran its own invariant when it
+//     was built — but it is not a property this type states, and the difference matters the moment
+//     somebody wants one that does not follow from the parts (`inventory`'s EAN-13 check digit is
+//     out of an invariant for the same reason: an invariant may not fold either).
+//
+// A cycle is not representable here. The parts are nested inside the component rather than named by
+// a key, so writing one would take an infinite literal. That is not a claim about the world — a real
+// bill of materials is parent/child rows and can absolutely name its own ancestor — it says where the
+// check belongs: with whoever turns those rows into this tree, not with a behavior in this module.
+//
+// The module speaks cart's `Sku` and nothing else of cart's, and nothing imports it: what it produces
+// is a requirement, and requirements are read by people. It is exposed anyway, because the smoke test
+// builds a `Component` from JSON.
+// Findings recorded here: F29 at Requirement.
+module example.catalog exposing (
+    Component,
+    Requirement,
+    Depth,
+    Buildable,
+    explode,
+    bomDepth,
+    buildableFrom
+)
+import example.cart ( Sku )
+import List ( fold, isEmpty )
+
+// One node of the structure: a sku, how many of it the parent takes, and what it is made of. A leaf
+// is a component with no parts — something bought rather than built — and it is the empty list that
+// says so, not a flag.
+data Component =
+    { sku: Sku
+    , quantity: Int
+    , parts: List<Component>
+    }
+    invariant quantity >= 1
+
+// === explode: the whole structure as a flat requirement ===
+// What building `orderQuantity` kits takes, sku by sku, every level included. The multiplier carries
+// down: a desk takes four leg sets and a leg set takes eight bolts, so two desks take sixty-four
+// bolts and the arithmetic happens once per level rather than once per path.
+//
+// `purchased` is the leaves. Those are the lines a buyer acts on; everything else is made, and a
+// requirement that does not say which is which sends somebody shopping for sub-assemblies.
+// F29 is on `purchased`: a `Set` encodes to a JSON array in whatever order it holds, so the smoke test
+// asserts membership rather than the array. Which is the right assertion here and the wrong one to be
+// left with when a response body has to be stable.
+data Requirement =
+    { need: Map<Sku, Int>
+    , purchased: Set<Sku>
+    }
+
+behavior explode : (kit: Component, orderQuantity: Int) -> Requirement
+    constructs Requirement
+
+// The accumulator goes in and comes back, so the walk is one pass. `Map.upsert` adds to a sku already
+// reached — the same sub-assembly under two parents is one line, not two.
+let needFrom (need: Map<Sku, Int>, c: Component, parentTakes: Int): Map<Sku, Int> = {
+    let taken = c.quantity * parentTakes
+    let here = Map.upsert(c.sku, taken, running -> running + taken, need)
+    fold((acc, p) -> needFrom(acc, p, taken), here, c.parts)
+}
+
+let leavesOf (c: Component): Set<Sku> =
+    if isEmpty(c.parts)
+        then Set.singleton(c.sku)
+        else fold((acc, p) -> Set.union(acc, leavesOf(p)), Set.empty, c.parts)
+
+let explode (kit, orderQuantity) =
+    Requirement { need = needFrom(Map.empty, kit, orderQuantity), purchased = leavesOf(kit) }
+
+// A desk of four leg sets of eight bolts each. The fixture is written once and read by three
+// `example` blocks below, which is what a `let` at module level is for.
+let desk = Component { sku = Sku("desk"), quantity = 1, parts =
+    [ Component { sku = Sku("leg-set"), quantity = 4, parts =
+        [ Component { sku = Sku("bolt"), quantity = 8, parts = [] }
+        , Component { sku = Sku("foot"), quantity = 1, parts = [] } ] }
+    , Component { sku = Sku("top"), quantity = 1, parts = [] } ] }
+
+example explode
+    | "the multiplier carries down every level" :
+        (desk, 2)
+            -> Requirement { need = [ (Sku("desk"), 2), (Sku("leg-set"), 8), (Sku("bolt"), 64)
+                                    , (Sku("foot"), 8), (Sku("top"), 2) ]
+                           , purchased = [ Sku("bolt"), Sku("foot"), Sku("top") ] }
+    | "a bought part explodes to itself" :
+        (Component { sku = Sku("bolt"), quantity = 1, parts = [] }, 5)
+            -> Requirement { need = [ (Sku("bolt"), 5) ], purchased = [ Sku("bolt") ] }
+
+// === bomDepth: how many levels there are ===
+// The number that decides the order requirements are netted in, and the one figure a flat structure
+// cannot answer. A leaf is one level.
+data Depth = Int
+    invariant value >= 1
+
+behavior bomDepth : (kit: Component) -> Depth
+    constructs Depth
+
+let depthOf (c: Component): Int =
+    1 + fold((acc, p) -> Int.max(acc, depthOf(p)), 0, c.parts)
+
+let bomDepth (kit) = Depth(depthOf(kit))
+
+example bomDepth
+    | "a bought part is one level" :
+        (Component { sku = Sku("bolt"), quantity = 1, parts = [] }) -> Depth(1)
+    | "a kit of a kit is three" : (desk) -> Depth(3)
+
+// === buildableFrom: how many the stock on hand supports, and what runs out first ===
+// The recursion has already done its work by the time this runs: `explode` flattened the structure,
+// so the question is a fold over the purchased skus and not a second walk. That is the shape to reach
+// for — walk once, answer many times — and it is why `Requirement` carries `purchased` rather than
+// leaving the caller to work out which lines are bought.
+//
+// A count of zero is an answer and not a failure: it names the sku to order. So there is one output
+// case, and `limiting` is the line that decided it.
+data Buildable =
+    { count: Int
+    , limiting: Sku
+    }
+
+behavior buildableFrom : (kit: Component, onHand: Map<Sku, Int>) -> Buildable
+    constructs Buildable
+
+// How many kits one purchased sku supports. Its per-kit need is at least one — every `quantity` is,
+// by the invariant, and a product of them is too — so the division is safe where it stands.
+let supportedBy (perKit: Map<Sku, Int>, onHand: Map<Sku, Int>, sku: Sku): Int = {
+    let need = Map.get(sku, perKit) |> Option.withDefault(1)
+    let have = Map.get(sku, onHand) |> Option.withDefault(0)
+    have / need
+}
+
+// Two skus can support the same number of kits, and then which one is named is a decision. Leaving
+// it to `Set.toList` would answer by iteration order, which is not a rule anybody agreed to — so the
+// skus are put in order first and `List.sortBy` is stable, which makes the tie break alphabetically
+// and makes it break the same way every run.
+//
+// `purchased` is never empty — a component with no parts is its own leaf — so the `None` arm is a
+// case the model has ruled out and `unreachable` says so, rather than a zero that would read as a
+// real answer about a real sku.
+let buildableFrom (kit, onHand) = {
+    let requirement = explode(kit, 1)
+    let scarcest = List.sort(Set.toList(requirement.purchased))
+        |> List.sortBy(sku -> supportedBy(requirement.need, onHand, sku))
+        |> List.get(0)
+    match scarcest with
+        | Some sku ->
+            Buildable { count = supportedBy(requirement.need, onHand, sku), limiting = sku }
+        | None -> unreachable "a component with no parts is its own purchased leaf"
+}
+
+example buildableFrom
+    | "the scarcest purchased part decides it" :
+        (desk, [ (Sku("bolt"), 100), (Sku("foot"), 12), (Sku("top"), 9) ])
+            -> Buildable { count = 3, limiting = Sku("bolt") }
+    | "a part nobody stocks makes nothing, and names itself" :
+        (desk, [ (Sku("bolt"), 100), (Sku("top"), 9) ])
+            -> Buildable { count = 0, limiting = Sku("foot") }

@@ -10,6 +10,14 @@
 // interface. Nothing here is anybody's interface. Every rollup is an endpoint.
 //
 // What is on show:
+//   - **A figure and the currency it is in, kept together.** Deals arrive in whatever currency they
+//     were sold in, and this module used to sum the amounts and ignore the codes — which is wrong by
+//     the exchange rate, silently, every quarter. Now each deal is converted on the way in, `Forecast`
+//     states the currency it is in, and a deal in a currency the rate table does not price stops the
+//     whole forecast rather than dropping out of it.
+//   - **The team is the subtree, not a list.** A manager's number is a walk down example.org's role
+//     hierarchy, so a rep who moves is counted where they now report and counted once. Two forecasts
+//     in different currencies are refused rather than added.
 //   - A map key the domain *builds* rather than receives. FiscalPeriod is "FY26-Q3", assembled from the
 //     close date and the org's fiscal-year start month, and its own regex then checks the result exactly as
 //     it would check one that arrived from outside.
@@ -28,12 +36,13 @@
 //   - A rollup keyed by a sum. ForecastCategory's five cases are all unit data, so the category itself keys
 //     the map and the five names are written once, where they are declared.
 //
-// Findings recorded here: F5 at attainmentOf. F3, F16 and F23 were recorded here too and are gone: a sum
-// whose cases are all unit data keys a boundary map, a field every case spreads is read on the sum, and a
-// published helper is called directly instead of copied, since a behavior — unlike a helper — is callable
-// only from another behavior's body.
+// Findings recorded here: F5 at attainmentOf, F31 at the rollupThrough rows. F3, F16 and F23 were
+// recorded here too and are gone: a sum whose cases are all unit data keys a boundary map, a field
+// every case spreads is read on the sum, and a published helper is called directly instead of copied,
+// since a behavior — unlike a helper — is callable only from another behavior's body.
 module example.forecasting
-import example.crm ( Amount, UserId, AccountId, CurrencyCode )
+import example.crm ( Amount, UserId, AccountId, CurrencyCode, ConversionRate, RateTable )
+import example.org ( RoleNode, RoleName )
 import example.pipeline ( OpportunityId, OpportunityName, Opportunity, OpenOpportunity, ClosedWon
                         , Prospecting, Qualification, NeedsAnalysis, ValueProposition
                         , IdDecisionMakers, PerceptionAnalysis, ProposalPriceQuote, NegotiationReview
@@ -61,8 +70,12 @@ data Attainment = Int
 
 // === Reports ===
 
+// A forecast is a figure in a currency, and saying which one is what lets two of them be added. Every
+// deal behind it has been converted to this currency already — the conversion happens once, per deal,
+// on the way in, and nothing downstream has to know a deal was ever stated in anything else.
 data Forecast =
     { owner: UserId
+    , currency: CurrencyCode
     , periods: List<FiscalPeriod>
     , byPeriod: Map<FiscalPeriod, Amount>
     , total: Amount
@@ -162,36 +175,69 @@ let acmeDeal = Prospecting
 // A hundred and fifty thousand in the third quarter, which is the figure every quota row is held against.
 let q3Forecast = Forecast
     { owner = UserId("u-001")
+    , currency = CurrencyCode("JPY")
     , periods = [ FiscalPeriod("FY26-Q3") ]
     , byPeriod = Map.fromList([ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ])
     , total = Amount(150000.00m)
     , dealCount = 1
     }
 
+// The org's rates. Yen is the reporting currency and is in the table at one, as `RateTable`'s
+// invariant requires — so a yen deal and a dollar deal take the same path in.
+let yenRates = RateTable { base = CurrencyCode("JPY"), rates = Map.fromList(
+    [ (CurrencyCode("JPY"), ConversionRate(1.0m))
+    , (CurrencyCode("USD"), ConversionRate(150.0m)) ]) }
+
 // === weightedForecast ===
 // The weighted figure is probability × amount ÷ 100, and this is the one place in the project where a division
 // is the arithmetic rather than a way of writing a ratio. So the scale and the rounding mode are named at the
 // call, once per deal, and the answer is a Decimal rather than a union because the denominator is a literal
 // hundred and cannot be zero.
-let weightedOf (opp: OpenOpportunity): Decimal =
-    Decimal.round(Decimal.fromInt(probabilityFor(opp).value) * opp.amount.value * 0.01m, 2, HALF_UP)
+// A deal's weight, in the reporting currency. The rate lookup answers an `Option`, so the whole
+// conversion is `Option.map` and the deal simply has no weighted figure when the table says nothing
+// about its currency — which is the honest answer, and which the guard below then refuses to hide.
+//
+// This is where the module used to sum a dollar deal and a yen deal without noticing.
+let weightedOf (opp: OpenOpportunity, rates: RateTable): Option<Decimal> =
+    Map.get(opp.currency, rates.rates)
+        |> Option.map(rate -> Decimal.round(Decimal.fromInt(probabilityFor(opp).value)
+                                            * opp.amount.value * rate.value * 0.01m, 2, HALF_UP))
 
-let addToPeriod (acc: Map<FiscalPeriod, Decimal>, opp: OpenOpportunity, fyStart: Int)
+let weightedEntry (opp: OpenOpportunity, fyStart: Int, rates: RateTable)
+        : Option<(FiscalPeriod, Decimal)> =
+    weightedOf(opp, rates) |> Option.map(weighted -> (FiscalPeriod(periodLabel(opp.closeDate, fyStart)),
+                                                      weighted))
+
+let addEntry (acc: Map<FiscalPeriod, Decimal>, entry: (FiscalPeriod, Decimal))
         : Map<FiscalPeriod, Decimal> = {
-    let period = FiscalPeriod(periodLabel(opp.closeDate, fyStart))
-    let weighted = weightedOf(opp)
+    let (period, weighted) = entry
     Map.upsert(period, weighted, running -> Decimal.add(running, weighted), acc)
 }
 
-behavior weightedForecast : (owner: UserId, opps: List<OpenOpportunity>, fiscalYearStartMonth: Int)
-        -> Forecast | InvalidFiscalYearStart
-    constructs Forecast, FiscalPeriod, Amount, InvalidFiscalYearStart
+// The currencies no rate covers, which is what the failure has to name: telling a manager the forecast
+// is wrong without saying which currency to price is not a report anybody can act on.
+data UnconvertibleCurrency = { currencies: Set<CurrencyCode> }
 
-let weightedForecast (owner, opps, fiscalYearStartMonth) = {
+let unpriced (opps: List<OpenOpportunity>, rates: RateTable): Set<CurrencyCode> =
+    Set.fromList(List.map(.currency,
+        List.filter(opp -> Bool.not(Map.containsKey(opp.currency, rates.rates)), opps)))
+
+behavior weightedForecast : (owner: UserId, opps: List<OpenOpportunity>, fiscalYearStartMonth: Int,
+                             rates: RateTable)
+        -> Forecast | InvalidFiscalYearStart | UnconvertibleCurrency
+    constructs Forecast, FiscalPeriod, Amount, InvalidFiscalYearStart, UnconvertibleCurrency
+
+// `List.filterMap` drops the deals that could not be converted, and the guard then says the count has
+// to match: a forecast that quietly lost a deal is worse than no forecast, because it looks like one.
+let weightedForecast (owner, opps, fiscalYearStartMonth, rates) = {
     guard fiscalYearStartMonth >= 1 && fiscalYearStartMonth <= 12 else InvalidFiscalYearStart
+    let entries = List.filterMap(opp -> weightedEntry(opp, fiscalYearStartMonth, rates), opps)
+    guard List.length(entries) == List.length(opps)
+        else UnconvertibleCurrency { currencies = unpriced(opps, rates) }
     let byPeriod: Map<FiscalPeriod, Decimal> =
-        List.fold((acc, opp) -> addToPeriod(acc, opp, fiscalYearStartMonth), Map.empty(), opps)
+        List.fold((acc, entry) -> addEntry(acc, entry), Map.empty, entries)
     Forecast { owner = owner
+             , currency = rates.base
              , periods = List.sort(Map.keys(byPeriod))
              , byPeriod = Map.map((period, weighted) -> Amount(weighted), byPeriod)
              , total = Amount(List.sum(Map.values(byPeriod)))
@@ -201,9 +247,10 @@ let weightedForecast (owner, opps, fiscalYearStartMonth) = {
 
 example weightedForecast
     | "a deal in the first stage weighs a tenth of itself, in the quarter it closes in" :
-        (UserId("u-001"), [ acmeDeal ], 1)
+        (UserId("u-001"), [ acmeDeal ], 1, yenRates)
         -> Forecast
             { owner = UserId("u-001")
+            , currency = CurrencyCode("JPY")
             , periods = [ FiscalPeriod("FY26-Q3") ]
             , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(100000.00m)) ]
             , total = Amount(100000.00m)
@@ -214,25 +261,48 @@ example weightedForecast
          [ acmeDeal
          , Prospecting { ...acmeDeal, id = OpportunityId("006000000000002")
                        , amount = Amount(500000.00m), closeDate = Date("2026-08-31") } ],
-         1)
+         1, yenRates)
         -> Forecast
             { owner = UserId("u-001")
+            , currency = CurrencyCode("JPY")
             , periods = [ FiscalPeriod("FY26-Q3") ]
             , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ]
             , total = Amount(150000.00m)
             , dealCount = 2
             }
-    | "an empty pipeline is a forecast of nothing, not a missing forecast" :
-        (UserId("u-001"), [ ], 1)
+    | "a dollar deal is converted before it is added, not after" :
+        (UserId("u-001"),
+         [ acmeDeal
+         , Prospecting { ...acmeDeal, id = OpportunityId("006000000000003")
+                       , amount = Amount(1000.00m), currency = CurrencyCode("USD") } ],
+         1, yenRates)
         -> Forecast
             { owner = UserId("u-001")
+            , currency = CurrencyCode("JPY")
+            , periods = [ FiscalPeriod("FY26-Q3") ]
+            , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(115000.00m)) ]
+            , total = Amount(115000.00m)
+            , dealCount = 2
+            }
+    | "a deal in a currency the table does not price stops the whole forecast, and names it" :
+        (UserId("u-001"),
+         [ acmeDeal
+         , Prospecting { ...acmeDeal, id = OpportunityId("006000000000004")
+                       , amount = Amount(1000.00m), currency = CurrencyCode("EUR") } ],
+         1, yenRates)
+        -> UnconvertibleCurrency { currencies = [ CurrencyCode("EUR") ] }
+    | "an empty pipeline is a forecast of nothing, not a missing forecast" :
+        (UserId("u-001"), [ ], 1, yenRates)
+        -> Forecast
+            { owner = UserId("u-001")
+            , currency = CurrencyCode("JPY")
             , periods = [ ]
             , byPeriod = [ ]
             , total = Amount(0.0m)
             , dealCount = 0
             }
     | "there is still no thirteenth month" :
-        (UserId("u-001"), [ ], 13)
+        (UserId("u-001"), [ ], 13, yenRates)
         -> InvalidFiscalYearStart
 
 // === categoryRollup ===
@@ -255,11 +325,11 @@ let categoryRollupOf (opps) = {
     let money: Map<ForecastCategory, Decimal> =
         List.fold((acc, opp) -> Map.upsert(categoryOf(opp), amountOfAny(opp),
                                            running -> Decimal.add(running, amountOfAny(opp)), acc),
-                  Map.empty(), opps)
+                  Map.empty, opps)
     CategoryRollup
         { byCategory = Map.map((category, total) -> Amount(total), money)
         , countByCategory = List.fold((acc, opp) -> Map.upsert(categoryOf(opp), 1, n -> n + 1, acc),
-                                      Map.empty(), opps)
+                                      Map.empty, opps)
         }
 }
 
@@ -396,19 +466,89 @@ let mergeEntry (acc: Map<FiscalPeriod, Decimal>, entry: (FiscalPeriod, Amount))
     Map.upsert(period, amount.value, running -> Decimal.add(running, amount.value), acc)
 }
 
-behavior rollupTeam : (manager: UserId, forecasts: List<Forecast>) -> Forecast
-    constructs Forecast, Amount
+// Which forecasts a manager's number is made of is not a list somebody assembles at the call: it is
+// the subtree under them in example.org's hierarchy, and reading it off the tree is what stops a rep
+// being counted twice or dropped when they move. The walk is the recursion that structure is for.
+//
+// A rollup only means anything if every number in it is in the same currency, which is why `Forecast`
+// carries one. Two currencies is a refusal and not a sum — the point of converting on the way in is
+// that by the time a figure reaches here it has already been priced, and one that has not is a bug
+// upstream rather than a number to add anyway.
+data MixedCurrencies = { currencies: Set<CurrencyCode> }
+data NoTeamForecast = { manager: UserId }
 
-let rollupTeam (manager, forecasts) = {
+let ownForecast (node: RoleNode, byOwner: Map<UserId, Forecast>): List<Forecast> =
+    Map.get(node.holder, byOwner) |> Option.map(one -> [ one ]) |> Option.withDefault([])
+
+let forecastsUnder (node: RoleNode, byOwner: Map<UserId, Forecast>): List<Forecast> =
+    List.fold((acc, r) -> acc ++ forecastsUnder(r, byOwner), ownForecast(node, byOwner),
+              node.reports)
+
+behavior rollupThrough : (node: RoleNode, byOwner: Map<UserId, Forecast>)
+        -> Forecast | MixedCurrencies | NoTeamForecast
+    constructs Forecast, Amount, MixedCurrencies, NoTeamForecast
+
+let rollupThrough (node, byOwner) = {
+    let forecasts = forecastsUnder(node, byOwner)
+    guard Bool.not(List.isEmpty(forecasts)) else NoTeamForecast { manager = node.holder }
+    let currencies = Set.fromList(List.map(.currency, forecasts))
+    guard Set.size(currencies) == 1 else MixedCurrencies { currencies = currencies }
     let byPeriod: Map<FiscalPeriod, Decimal> =
-        List.fold((acc, one) -> mergeForecast(acc, one), Map.empty(), forecasts)
-    Forecast { owner = manager
+        List.fold((acc, one) -> mergeForecast(acc, one), Map.empty, forecasts)
+    Forecast { owner = node.holder
+             , currency = currencyOf(forecasts)
              , periods = List.sort(Map.keys(byPeriod))
              , byPeriod = Map.map((period, total) -> Amount(total), byPeriod)
              , total = Amount(List.sum(Map.values(byPeriod)))
              , dealCount = List.sum(List.map(one -> one.dealCount, forecasts))
              }
 }
+
+// The guards above have established that there is at least one forecast and that they all state the
+// same currency, so the head of the list is the currency of every one of them.
+let currencyOf (forecasts: List<Forecast>): CurrencyCode =
+    match List.get(0, forecasts) with
+        | Some one -> one.currency
+        | None -> unreachable "the guard above rules out an empty list of forecasts"
+
+let repForecast = Forecast
+    { owner = UserId("u-rep")
+    , currency = CurrencyCode("JPY")
+    , periods = [ FiscalPeriod("FY26-Q3") ]
+    , byPeriod = Map.fromList([ (FiscalPeriod("FY26-Q3"), Amount(100000.00m)) ])
+    , total = Amount(100000.00m)
+    , dealCount = 1
+    }
+
+// F31 shows up in the rows below: the behavior seeds its fold with `Map.empty`, and the fixture for
+// the same argument has to write `[ ]`, because a fixture may not name it.
+let acmeOrg = RoleNode { role = RoleName("Manager"), holder = UserId("u-mgr"), reports =
+    [ RoleNode { role = RoleName("Rep"), holder = UserId("u-rep"), reports = [] }
+    , RoleNode { role = RoleName("Rep"), holder = UserId("u-rep2"), reports = [] } ] }
+
+example rollupThrough
+    | "a manager's number is the subtree's numbers, and the same quarter adds rather than replaces" :
+        (acmeOrg,
+            [ (UserId("u-rep"), repForecast)
+            , (UserId("u-rep2"), Forecast { ...repForecast, owner = UserId("u-rep2")
+                                          , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(50000.00m)) ]
+                                          , total = Amount(50000.00m) }) ])
+        -> Forecast
+            { owner = UserId("u-mgr")
+            , currency = CurrencyCode("JPY")
+            , periods = [ FiscalPeriod("FY26-Q3") ]
+            , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ]
+            , total = Amount(150000.00m)
+            , dealCount = 2
+            }
+    | "two currencies under one manager is a refusal, not a sum" :
+        (acmeOrg,
+            [ (UserId("u-rep"), repForecast)
+            , (UserId("u-rep2"), Forecast { ...repForecast, owner = UserId("u-rep2")
+                                          , currency = CurrencyCode("USD") }) ])
+        -> MixedCurrencies { currencies = [ CurrencyCode("JPY"), CurrencyCode("USD") ] }
+    | "a manager whose team has filed nothing has no forecast, not a forecast of zero" :
+        (acmeOrg, [ ]) -> NoTeamForecast { manager = UserId("u-mgr") }
 
 // === topPerformers ===
 // Rank by what each owner closed. The amounts have done their work once the list is in order, so what comes
@@ -417,7 +557,7 @@ let rollupTeam (manager, forecasts) = {
 let wonByOwner (won: List<ClosedWon>): Map<UserId, Decimal> =
     List.fold((acc, w) -> Map.upsert(w.owner, w.wonAmount.value,
                                      running -> Decimal.add(running, w.wonAmount.value), acc),
-              Map.empty(), won)
+              Map.empty, won)
 
 behavior topPerformers : (won: List<ClosedWon>, n: Int) -> Leaderboard
     constructs Leaderboard

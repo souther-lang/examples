@@ -23,6 +23,7 @@
 //     temporal map key crosses the boundary as its ISO form, so the JSON is `{"2026-07-25": 2}`.
 //   - `DateTime` arithmetic for the carrier cut-off and `Date` arithmetic for the delivery promise,
 //     with `Date` keys read back in order by `List.sort` — a Date is ordered like any primitive.
+// Findings recorded here: F30 at the import of example.inventory.
 module example.shipping exposing (
     ShipmentId,
     Carrier,
@@ -40,6 +41,7 @@ module example.shipping exposing (
     planCalendar
 )
 import example.cart ( Sku, LineItem, PricedCart )
+// F30: `StockLine` is imported and never used, and nothing says so.
 import example.inventory ( Allocated, Location, StockLine )
 import List ( map, fold, filterMap, length, sum )
 
@@ -232,7 +234,7 @@ let planCalendar (shipments) = {
     // the accumulator is annotated here. That is what a local type annotation is for: the fold's
     // step would pin the types at the call, but the binding is read before the step is.
     let perDay: Map<Date, Int> = fold((acc, s) -> Map.upsert(s.dispatchOn, 1, n -> n + 1, acc),
-                                      Map.empty(), shipments)
+                                      Map.empty, shipments)
     ShipmentCalendar {
         perDay = perDay,
         days = List.sort(Map.keys(perDay)),

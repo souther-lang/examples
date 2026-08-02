@@ -1,0 +1,143 @@
+// The role hierarchy — Salesforce's, and every sales organisation's. It is the second self-referential
+// `data` in this repository and the one that shows why the direction a hierarchy points is a modelling
+// decision rather than a storage detail.
+//
+// **The tree points down.** A `RoleNode` holds the roles that report to it. The obvious alternative is
+// to point up, `manager: UserId?` on each person, which is how the table is laid out in almost every
+// system — and it is the one shape that makes walking the hierarchy untypeable here. Following a
+// `UserId` upwards is a `Map` lookup, and a looked-up value is not a sub-term of anything, so the walk
+// is not structural recursion and the helper would have to be marked `partial`. Pointing down, every
+// step goes into `node.reports`, which is smaller than `node`, and the walk is total by construction.
+//
+// The same choice removes the cycle. Rows that name a parent can name an ancestor, and a system built
+// that way needs a check nobody can express as an invariant; a tree of nested nodes cannot be written
+// cyclically at all. What is left is a job for whoever turns the rows into the tree — one place, at the
+// edge, rather than a guard on every walk.
+//
+// This module speaks crm's `UserId` and nothing else of crm's. `example.quoting` uses it to work out
+// who signs a discount, and `example.forecasting` to roll a team's numbers up through it, so two
+// unrelated questions are answered by one structure instead of by two flattened copies of it.
+module example.org exposing (
+    RoleName,
+    RoleNode,
+    ReportingChain,
+    NotInHierarchy,
+    Team,
+    Span,
+    chainTo,
+    teamOf,
+    widestSpan
+)
+import example.crm ( UserId )
+import List ( fold, map, length, isEmpty, reverse, drop )
+
+// What the role is called. It is administered outside the model, so its length is all this says.
+data RoleName = String
+    invariant String.length(value) >= 1
+
+// One role, the person holding it, and the roles reporting to it. A leaf is a role with no reports,
+// and it is the empty list that says so rather than a flag.
+data RoleNode =
+    { role: RoleName
+    , holder: UserId
+    , reports: List<RoleNode>
+    }
+
+// === chainTo: the line of command down to one person ===
+// Holders from the top down, ending with the person asked about. Read backwards it is the escalation
+// path — which is what `quoting` reads it as — and read forwards it is what an org chart draws.
+//
+// The recursion answers a `List<UserId>` and uses the empty list for "not under this node", so there
+// is one return type and no `Option` to construct inside the walk. The fold stops looking once a
+// branch has answered, which matters on a wide tree and costs nothing to write.
+data ReportingChain = { steps: List<UserId> }
+data NotInHierarchy = { user: UserId }
+
+let pathTo (node: RoleNode, user: UserId): List<UserId> =
+    if node.holder == user
+        then [ node.holder ]
+        else {
+            let below = fold((found, r) -> if isEmpty(found) then pathTo(r, user) else found,
+                             [], node.reports)
+            if isEmpty(below) then [] else [ node.holder ] ++ below
+        }
+
+behavior chainTo : (root: RoleNode, user: UserId) -> ReportingChain | NotInHierarchy
+    constructs ReportingChain, NotInHierarchy
+
+let chainTo (root, user) = {
+    let steps = pathTo(root, user)
+    guard Bool.not(isEmpty(steps)) else NotInHierarchy { user = user }
+    ReportingChain { steps = steps }
+}
+
+// === teamOf: everybody at or below a node ===
+// A `Set`, because the question is membership: forecasting asks whether a deal's owner is in this
+// manager's team, and asking that of a list is a scan per deal.
+data Team = { members: Set<UserId> }
+
+let below (node: RoleNode): Set<UserId> =
+    fold((acc, r) -> Set.union(acc, below(r)), Set.singleton(node.holder), node.reports)
+
+behavior teamOf : (node: RoleNode) -> Team
+    constructs Team
+
+let teamOf (node) = Team { members = below(node) }
+
+// === widestSpan: the largest number of direct reports anywhere in the tree ===
+// The figure an org design is argued about with. It is a maximum over the whole structure and not of
+// any one node, so it is the second recursion here — `chainTo` searches, this one measures, and
+// neither could be written against a flat list of people and their managers without rebuilding the
+// tree first.
+data Span =
+    { widest: Int
+    , at: RoleName
+    }
+
+behavior widestSpan : (root: RoleNode) -> Span
+    constructs Span
+
+let widerOf (a: (Int, RoleName), b: (Int, RoleName)): (Int, RoleName) = {
+    let (aWide, aRole) = a
+    let (bWide, bRole) = b
+    if bWide > aWide then b else a
+}
+
+let spanOf (node: RoleNode): (Int, RoleName) =
+    fold((acc, r) -> widerOf(acc, spanOf(r)), (length(node.reports), node.role), node.reports)
+
+let widestSpan (root) = {
+    let (widest, at) = spanOf(root)
+    Span { widest = widest, at = at }
+}
+
+// The org the examples are written against, and the one `quoting` and `forecasting` use too: a chief
+// executive over two vice presidents, one of whom has a director with two managers under them.
+let acmeOrg = RoleNode { role = RoleName("CEO"), holder = UserId("u-ceo"), reports =
+    [ RoleNode { role = RoleName("VP Sales"), holder = UserId("u-vp"), reports =
+        [ RoleNode { role = RoleName("Director West"), holder = UserId("u-dir"), reports =
+            [ RoleNode { role = RoleName("Manager"), holder = UserId("u-mgr"), reports =
+                [ RoleNode { role = RoleName("Rep"), holder = UserId("u-rep"), reports = [] }
+                , RoleNode { role = RoleName("Rep"), holder = UserId("u-rep2"), reports = [] }
+                , RoleNode { role = RoleName("Rep"), holder = UserId("u-rep3"), reports = [] } ] } ] } ] }
+    , RoleNode { role = RoleName("VP Ops"), holder = UserId("u-ops"), reports = [] } ] }
+
+example chainTo
+    | "the line down to a rep names every holder on the way" :
+        (acmeOrg, UserId("u-rep"))
+        -> ReportingChain { steps = [ UserId("u-ceo"), UserId("u-vp"), UserId("u-dir"),
+                                      UserId("u-mgr"), UserId("u-rep") ] }
+    | "the top of the tree is a chain of one" :
+        (acmeOrg, UserId("u-ceo")) -> ReportingChain { steps = [ UserId("u-ceo") ] }
+    | "somebody outside the tree has no line at all" :
+        (acmeOrg, UserId("u-nobody")) -> NotInHierarchy { user = UserId("u-nobody") }
+
+example teamOf
+    | "a node's team is itself and everyone under it" :
+        (acmeOrg) -> Team { members = [ UserId("u-ceo"), UserId("u-vp"), UserId("u-dir"),
+                                        UserId("u-mgr"), UserId("u-rep"), UserId("u-rep2"),
+                                        UserId("u-rep3"), UserId("u-ops") ] }
+
+example widestSpan
+    | "the manager with three reps is the widest point, not the chief executive with two" :
+        (acmeOrg) -> Span { widest = 3, at = RoleName("Manager") }

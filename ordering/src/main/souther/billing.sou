@@ -9,6 +9,17 @@
 // apart. Which context owns a shared name is a decision, and the decision is made once, here.
 //
 // The features on show:
+//   - **A due date lands on a day somebody works.** Payment terms give a nominal date, and money does
+//     not move on a Sunday or a bank holiday, so the nominal date is walked to a business day in the
+//     direction the trading agreement states. The walk is `List.range` and `List.find` over ten
+//     candidate days rather than a recursive step, because a recursion on a computed date is not
+//     structural and would need `partial` — a finite search says the same thing and stays total.
+//     Which day of the week a date falls on is worked out here from a Sunday the calendar carries,
+//     since the standard library has `Date.year` / `month` / `day` and no `dayOfWeek`.
+//   - **A correction is a new document, not an edit.** An invoice is a statement made on a day; what
+//     it stated stays stated. So a price error becomes a credit note against it, and what the customer
+//     currently owes is the invoice folded together with its credit notes. Nothing rewrites an
+//     `Invoice`, and there is no field on one that a correction would have to reach.
 //   - `Decimal` arithmetic end to end — add / subtract / multiply / compare, with `Decimal.abs`,
 //     `min`, `max` and `clamp` for the settlement arithmetic. Money is never an Int here; what an
 //     invoice states is a Decimal, and Int appears only as a count of days.
@@ -19,6 +30,7 @@
 //     a payment landed.
 //   - `List.foldr` walking the ledger from the end, and `List.filter` / `List.map` reading it two
 //     more ways.
+// Findings recorded here: F24 again, at issueCreditNote, and F31 at payerCalendar.
 module example.billing exposing (
     InvoiceNo,
     Amount,
@@ -26,20 +38,33 @@ module example.billing exposing (
     Net15,
     Net30,
     EndOfNextMonth,
+    DueDateRule,
+    SameDay,
+    PrecedingBusinessDay,
+    FollowingBusinessDay,
+    PaymentCalendar,
     Invoice,
     Payment,
     Settled,
     PartPaid,
     Overpaid,
     AgeingReport,
+    CreditReason,
+    PriceError,
+    Returned,
+    AgreedDiscount,
+    CreditNote,
+    ExceedsInvoice,
     issueInvoice,
     settle,
-    ageing
+    ageing,
+    issueCreditNote,
+    netOfCredits
 )
 import example.cart ( Sku, LineItem )
 import example.ordering ( OrderId, RecordedOrder )
 import example.tax ( TaxRate, TaxBreakdown, TaxCategory )
-import List ( map, filter, fold, foldr, length )
+import List ( map, filter, fold, foldr, length, find, range )
 
 // An invoice number: series, year, and a sequence within the year. It is assembled by this module
 // (see `issueInvoice`) and also arrives from outside on a payment, so the format is an invariant
@@ -64,6 +89,46 @@ data Amount = Decimal
 // helper that suggests itself compiles and returns the wrong date.
 data Terms = Net15 | Net30 | EndOfNextMonth
 
+// === The days money can actually move ===
+// Terms give a nominal date; a bank gives a business day. Which way a nominal date that lands on a
+// closed day is walked is a trading agreement and not a law, so it is a case: some contracts pull the
+// payment forward so the supplier is never paid late, others push it back so the payer never pays
+// early, and a few state the nominal day and mean it.
+data DueDateRule = SameDay | PrecedingBusinessDay | FollowingBusinessDay
+
+// The calendar and the convention travel together, because both are agreed with the same counterparty
+// at the same time. `aSunday` is any Sunday: the standard library reads a date's year, month and day
+// and not its weekday, so the weekday is counted from a day the calendar names. Handing one in is
+// better than a constant in this file — a domain that needs a week starting elsewhere says so here.
+data PaymentCalendar =
+    { holidays: Set<Date>
+    , aSunday: Date
+    , rule: DueDateRule
+    }
+
+let weekday (calendar: PaymentCalendar, d: Date): Int =
+    Int.modBy(7, Date.daysBetween(calendar.aSunday, d))
+
+let isBusinessDay (calendar: PaymentCalendar, d: Date): Bool =
+    weekday(calendar, d) >= 1 && weekday(calendar, d) <= 5
+        && Bool.not(Set.contains(d, calendar.holidays))
+
+// Ten candidate days in the direction the rule states, and the first one anybody works. Ten is more
+// than any run of closed days a calendar has, and a bounded search is what keeps this total: stepping
+// recursively until a business day turns up recurses on a computed date, which is not structural, and
+// `partial` would be a promise this makes without needing to.
+let firstBusinessDay (calendar: PaymentCalendar, from: Date, step: Int): Date =
+    range(0, 10)
+        |> map(n -> Date.addDays(n * step, from))
+        |> find(d -> isBusinessDay(calendar, d))
+        |> Option.withDefault(from)
+
+let onABusinessDay (calendar: PaymentCalendar, nominal: Date): Date =
+    match calendar.rule with
+        | SameDay -> nominal
+        | PrecedingBusinessDay -> firstBusinessDay(calendar, nominal, 0 - 1)
+        | FollowingBusinessDay -> firstBusinessDay(calendar, nominal, 1)
+
 // === issueInvoice: a recorded order and its tax become a statement ===
 // The number is built here rather than read: `String.padLeft` widens the sequence to six digits and
 // `String.join` puts the three parts together, and `InvoiceNo`'s invariant then checks the result —
@@ -83,16 +148,19 @@ data Invoice =
     }
 
 behavior issueInvoice : (recorded: RecordedOrder, breakdown: TaxBreakdown, terms: Terms,
-                         issuedOn: Date, sequence: Int) -> Invoice
+                         issuedOn: Date, sequence: Int, calendar: PaymentCalendar) -> Invoice
     constructs Invoice, InvoiceNo, Amount
 
-// The due date each term means. `match` over the cases, so adding a term is a compile error here
-// rather than a silently unhandled one.
-let dueDate (terms: Terms, issuedOn: Date): Date =
+// The due date each term means, walked onto a day money moves. `match` over the cases, so adding a
+// term is a compile error here rather than a silently unhandled one.
+let nominalDueDate (terms: Terms, issuedOn: Date): Date =
     match terms with
         | Net15 -> Date.addDays(15, issuedOn)
         | Net30 -> Date.addDays(30, issuedOn)
         | EndOfNextMonth -> endOfMonth(Date.addMonths(1, monthStart(issuedOn)))
+
+let dueDate (terms: Terms, issuedOn: Date, calendar: PaymentCalendar): Date =
+    onABusinessDay(calendar, nominalDueDate(terms, issuedOn))
 
 // The first of a date's own month, by stepping back the days already elapsed in it, and the last day
 // of that month, by stepping back one from the first of the next. Neither Elm nor .NET ships these;
@@ -110,23 +178,32 @@ let invoiceNumber (issuedOn: Date, sequence: Int): InvoiceNo =
 // honest: what cannot be read is asked for.
 let yearOf (issuedOn: Date): Int = 2026
 
-let issueInvoice (recorded, breakdown, terms, issuedOn, sequence) =
+let issueInvoice (recorded, breakdown, terms, issuedOn, sequence, calendar) =
     Invoice {
         no = invoiceNumber(issuedOn, sequence),
         orderId = recorded.orderId,
         issuedOn = issuedOn,
-        dueOn = dueDate(terms, issuedOn),
+        dueOn = dueDate(terms, issuedOn, calendar),
         net = Amount(Decimal.fromInt(breakdown.net)),
         tax = Amount(Decimal.fromInt(breakdown.tax)),
         gross = Amount(Decimal.fromInt(breakdown.gross))
     }
+
+// The calendar the examples below are written against: the eleventh of August is a holiday, the weeks
+// are counted from a Sunday in January, and a due date that lands on a closed day is pulled forward.
+// F31 is here: `[ … ]` is a list wherever a body writes one, so a Set field is filled with
+// `Set.fromList` — while an `example`'s fixture two screens below writes the same brackets and gets a
+// Set, because a fixture is decoded and a Set decodes from an array.
+let payerCalendar = PaymentCalendar { holidays = Set.fromList([ Date("2026-08-11") ]),
+                                      aSunday = Date("2026-01-04"),
+                                      rule = PrecedingBusinessDay }
 
 example issueInvoice
     | "a net-30 invoice states the order's amounts and falls due in thirty days" :
         (RecordedOrder { orderId = OrderId("ORD-1"), items =
             [ LineItem { sku = Sku("apple"), quantity = 3, unitPrice = 105, weightGrams = 120 } ], total = 315 }
         , TaxBreakdown { net = 315, rate = TaxRate(0.10m), rateLabel = "10%", tax = 31, gross = 346 }
-        , Net30, Date("2026-07-25"), 42)
+        , Net30, Date("2026-07-25"), 42, payerCalendar)
             -> Invoice { no = InvoiceNo("INV-2026-000042"), orderId = OrderId("ORD-1"),
                          issuedOn = Date("2026-07-25"), dueOn = Date("2026-08-24"),
                          net = Amount(315.0m), tax = Amount(31.0m), gross = Amount(346.0m) }
@@ -135,26 +212,34 @@ example issueInvoice
             [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000, weightGrams = 120 } ], total = 200000 }
         , TaxBreakdown { net = 200000, rate = TaxRate(0.10m), rateLabel = "10%", tax = 20000,
                          gross = 220000 }
-        , EndOfNextMonth, Date("2026-07-31"), 9)
+        , EndOfNextMonth, Date("2026-07-31"), 9, payerCalendar)
             -> Invoice { no = InvoiceNo("INV-2026-000009"), orderId = OrderId("ORD-3"),
                          issuedOn = Date("2026-07-31"), dueOn = Date("2026-08-31"),
                          net = Amount(200000.0m), tax = Amount(20000.0m), gross = Amount(220000.0m) }
-    | "end of next month lands on the short month it lands on, not a day count" :
+    | "end of next month lands on a Saturday, so it is paid on the Friday" :
         (RecordedOrder { orderId = OrderId("ORD-4"), items =
             [ LineItem { sku = Sku("pen"), quantity = 1, unitPrice = 100, weightGrams = 10 } ], total = 100 }
         , TaxBreakdown { net = 100, rate = TaxRate(0.10m), rateLabel = "10%", tax = 10, gross = 110 }
-        , EndOfNextMonth, Date("2026-01-15"), 11)
+        , EndOfNextMonth, Date("2026-01-15"), 11, payerCalendar)
             -> Invoice { no = InvoiceNo("INV-2026-000011"), orderId = OrderId("ORD-4"),
-                         issuedOn = Date("2026-01-15"), dueOn = Date("2026-02-28"),
+                         issuedOn = Date("2026-01-15"), dueOn = Date("2026-02-27"),
                          net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) }
-    | "net-15 halves the window and nothing else changes" :
+    | "net-15 lands on a Sunday, so it is paid on the Friday before" :
         (RecordedOrder { orderId = OrderId("ORD-2"), items =
             [ LineItem { sku = Sku("rice"), quantity = 2, unitPrice = 550, weightGrams = 120 } ], total = 1100 }
         , TaxBreakdown { net = 1100, rate = TaxRate(0.08m), rateLabel = "8%", tax = 88, gross = 1188 }
-        , Net15, Date("2026-07-25"), 7)
+        , Net15, Date("2026-07-25"), 7, payerCalendar)
             -> Invoice { no = InvoiceNo("INV-2026-000007"), orderId = OrderId("ORD-2"),
-                         issuedOn = Date("2026-07-25"), dueOn = Date("2026-08-09"),
+                         issuedOn = Date("2026-07-25"), dueOn = Date("2026-08-07"),
                          net = Amount(1100.0m), tax = Amount(88.0m), gross = Amount(1188.0m) }
+    | "a bank holiday is closed like a weekend, so the Tuesday is paid on the Monday" :
+        (RecordedOrder { orderId = OrderId("ORD-5"), items =
+            [ LineItem { sku = Sku("pen"), quantity = 1, unitPrice = 100, weightGrams = 10 } ], total = 100 }
+        , TaxBreakdown { net = 100, rate = TaxRate(0.10m), rateLabel = "10%", tax = 10, gross = 110 }
+        , Net15, Date("2026-07-27"), 12, payerCalendar)
+            -> Invoice { no = InvoiceNo("INV-2026-000012"), orderId = OrderId("ORD-5"),
+                         issuedOn = Date("2026-07-27"), dueOn = Date("2026-08-10"),
+                         net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) }
 
 // === settle: a payment against an invoice ===
 // Three outcomes, and none of them is a failure: paid in full, paid short, paid over. `Decimal.compare`
@@ -280,3 +365,103 @@ example ageing
             -> AgeingReport { current = Amount(990.0m), overdue30 = Amount(0.0m),
                               overdue60 = Amount(0.0m), worstDaysLate = 0,
                               exposure = Amount(500.0m) }
+
+// === issueCreditNote: a correction is a document of its own ===
+// An invoice states an amount on a day, and a mistake does not make that statement un-made: the
+// customer has a copy, the tax authority has a copy, and the month it fell in may already be closed.
+// So nothing here rewrites an `Invoice`. A price error becomes a credit note against it, carrying the
+// reason, and what the customer owes now is the invoice folded together with its credit notes.
+//
+// That is why `Invoice` has no `cancelled` flag and no `revisedGross`, and why `netOfCredits` takes
+// the notes rather than reading a field. The alternative — updating the invoice — makes the amount
+// depend on when it was read, and makes "what did we bill in July" a question the data cannot answer.
+//
+// The one rule is that the credits may not exceed what was invoiced. Crediting more than was charged
+// is not a refund but a payment out, which is a different event with a different authorisation, so it
+// is refused here rather than allowed through as a negative.
+data CreditReason = PriceError | Returned | AgreedDiscount
+
+data CreditNote =
+    { no: InvoiceNo
+    , against: InvoiceNo
+    , issuedOn: Date
+    , reason: CreditReason
+    , net: Amount
+    , tax: Amount
+    , gross: Amount
+    }
+
+data ExceedsInvoice =
+    { against: InvoiceNo
+    , alreadyCredited: Amount
+    , remaining: Amount
+    , asked: Amount
+    }
+
+behavior issueCreditNote : (invoice: Invoice, existing: List<CreditNote>, reason: CreditReason,
+                            net: Amount, tax: Amount, issuedOn: Date, sequence: Int)
+    -> CreditNote | ExceedsInvoice
+    constructs CreditNote, ExceedsInvoice, InvoiceNo, Amount
+
+let creditedSoFar (existing: List<CreditNote>): Decimal =
+    fold((acc, n) -> Decimal.add(acc, n.gross.value), 0.0m, existing)
+
+// F24 again: `credited` and `asked` are sums of non-negative Amounts and cannot be negative, and
+// naming them is what the arithmetic needs to be readable at all — so this warns, and stays.
+let issueCreditNote (invoice, existing, reason, net, tax, issuedOn, sequence) = {
+    let credited = creditedSoFar(existing)
+    let remaining = Decimal.subtract(invoice.gross.value, credited)
+    let asked = Decimal.add(net.value, tax.value)
+    guard Decimal.compare(asked, remaining) <= 0
+        else ExceedsInvoice { against = invoice.no, alreadyCredited = Amount(credited),
+                              remaining = Amount(Decimal.max(0.0m, remaining)), asked = Amount(asked) }
+    CreditNote { no = invoiceNumber(issuedOn, sequence), against = invoice.no, issuedOn = issuedOn,
+                 reason = reason, net = net, tax = tax, gross = Amount(asked) }
+}
+
+// What the customer owes now. The invoice is untouched, so this is a fold and not a field, and it is
+// clamped at zero for the same reason an `Amount` is never negative: over-credited is a state this
+// module refuses to enter, so a figure that reached it would be reporting something that cannot be.
+behavior netOfCredits : (invoice: Invoice, notes: List<CreditNote>) -> Amount
+    constructs Amount
+
+let netOfCredits (invoice, notes) =
+    Amount(Decimal.max(0.0m, Decimal.subtract(invoice.gross.value, creditedSoFar(notes))))
+
+let julyInvoice = Invoice { no = InvoiceNo("INV-2026-000042"), orderId = OrderId("ORD-1"),
+                            issuedOn = Date("2026-07-25"), dueOn = Date("2026-08-24"),
+                            net = Amount(315.0m), tax = Amount(31.0m), gross = Amount(346.0m) }
+
+example issueCreditNote
+    | "a price error is credited against the invoice that stated it" :
+        (julyInvoice, [], PriceError, Amount(100.0m), Amount(10.0m), Date("2026-08-03"), 43)
+            -> CreditNote { no = InvoiceNo("INV-2026-000043"), against = InvoiceNo("INV-2026-000042"),
+                            issuedOn = Date("2026-08-03"), reason = PriceError,
+                            net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) }
+    | "a second note is allowed up to what is left" :
+        (julyInvoice
+        , [ CreditNote { no = InvoiceNo("INV-2026-000043"), against = InvoiceNo("INV-2026-000042"),
+                         issuedOn = Date("2026-08-03"), reason = PriceError,
+                         net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) } ]
+        , Returned, Amount(200.0m), Amount(20.0m), Date("2026-08-10"), 44)
+            -> CreditNote { no = InvoiceNo("INV-2026-000044"), against = InvoiceNo("INV-2026-000042"),
+                            issuedOn = Date("2026-08-10"), reason = Returned,
+                            net = Amount(200.0m), tax = Amount(20.0m), gross = Amount(220.0m) }
+    | "crediting more than was invoiced is a different event, and is refused" :
+        (julyInvoice
+        , [ CreditNote { no = InvoiceNo("INV-2026-000043"), against = InvoiceNo("INV-2026-000042"),
+                         issuedOn = Date("2026-08-03"), reason = PriceError,
+                         net = Amount(300.0m), tax = Amount(30.0m), gross = Amount(330.0m) } ]
+        , AgreedDiscount, Amount(50.0m), Amount(5.0m), Date("2026-08-10"), 44)
+            -> ExceedsInvoice { against = InvoiceNo("INV-2026-000042"),
+                                alreadyCredited = Amount(330.0m), remaining = Amount(16.0m),
+                                asked = Amount(55.0m) }
+
+example netOfCredits
+    | "an invoice with no credit notes owes what it states" : (julyInvoice, []) -> Amount(346.0m)
+    | "a credit note takes its gross off what is owed, and the invoice still says 346" :
+        (julyInvoice
+        , [ CreditNote { no = InvoiceNo("INV-2026-000043"), against = InvoiceNo("INV-2026-000042"),
+                         issuedOn = Date("2026-08-03"), reason = PriceError,
+                         net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) } ])
+            -> Amount(236.0m)

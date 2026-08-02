@@ -728,30 +728,15 @@ let closeWon (opp, on, finalAmount) =
             ClosedWon { ...n, closedOn = on, wonAmount = finalAmount }
         }
 
-// Eight arms whose only job is to name the stage the deal was lost at. That name is what a win/loss review
-// reads first, and it is why ClosedLost carries a StageName rather than the state it came from: the state
-// is gone, the fact of how far it got is not.
+// Every open stage spreads OpportunityCommon, so the sum carries that part and the loss is written once
+// rather than per stage. What a win/loss review reads first is the stage the deal was lost at, and it is
+// why ClosedLost carries a StageName rather than the state it came from: the state is gone, the fact of
+// how far it got is not.
 behavior closeLost : (opp: OpenOpportunity, on: Date, reason: LossReason) -> ClosedLost
     constructs ClosedLost, StageName
 
 let closeLost (opp, on, reason) =
-    match opp with
-        | Prospecting as s ->
-            ClosedLost { ...s, closedOn = on, reason = reason, stageAtLoss = stageNameOf(s) }
-        | Qualification as s ->
-            ClosedLost { ...s, closedOn = on, reason = reason, stageAtLoss = stageNameOf(s) }
-        | NeedsAnalysis as s ->
-            ClosedLost { ...s, closedOn = on, reason = reason, stageAtLoss = stageNameOf(s) }
-        | ValueProposition as s ->
-            ClosedLost { ...s, closedOn = on, reason = reason, stageAtLoss = stageNameOf(s) }
-        | IdDecisionMakers as s ->
-            ClosedLost { ...s, closedOn = on, reason = reason, stageAtLoss = stageNameOf(s) }
-        | PerceptionAnalysis as s ->
-            ClosedLost { ...s, closedOn = on, reason = reason, stageAtLoss = stageNameOf(s) }
-        | ProposalPriceQuote as s ->
-            ClosedLost { ...s, closedOn = on, reason = reason, stageAtLoss = stageNameOf(s) }
-        | NegotiationReview as s ->
-            ClosedLost { ...s, closedOn = on, reason = reason, stageAtLoss = stageNameOf(s) }
+    ClosedLost { ...opp, closedOn = on, reason = reason, stageAtLoss = stageNameOf(opp) }
 
 // === What a loss is followed up with ===
 // The nested sum earns its nesting here: the outer match asks whether somebody else won the deal, and only
@@ -872,7 +857,7 @@ example closeAndSummarize
 // exhaustive match. What is left of finding F3.
 
 let countByStage (opps: List<Opportunity>): Map<StageName, Int> =
-    List.fold((acc, opp) -> Map.upsert(stageNameOf(opp), 1, n -> n + 1, acc), Map.empty(), opps)
+    List.fold((acc, opp) -> Map.upsert(stageNameOf(opp), 1, n -> n + 1, acc), Map.empty, opps)
 
 // A call's result is reached into, so the amount arrives as `amountOf(opp).value` and neither the helper
 // that opened the newtype nor the one that chained the two calls is here any more.
@@ -882,7 +867,7 @@ let totalByStage (opps: List<Opportunity>): Map<StageName, Amount> =
                              amountOf(opp),
                              running -> Amount(Decimal.add(running.value, amountOf(opp).value)),
                              acc),
-              Map.empty(), opps)
+              Map.empty, opps)
 
 behavior pipelineByStage : (opps: List<Opportunity>) -> StageBreakdown
     constructs StageBreakdown, StageName, Amount

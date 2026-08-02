@@ -46,6 +46,11 @@ module example.crm exposing (
     CampaignName,
     Amount,
     CurrencyCode,
+    Money,
+    ConversionRate,
+    RateTable,
+    NoRateFor,
+    convert,
     EmployeeCount,
     LeadScore,
     Industry,
@@ -209,6 +214,67 @@ data Amount = Decimal
 data CurrencyCode = String
     invariant String.matches("[A-Z]{3}", value)
 
+// === Money, and why an Amount on its own is not it ===
+// An `Amount` is a number. Six hundred of something is not a figure anybody can add to nine hundred
+// of something else, and a multi-currency pipeline is exactly where that gets done by accident: the
+// deals carry their currency, the rollup sums the amounts, and nobody notices until a quarter closes
+// twenty per cent out. Pairing the two into one type is what stops it — a `Money` cannot be summed
+// with `List.sum`, and the only way to a figure that can be is `convert`, which names the table it
+// converted at.
+data Money =
+    { amount: Amount
+    , currency: CurrencyCode
+    }
+
+// A rate is strictly positive. Zero would make a currency worth nothing, which is a broken table
+// rather than a market.
+data ConversionRate = Decimal
+    invariant value > 0.0m
+
+// The org's rates, all of them into one reporting currency. The base is in the table at one, which is
+// the invariant: it removes the special case at every call site, so converting a figure already in the
+// reporting currency is the same code path as converting anything else rather than an `if` somebody
+// forgets. `Option.map` then `withDefault` reads through the lookup without constructing anything,
+// which is what an invariant's helper is allowed to do.
+data RateTable =
+    { base: CurrencyCode
+    , rates: Map<CurrencyCode, ConversionRate>
+    }
+    invariant baseIsUnity = baseAtOne(base, rates)
+
+let baseAtOne (base: CurrencyCode, rates: Map<CurrencyCode, ConversionRate>): Bool =
+    Map.get(base, rates)
+        |> Option.map(r -> Decimal.compare(r.value, 1.0m) == 0)
+        |> Option.withDefault(false)
+
+// A currency the table says nothing about. Not a rate of one and not a zero: a figure that cannot be
+// converted is a figure that must not be added to anything, and saying so is the only safe answer.
+data NoRateFor = { currency: CurrencyCode }
+
+behavior convert : (money: Money, table: RateTable) -> Money | NoRateFor
+    constructs Money, Amount, NoRateFor
+
+let convert (money, table) =
+    match Map.get(money.currency, table.rates) with
+        | Some rate -> Money { amount = Amount(money.amount.value * rate.value),
+                               currency = table.base }
+        | None -> NoRateFor { currency = money.currency }
+
+let yenTable = RateTable { base = CurrencyCode("JPY"), rates = Map.fromList(
+    [ (CurrencyCode("JPY"), ConversionRate(1.0m))
+    , (CurrencyCode("USD"), ConversionRate(150.0m)) ]) }
+
+example convert
+    | "a figure already in the reporting currency goes through the same path, at one" :
+        (Money { amount = Amount(1000.00m), currency = CurrencyCode("JPY") }, yenTable)
+        -> Money { amount = Amount(1000.00m), currency = CurrencyCode("JPY") }
+    | "a dollar deal becomes yen, and says so" :
+        (Money { amount = Amount(6000.00m), currency = CurrencyCode("USD") }, yenTable)
+        -> Money { amount = Amount(900000.000m), currency = CurrencyCode("JPY") }
+    | "a currency the table never heard of converts to nothing at all" :
+        (Money { amount = Amount(500.00m), currency = CurrencyCode("EUR") }, yenTable)
+        -> NoRateFor { currency = CurrencyCode("EUR") }
+
 // Drives tiering. An account with nobody in it is not an account anyone sells to.
 data EmployeeCount = Int
     invariant value >= 1
@@ -244,7 +310,7 @@ data Account =
     , domain: DomainName?         // an honest optional: an account may have no website on file
     , industry: Industry
     , employees: EmployeeCount
-    , type: AccountType
+    , accountType: AccountType    // not `type`: a case lays its fields beside the discriminator of that name
     , owner: UserId
     , currency: CurrencyCode
     }
@@ -397,7 +463,7 @@ let acmeAccount = Account
     , domain = DomainName("acme.example.com")
     , industry = Technology
     , employees = EmployeeCount(1000)
-    , type = Prospect
+    , accountType = Prospect
     , owner = UserId("u-001")
     , currency = CurrencyCode("JPY")
     }
@@ -408,7 +474,7 @@ let betaAccount = Account
     , domain = DomainName("beta.example.com")
     , industry = Manufacturing
     , employees = EmployeeCount(999)
-    , type = Customer { since = Date("2024-04-01") }
+    , accountType = Customer { since = Date("2024-04-01") }
     , owner = UserId("u-001")
     , currency = CurrencyCode("JPY")
     }
@@ -419,7 +485,7 @@ let gammaAccount = Account
     , domain = None
     , industry = Retail
     , employees = EmployeeCount(99)
-    , type = Prospect
+    , accountType = Prospect
     , owner = UserId("u-002")
     , currency = CurrencyCode("USD")
     }
@@ -855,7 +921,7 @@ let convertLead (lead, request, accounts, contacts) =
                             , domain = List.get(0, domainsOf(lead.reach))
                             , industry = request.industry
                             , employees = request.employees
-                            , type = request.accountType
+                            , accountType = request.accountType
                             , owner = lead.owner
                             , currency = request.currency
                             }
