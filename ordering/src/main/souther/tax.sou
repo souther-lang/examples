@@ -34,9 +34,12 @@
 //     `example`s below pin that difference.
 // example.billing imports this module, so it writes an `exposing` list. What is on it is settled by
 // three readers at once: billing (the breakdown and the category), the jOOQ binding in app.ordering
-// (which names TaxRate, TaxCategory, TaxBreakdown, RateOf and TaxFor across a package boundary), and
-// the injected `rateOf`, whose `constructs TaxRate` needs that type exposed or E1305 rejects it.
-// What no one outside reads — PerLineTax and the comparison behavior beside it — stays this module's.
+// (which names TaxRate, TaxCategory, TaxBreakdown, ScheduleOf and TaxFor across a package boundary),
+// and the injected `scheduleOf`, whose `constructs RateSchedule, RateChange, TaxRate` needs those
+// types exposed or E1305 rejects it. What no one outside reads — PerLineTax and the comparison
+// behavior beside it — stays this module's.
+//
+// Findings recorded here: F32 at ascendingStep.
 module example.tax exposing (
     TaxRate,
     TaxCategory,
@@ -89,6 +92,9 @@ let stillAscending (carried: (Date, Bool), c: RateChange): Bool = {
     sofar && previous <= c.from
 }
 
+// F32 is why this is a helper of its own rather than the last line of the one above: a block whose
+// result begins with `(` is read as applying the line before it, so the tuple has to be the whole
+// body. `socialinsurance`'s grade table splits the same check the same way.
 let ascendingStep (carried: (Date, Bool), c: RateChange): (Date, Bool) =
     (c.from, stillAscending(carried, c))
 

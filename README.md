@@ -144,9 +144,28 @@ to be forced into everywhere.
 **F30 — an unused import is accepted in silence.** `shipping.sou` imports `StockLine` and never
 mentions it again.
 
-A note rather than a finding: brackets mean a `List` in a body and decode to whatever the field wants
-in an `example` fixture, so `holidays = [ Date(…) ]` compiles in a fixture and needs `Set.fromList` in
-`billing`'s. And `Map.empty` may be named in a body but not in a fixture.
+**F31 — the same brackets mean two things.** In a body `[ … ]` is a `List`, so a `Set` field is filled
+with `Set.fromList`; in an `example` fixture the same characters decode to whatever the field is, so
+`holidays = [ Date(…) ]` is a `Set` there and does not compile in `billing`'s `payerCalendar` two
+screens above it. The asymmetry runs the other way too: `Map.empty` may be named in a body and not in
+a fixture, so `forecasting`'s empty-team row is written `[ ]` while the behavior beside it writes
+`Map.empty`. A reader who learns the rule in one place has learned the wrong rule for the other, and
+neither spelling is wrong often enough to be memorable.
+
+**F32 — a result line that begins with `(` is read as applying the line above.** A block's last
+expression is its value, and layout does not end a statement, so
+
+```
+let ascendingStep (carried: (Date, Bool), c: RateChange): (Date, Bool) = {
+    let (previous, sofar) = carried
+    (c.from, sofar && previous <= c.from)
+}
+```
+
+parses as `carried (c.from, …)` and reports a block with no result. Returning a tuple from a block is
+the natural way to write a fold's step, and `socialinsurance` already splits its ascendingness check
+into two helpers to avoid this; `tax`'s rate schedule now does the same, for the same reason and
+without either file being able to say so in one line.
 
 ## Running
 

@@ -36,10 +36,10 @@
 //   - A rollup keyed by a sum. ForecastCategory's five cases are all unit data, so the category itself keys
 //     the map and the five names are written once, where they are declared.
 //
-// Findings recorded here: F5 at attainmentOf. F3, F16 and F23 were recorded here too and are gone: a sum
-// whose cases are all unit data keys a boundary map, a field every case spreads is read on the sum, and a
-// published helper is called directly instead of copied, since a behavior — unlike a helper — is callable
-// only from another behavior's body.
+// Findings recorded here: F5 at attainmentOf, F31 at the rollupThrough rows. F3, F16 and F23 were
+// recorded here too and are gone: a sum whose cases are all unit data keys a boundary map, a field
+// every case spreads is read on the sum, and a published helper is called directly instead of copied,
+// since a behavior — unlike a helper — is callable only from another behavior's body.
 module example.forecasting
 import example.crm ( Amount, UserId, AccountId, CurrencyCode, ConversionRate, RateTable )
 import example.org ( RoleNode, RoleName )
@@ -520,6 +520,8 @@ let repForecast = Forecast
     , dealCount = 1
     }
 
+// F31 shows up in the rows below: the behavior seeds its fold with `Map.empty`, and the fixture for
+// the same argument has to write `[ ]`, because a fixture may not name it.
 let acmeOrg = RoleNode { role = RoleName("Manager"), holder = UserId("u-mgr"), reports =
     [ RoleNode { role = RoleName("Rep"), holder = UserId("u-rep"), reports = [] }
     , RoleNode { role = RoleName("Rep"), holder = UserId("u-rep2"), reports = [] } ] }

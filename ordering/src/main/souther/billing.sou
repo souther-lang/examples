@@ -30,7 +30,7 @@
 //     a payment landed.
 //   - `List.foldr` walking the ledger from the end, and `List.filter` / `List.map` reading it two
 //     more ways.
-// Findings recorded here: F24 again, at issueCreditNote.
+// Findings recorded here: F24 again, at issueCreditNote, and F31 at payerCalendar.
 module example.billing exposing (
     InvoiceNo,
     Amount,
@@ -191,10 +191,9 @@ let issueInvoice (recorded, breakdown, terms, issuedOn, sequence, calendar) =
 
 // The calendar the examples below are written against: the eleventh of August is a holiday, the weeks
 // are counted from a Sunday in January, and a due date that lands on a closed day is pulled forward.
-// `[ … ]` is a list wherever a body writes one, so a Set field is filled with `Set.fromList`. In an
-// `example`'s fixture the same brackets do become a Set, because a fixture is decoded and a Set
-// decodes from an array — the two places read the same characters differently, which is worth knowing
-// before writing a fixture that a body cannot.
+// F31 is here: `[ … ]` is a list wherever a body writes one, so a Set field is filled with
+// `Set.fromList` — while an `example`'s fixture two screens below writes the same brackets and gets a
+// Set, because a fixture is decoded and a Set decodes from an array.
 let payerCalendar = PaymentCalendar { holidays = Set.fromList([ Date("2026-08-11") ]),
                                       aSunday = Date("2026-01-04"),
                                       rule = PrecedingBusinessDay }
