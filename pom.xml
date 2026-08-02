@@ -25,6 +25,7 @@
         <module>businesstrip</module>
         <module>member</module>
         <module>ordering</module>
+        <module>whodunit</module>
     </modules>
 
     <properties>

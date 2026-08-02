@@ -1,0 +1,114 @@
+// A whodunit solved at compile time. Three suspects, three rooms, one culprit. The data
+// declarations state the world of the puzzle, the behavior enumerates every world there could be
+// and keeps the ones the clues let stand, and each `example` row is one puzzle: its inputs are the
+// clues, its expected value is the verdict. The build passing is the proof that each puzzle has
+// exactly the answer its row states — change a clue and the row stops compiling.
+//
+// What is on show:
+//   - Enumeration without recursion. The candidate worlds are a fixed product — three rooms handed
+//     to three suspects, one of the three named as culprit — written as nested `concatMap` over
+//     the same list of rooms. Nothing recurses, so nothing needs `partial` and the totality
+//     checker has nothing to ask: the search is bounded because the domain is.
+//   - `allUniqueBy` as a constraint. "Everyone stood in a different room" is one call that keeps a
+//     seating injective, not a hand-rolled pairwise comparison.
+//   - A verdict as a sum. Solving ends three ways — one story stands, none does, several do — and
+//     the sum names all three, so an over- or under-constrained puzzle is an answer, not an error.
+//   - Examples as a puzzle book. The rows at the foot of this file are the puzzles; the compiler
+//     solves each one to check the book, every build.
+module example.whodunit
+
+import List ( concatMap, map, filter, all, any, allUniqueBy, length, get )
+
+// === The world of the puzzle ===
+
+data Suspect = Alice | Bob | Carol
+data Room    = Kitchen | Study | Garden
+
+// One suspect stood in one room.
+data Placement = { who: Suspect, room: Room }
+
+// A complete account of the evening: who did it, and where everyone stood.
+data World = { culprit: Suspect, places: List<Placement> }
+
+// What the scene or a witness says. Each case is one sentence of the puzzle's language, and a
+// puzzle is a list of them.
+data CulpritWasIn = { room: Room }                // where the deed was done
+data SawIn        = { who: Suspect, room: Room }  // a sighting
+data WasElsewhere = { who: Suspect, room: Room }  // an alibi
+data Innocent     = { who: Suspect }              // cleared outright
+data Clue = CulpritWasIn | SawIn | WasElsewhere | Innocent
+
+// === Every world there could be ===
+// Three nested passes over the same three rooms give every way to seat the suspects, and
+// `allUniqueBy` keeps the seatings where no room is shared: 27 candidates come in, 6 go out.
+// Naming each suspect as culprit multiplies that to the 18 worlds a clue ever gets to judge.
+
+let rooms    = [ Kitchen, Study, Garden ]
+let suspects = [ Alice, Bob, Carol ]
+
+let seatings =
+    concatMap(a ->
+        concatMap(b ->
+            map(c -> [ Placement { who = Alice, room = a }
+                     , Placement { who = Bob,   room = b }
+                     , Placement { who = Carol, room = c } ],
+                rooms),
+            rooms),
+        rooms)
+        |> filter(seating -> allUniqueBy(p -> p.room, seating))
+
+let worlds =
+    concatMap(culprit -> map(seating -> World { culprit = culprit, places = seating }, seatings),
+              suspects)
+
+// === Judging a world against the clues ===
+
+let stood (places: List<Placement>, who: Suspect, room: Room): Bool =
+    any(p -> p.who == who && p.room == room, places)
+
+let holds (clue: Clue, w: World): Bool =
+    match clue with
+        | CulpritWasIn { room }      -> stood(w.places, w.culprit, room)
+        | SawIn { who, room }        -> stood(w.places, who, room)
+        | WasElsewhere { who, room } -> Bool.not(stood(w.places, who, room))
+        | Innocent { who }           -> w.culprit /= who
+
+// === solve: the only story the clues let stand ===
+// Exactly one fitting world is a solved puzzle. None is a contradiction — some clue rules out
+// every world. More than one means the clues do not pin the evening down yet.
+
+data Unraveled = { culprit: Suspect, places: List<Placement> }
+
+behavior solve : (clues: List<Clue>) -> Unraveled | NoConsistentStory | StillAmbiguous
+    constructs Unraveled, NoConsistentStory, StillAmbiguous,
+               World, Placement, Alice, Bob, Carol, Kitchen, Study, Garden
+
+let solve (clues) = {
+    let fitting = filter(w -> all(clue -> holds(clue, w), clues), worlds)
+    match get(0, fitting) with
+        | None   -> NoConsistentStory
+        | Some w ->
+            if length(fitting) == 1
+            then Unraveled { culprit = w.culprit, places = w.places }
+            else StillAmbiguous
+}
+
+// === The puzzle book ===
+// Each row is a puzzle stated in full: the clues it gives the reader, and the one verdict they
+// force. The first row is the classic — the scene names a room, a sighting and an alibi pin the
+// other two suspects, and only one account of the evening survives.
+example solve
+    | "a scene, a sighting and an alibi leave one story standing" :
+        ([ CulpritWasIn { room = Kitchen }
+         , SawIn { who = Alice, room = Study }
+         , WasElsewhere { who = Bob, room = Kitchen } ])
+        -> Unraveled { culprit = Carol
+                     , places = [ Placement { who = Alice, room = Study }
+                                , Placement { who = Bob,   room = Garden }
+                                , Placement { who = Carol, room = Kitchen } ] }
+    | "clearing all three suspects leaves nobody to have done it" :
+        ([ Innocent { who = Alice }, Innocent { who = Bob }, Innocent { who = Carol } ])
+        -> NoConsistentStory
+    | "a scene with no witnesses fits too many stories" :
+        ([ CulpritWasIn { room = Kitchen } ])
+        -> StillAmbiguous
