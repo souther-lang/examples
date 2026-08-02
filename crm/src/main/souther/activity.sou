@@ -62,9 +62,9 @@ module example.activity exposing (
 )
 // The import list names what this module works with. The deal its `nextStepFor` rows are stated
 // against is `example.pipeline`'s own value, named here rather than restated, so the types inside it
-// stay that module's business. An imported value can be spread as well as named (souther#212, retiring
-// finding F27) — neither row below needs to vary it, so nothing here changed shape, but a row that did
-// would write `NegotiationReview { ...acmeInNegotiation, floorAmount = … }` rather than declaring its own.
+// stay that module's business. An imported value can be spread as well as named — no row below needs to
+// vary it, but one that did would write `NegotiationReview { ...acmeInNegotiation, floorAmount = … }`
+// rather than declaring its own deal.
 import example.crm ( AccountId, ContactId, LeadId, UserId )
 import example.pipeline ( OpportunityId, OpenOpportunity
                         , Prospecting, Qualification, NeedsAnalysis, ValueProposition
@@ -337,7 +337,7 @@ let lastActivityOn (activities, today) = {
 // The projection to a key is where absence is the model's own: an activity about a lead has no account to
 // roll up to. List.filterMap serves absence the model reads — a `?` field, a lookup that misses — and this
 // absence is a case of RelatedTo, which nothing can turn into an optional. So the projection answers with a
-// list of nought or one and concatMap does the work. Finding F8.
+// list of nought or one and concatMap does the work.
 let accountKeyOf (a: Activity): List<AccountId> =
     match relatedOf(a) with
         | RelatedToAccount { accountId }     -> [ accountId ]

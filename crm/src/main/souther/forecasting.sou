@@ -35,11 +35,6 @@
 //     forecast of zero, because the two mean different things to whoever is being asked about the quarter.
 //   - A rollup keyed by a sum. ForecastCategory's five cases are all unit data, so the category itself keys
 //     the map and the five names are written once, where they are declared.
-//
-// Findings recorded here: F5 at attainmentOf, F31 at the rollupThrough rows. F3, F16 and F23 were
-// recorded here too and are gone: a sum whose cases are all unit data keys a boundary map, a field
-// every case spreads is read on the sum, and a published helper is called directly instead of copied,
-// since a behavior — unlike a helper — is callable only from another behavior's body.
 module example.forecasting
 import example.crm ( Amount, UserId, AccountId, CurrencyCode, ConversionRate, RateTable )
 import example.org ( RoleNode, RoleName )
@@ -84,7 +79,6 @@ data Forecast =
 
 // Keyed by the category itself. Every case of ForecastCategory is a unit data, so it travels as that
 // case's name and keys a boundary map directly — the five names are written once, where they are declared.
-// A CategoryName newtype stood here and the match that produced it wrote them a second time (finding F3).
 data CategoryRollup =
     { byCategory: Map<ForecastCategory, Amount>
     , countByCategory: Map<ForecastCategory, Int>
@@ -146,16 +140,13 @@ example periodOf
 // === Reading a deal ===
 // An imported behavior that depends on nothing is called by name, and categoryRollupOf below does exactly
 // that with example.pipeline's categoryOf — because categoryRollupOf is itself a behavior, and a behavior
-// is callable from another behavior's body, cross-module or not (souther#159/#189). weightedOf below is
-// an ordinary helper `let`, not a behavior, and a helper never reaches a behavior — that restriction did
-// not move. What moved is which side of pipeline's mapping is the copyable one: probabilityOf's own body
-// is now a published helper, probabilityFor (ADR-0075), and a helper reaches a published helper the same
-// way it reaches any imported function, so weightedOf calls that directly instead of carrying its own
-// ten-arm copy. Retired finding F23.
+// is callable from another behavior's body, cross-module or not. weightedOf below is an ordinary helper
+// `let`, not a behavior, and a helper never reaches a behavior — it reaches a published helper instead:
+// pipeline publishes probabilityFor (ADR-0075), which a helper reaches the same way it reaches any
+// imported function, so weightedOf calls that rather than carrying its own ten-arm copy.
 
 // The amount, the close date, the id and the account are read straight off OpenOpportunity: every one of
 // the eight open states spreads OpportunityCommon, and what holds of every case is a property of the sum.
-// Four eight-arm helpers stood here, which was finding F16.
 
 // === The deal and the forecast the rows are about ===
 // One deal of a million yen closing at the end of September, and the forecast that comes to. The deal is
@@ -366,7 +357,7 @@ behavior quotaFor : (owner: UserId, period: FiscalPeriod) -> Quota
 // The attainment is a percentage of quota, and it is the one figure here computed by dividing a Decimal by a
 // Decimal — so the guard above makes the zero denominator unreachable and the operator is used with the
 // rounding named. No DivisionByZero case appears in the output, because the model does not carry a case it can
-// never return. Finding F5.
+// never return.
 let attainmentOf (forecast: Decimal, quota: Decimal): Attainment =
     Attainment(Int.clamp(0, 999,
         Decimal.toInt(Decimal.round(forecast * 100.0m, 0, HALF_UP), FLOOR) / Decimal.toInt(quota, FLOOR)))
@@ -520,8 +511,8 @@ let repForecast = Forecast
     , dealCount = 1
     }
 
-// F31 shows up in the rows below: the behavior seeds its fold with `Map.empty`, and the fixture for
-// the same argument has to write `[ ]`, because a fixture may not name it.
+// A fixture is decoded rather than evaluated, so the rows below write an empty map as `[ ]` where the
+// behavior's own body seeds its fold with `Map.empty`.
 let acmeOrg = RoleNode { role = RoleName("Manager"), holder = UserId("u-mgr"), reports =
     [ RoleNode { role = RoleName("Rep"), holder = UserId("u-rep"), reports = [] }
     , RoleNode { role = RoleName("Rep"), holder = UserId("u-rep2"), reports = [] } ] }

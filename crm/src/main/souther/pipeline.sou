@@ -22,25 +22,15 @@
 //     contact and an opportunity are made together or none of them is.
 //   - Aggregation with `Map.upsert`: the pipeline by stage, counted and totalled in two folds, keyed by a
 //     String-backed StageName rather than by the stage sum — a stage carries fields, so it is not the
-//     enumeration a boundary map keys by, which is what is left of finding F3 and the reason the ten stage
-//     names exist twice in this file.
+//     enumeration a boundary map keys by, which is why the ten stage names exist twice in this file.
 //   - A zero-argument injected behavior. `nextOpportunityId` produces rather than transforms, so its
 //     generated base declares `apply()` with no input at all.
 //
-// The findings this module hit are recorded where they bite: F3 at StageName, F5 at winRateOf, F18 at the
-// two names this file had to change, F19 at pipelineByStage, F26 at the fixtures. F16 was recorded at idOf
-// and is gone: a field every case spreads is read on the sum itself. F17 is gone too: a behavior calls a
-// behavior whose requirement set is empty, so probabilityOf and categoryOf have no helper twin. F4 is
-// gone: closeAndSummarize carries its own rows. F1 was recorded at openFromLead and is gone: what a
-// cross-module `>->` cannot do, convertAndOpen does with a body.
-//
-// F18 is worth reading before the model: a behavior generates a class from its name with the first letter
-// capitalized, so a behavior and a data cannot share a word. This domain has two words that are both a
-// noun and a verb — you open an opportunity and you report on open opportunities; a win rate is a number
-// and working it out is an operation — and in both cases the compiler rejected the pair. The noun kept the
-// name (`OpenOpportunity`, `WinRate`) because that is what a pipeline report says, so the behaviors are
-// `openFromLead` and `winRateOf`. Nothing was learned by renaming them; the vocabulary just got worse in
-// two places.
+// Naming is worth reading before the model: a behavior generates a class from its name with the first
+// letter capitalized, so a behavior and a data cannot share a word. This domain has two words that are
+// both a noun and a verb — you open an opportunity and you report on open opportunities; a win rate is a
+// number and working it out is an operation. The noun keeps the name (`OpenOpportunity`, `WinRate`)
+// because that is what a pipeline report says, so the behaviors are `openFromLead` and `winRateOf`.
 module example.pipeline exposing (
     acmeInNegotiation,
     acmeChampioned,
@@ -108,8 +98,8 @@ module example.pipeline exposing (
     // The transitions are the module's interface: a boundary drives a deal through them and a downstream
     // context takes a state type as an input. Listing a behavior only settles its visibility on the JVM,
     // though — a behavior, such as qualifyOpportunity, is callable only from another behavior's body
-    // (cross-module or not), never from a plain helper `let` (retired finding F23, at probabilityFor
-    // above: the fix there was publishing the helper the behavior wraps, not a change to this rule).
+    // (cross-module or not), never from a plain helper `let`, which is why probabilityFor above
+    // publishes the helper the behavior wraps.
     qualifyOpportunity,
     AmountNotStated,
     recordNeeds,
@@ -167,7 +157,7 @@ data QuoteNumber = String
 // is a unit data keys a boundary map directly, but a stage is not one of those: it is a state carrying the
 // fields that stage has. So the ten stage names live twice in this file — once as the case names above,
 // once as the strings profileOf produces — and nothing keeps the two in step but that match being
-// exhaustive. What is left of finding F3.
+// exhaustive.
 data StageName = String
     invariant String.length(value) >= 1
 
@@ -283,7 +273,7 @@ data Opportunity =
 
 // The input sums. An anonymous union may not appear in a parameter, so "from any open stage" and "won
 // from either of these two" each need a name — which makes each of them sealed and every match over them
-// exhaustive, so naming them pays for itself. Finding F11, recorded as working-as-designed.
+// exhaustive, so naming them pays for itself.
 data OpenOpportunity =
     Prospecting | Qualification | NeedsAnalysis | ValueProposition | IdDecisionMakers
   | PerceptionAnalysis | ProposalPriceQuote | NegotiationReview
@@ -338,8 +328,7 @@ data SlipReport =
 // === Reading what every stage has ===
 // Every one of the ten states spreads OpportunityCommon, so every one of them has an id, an amount and a
 // close date — and the sum has them too, because what holds of every case is a property of the sum. So
-// `opp.id` and `opp.closeDate` are read straight off Opportunity and no helper stands between. This used
-// to be three ten-arm matches; finding F16 was that they had to be written.
+// `opp.id` and `opp.closeDate` are read straight off Opportunity and no helper stands between.
 //
 // Only the amount still opens the value, and for a reason the spread does not carry: a won deal weighs
 // what it was won at, not what it was asked at. The nine stages that do weigh the ask share one arm, and
@@ -376,9 +365,9 @@ let stageNameOf (opp: Opportunity): StageName =
 // helpers. There is no twin: a behavior whose own requirement set is empty is called by name, so
 // profileOf calls these two rather than a helper copy of the mapping. probabilityOf's own mapping is a
 // published helper (ADR-0075) rather than the behavior's own match: a behavior is only callable from
-// another behavior's body, cross-module or not (souther#159/#189), never from a plain helper `let` —
-// so forecasting's weightedOf, an ordinary helper, reaches probabilityFor directly and probabilityOf
-// is the published helper's behavior wrapper, retiring finding F23.
+// another behavior's body, cross-module or not, never from a plain helper `let` — so forecasting's
+// weightedOf, an ordinary helper, reaches probabilityFor directly and probabilityOf is the published
+// helper's behavior wrapper.
 let probabilityFor (opp: Opportunity): Probability =
     match opp with
         | Prospecting        -> Probability(10)
@@ -855,7 +844,7 @@ example closeAndSummarize
 //
 // The keys are StageName, not the stage sum: the stages carry fields, so they are not the enumeration a
 // boundary map keys by. The picklist vocabulary is written twice in this file and kept in step by one
-// exhaustive match. What is left of finding F3.
+// exhaustive match.
 
 let countByStage (opps: List<Opportunity>): Map<StageName, Int> =
     List.fold((acc, opp) -> Map.upsert(stageNameOf(opp), 1, n -> n + 1, acc), Map.empty, opps)
@@ -876,12 +865,9 @@ behavior pipelineByStage : (opps: List<Opportunity>) -> StageBreakdown
 let pipelineByStage (opps) = {
     let counts = countByStage(opps)
     StageBreakdown
-        // Alphabetical, which is the wrong order and the only one available. The ten stages have a natural
-        // order — the order they are declared in, which is the order a deal moves through them — and nothing
-        // carries it: a sum's cases have no index, and StageName is a String, so sorting it puts "Closed
-        // Lost" first and "Value Proposition" last. A pipeline report in that order is a pipeline report
-        // nobody reads. Ordering a unit-only sum by its declaration order would fix it in one line.
-        // Finding F19.
+        // Sorted by name, so "Closed Lost" comes first and "Value Proposition" last. The order a deal
+        // moves through the stages is the order they are declared in, and nothing here carries it: a
+        // sum's cases have no index, and the key is a StageName, which is a String.
         { stages = List.sort(Map.keys(counts))
         , count = counts
         , total = totalByStage(opps)
@@ -905,7 +891,7 @@ let topDeals (opps, n) =
 // Wins over closed deals. The guard makes the division by zero unreachable rather than reporting it: a
 // period with no closed deals has no win rate, which is a different statement from a rate of zero. That is
 // also why no outcome here is a DivisionByZero — the model does not carry a case it can never return, and
-// the guard is what earns that. Finding F5.
+// the guard is what earns that.
 behavior winRateOf : (closed: List<ClosedOpportunity>) -> WinRate | NoClosedDeals
     constructs WinRate, Probability, NoClosedDeals
 

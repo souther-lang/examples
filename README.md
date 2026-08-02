@@ -103,11 +103,10 @@ returns `Result<T>`, and `Ok`/`Err` are told apart by pattern match — no wildc
 
 ## Dogfooding findings
 
-The `crm` and `hr` examples were written to put the language under a domain that fights back, and what
-they produced besides a model is this list. Every entry is a rule a real system enforces, what had to be
-written instead, and what would let it be written directly. Each one is also recorded in the `.sou` file
-at the declaration that hit it, so a reader meets the finding where the model shows it rather than only
-here.
+The examples were written to put the language under domains that fight back, and what they produced
+besides a model is this list. Every entry is a rule a real system enforces, what had to be written
+instead, and what would let it be written directly. The list lives here and only here: a `.sou` file
+says what the domain is and how it is written in Souther, and carries none of this.
 
 A finding the compiler fixes is removed from here rather than kept as a resolved entry — the model is
 rewritten to the form it was asking for, and the commit that does it tells the story; git history is
@@ -151,8 +150,9 @@ order the set happens to hold, so a response body is not byte-stable and a test 
 array. `CatalogTest` compares membership instead, which is the right assertion here and the wrong one
 to be forced into everywhere.
 
-**F30 — an unused import is accepted in silence.** `shipping.sou` imports `StockLine` and never
-mentions it again.
+**F30 — an unused import is accepted in silence.** A module can name a type on its `import` list and
+never mention it again, and nothing says so — through the CLI or through the build. `shipping` carried
+one for a while and no reader of the file could have told.
 
 **F31 — the same brackets mean two things.** In a body `[ … ]` is a `List`, so a `Set` field is filled
 with `Set.fromList`; in an `example` fixture the same characters decode to whatever the field is, so

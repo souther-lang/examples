@@ -1,8 +1,8 @@
 // Fixtures can live in a companion file when they outgrow the model. `examples for` names the module
 // and the compiler merges these rows with the ones written beside the behaviors in crm.sou. No import is
 // needed: the same module's data and behaviors are in scope bare, and this file's own values join the
-// module the same way (souther#210, retiring finding F25) — a `let` with no parameter list declares a
-// value here; a `let` with parameters would be a helper, which this file may not hold.
+// module the same way — a `let` with no parameter list declares a value here; a `let` with parameters
+// would be a helper, which this file may not hold.
 //
 // Conversion is what earns the companion: every row states a lead, a request and the two books the
 // duplicate rules are checked against, and what each row is about is one field of one of them. The four

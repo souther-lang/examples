@@ -28,10 +28,6 @@
 //   - One injected behavior, `findAccountByDomain`, because the CRM database is outside the model. It
 //     is pinned at compile time with `fake` + `example` and again in the smoke test, which extends the
 //     generated base class from plain Java with no framework.
-//
-// Where the language could not state a rule directly, this file says so at the declaration that hit it.
-// Those notes are the point of the example as much as the model is (see the README's dogfooding
-// findings): F8 at `screenForDuplicates`.
 module example.crm exposing (
     AccountId,
     ContactId,
@@ -138,8 +134,8 @@ module example.crm exposing (
 //
 // The twelve-character tail these three share is held once: a `String.matches` pattern may be any
 // expression that evaluates to a string at compile time, which covers a `++` of a literal and a module's
-// own value (souther#208/#219, retiring finding F10), so the tail is a named value and each type composes
-// its own prefix onto it. Naming pays where a pattern is used twice, which is DomainName below.
+// own value, so the tail is a named value and each type composes its own prefix onto it. Naming pays
+// where a pattern is used twice, which is DomainName below.
 let salesforceIdTail = "[0-9A-Za-z]{12}([0-9A-Z]{3})?"
 
 data AccountId = String
@@ -428,9 +424,8 @@ data OpenLead = NewLead | WorkingLead
 // boundaries — so each is a value, and a row that varies one field spreads it.
 //
 // `acmeQualified`, the conversion request and the account/contact books live in `crm.examples.sou`
-// instead, beside the only rows that use them: an `examples for` file may now declare the values its own
-// rows name (souther#210, retiring finding F25), so a fixture named there no longer has to live here just
-// to be nameable.
+// instead, beside the only rows that use them: an `examples for` file declares the values its own rows
+// name, so a fixture only those rows use belongs there rather than here.
 //
 // `acmeNew` and `acmeWorking` stay here because this module's own examples (`recordTouch`, `scoreLead`,
 // `linkLeadToAccount`) use them too. `acmeNew` has no earlier state to spread; `acmeWorking` spreads it,
@@ -708,7 +703,7 @@ example disqualifyAndNurture
 
 // Absence is the model's own here (PhoneOnly has no address). List.filterMap serves absence the model
 // reads — a `?` field, a lookup that misses — and a case of ContactPoint is not that: nothing turns it
-// into an optional. So the projection is a 0-or-1-element list and the combinator is concatMap. Finding F8.
+// into an optional. So the projection is a 0-or-1-element list and the combinator is concatMap.
 let emailOf (reach: ContactPoint): List<EmailAddress> =
     match reach with
         | EmailOnly { email }     -> [ email ]

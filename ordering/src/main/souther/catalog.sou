@@ -26,7 +26,6 @@
 // The module speaks cart's `Sku` and nothing else of cart's, and nothing imports it: what it produces
 // is a requirement, and requirements are read by people. It is exposed anyway, because the smoke test
 // builds a `Component` from JSON.
-// Findings recorded here: F29 at Requirement.
 module example.catalog exposing (
     Component,
     Requirement,
@@ -56,9 +55,9 @@ data Component =
 //
 // `purchased` is the leaves. Those are the lines a buyer acts on; everything else is made, and a
 // requirement that does not say which is which sends somebody shopping for sub-assemblies.
-// F29 is on `purchased`: a `Set` encodes to a JSON array in whatever order it holds, so the smoke test
-// asserts membership rather than the array. Which is the right assertion here and the wrong one to be
-// left with when a response body has to be stable.
+// `purchased` is a `Set` because a sku is bought once however many parents ask for it. A set encodes
+// to a JSON array in whatever order it holds, so the smoke test asserts membership rather than the
+// array itself.
 data Requirement =
     { need: Map<Sku, Int>
     , purchased: Set<Sku>

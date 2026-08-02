@@ -38,8 +38,6 @@
 // and the injected `scheduleOf`, whose `constructs RateSchedule, RateChange, TaxRate` needs those
 // types exposed or E1305 rejects it. What no one outside reads — PerLineTax and the comparison
 // behavior beside it — stays this module's.
-//
-// Findings recorded here: F32 at ascendingStep.
 module example.tax exposing (
     TaxRate,
     TaxCategory,
@@ -92,9 +90,9 @@ let stillAscending (carried: (Date, Bool), c: RateChange): Bool = {
     sofar && previous <= c.from
 }
 
-// F32 is why this is a helper of its own rather than the last line of the one above: a block whose
-// result begins with `(` is read as applying the line before it, so the tuple has to be the whole
-// body. `socialinsurance`'s grade table splits the same check the same way.
+// The step itself: this change's date becomes the previous one, and the verdict carries on. Written
+// as its own helper whose whole body is the tuple, which is how `socialinsurance`'s grade table
+// writes the same check.
 let ascendingStep (carried: (Date, Bool), c: RateChange): (Date, Bool) =
     (c.from, stillAscending(carried, c))
 
