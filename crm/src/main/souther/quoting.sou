@@ -72,7 +72,7 @@ module example.quoting exposing (
 )
 import example.crm ( AccountId, UserId, Amount )
 import example.org ( RoleNode, RoleName, ReportingChain, NotInHierarchy, chainTo )
-import example.pipeline ( OpportunityId, QuoteNumber, PerceptionAnalysis )
+import example.pipeline ( OpportunityId, QuoteNumber, PerceptionAnalysis, acmeChampioned )
 
 // === Values ===
 
@@ -266,6 +266,77 @@ let buildQuote (number, opp, lines, issuedOn, validity) = {
           }
 }
 
+// === buildQuote's decision table ===
+// Five rules in a stated order, and the rows below are the decision table: one row with everything
+// good, one row per rule with everything else held good, both sides of each numeric boundary, and
+// one row where two rules are broken at once — the row a prose spec never states. Guard order is
+// behaviour: per-line is asked before blended, and the double-violation row is what pins that.
+//
+//   quantities >= 1 | line disc <= 50% | net >= 60% of list | products unique | validity 1..90 || answer
+//   ----------------+------------------+--------------------+-----------------+----------------++----------------------
+//   yes             | yes              | yes                | yes             | 90             || Quote
+//   0 on a line     | yes              | yes                | yes             | 30             || NoLines
+//   (no lines)      | -                | -                  | -               | 30             || NoLines
+//   yes             | 55% on a line    | yes                | yes             | 30             || LineDiscountOverCap
+//   yes             | yes              | 55% of list        | yes             | 30             || BlendedDiscountOverCap
+//   yes             | 55% on a line    | 46% of list        | yes             | 30             || LineDiscountOverCap
+//   yes             | yes              | yes                | SW-1001 twice   | 30             || DuplicateProduct
+//   yes             | yes              | yes                | yes             | 0              || ValidityOutOfRange
+//   yes             | yes              | yes                | yes             | 91             || ValidityOutOfRange
+//
+// The lines the rows vary. The platform licence is the deal's weight; the support plan is a small
+// clean line, there so one rule can be broken while the other holds.
+let platformLine = LineRequest { product = ProductCode("SW-1001"), name = ProductName("Platform licence")
+                               , quantity = 10, listPrice = 1000.00m, discount = 0.10m }
+let supportLine  = LineRequest { product = ProductCode("SW-2002"), name = ProductName("Support plan")
+                               , quantity = 1, listPrice = 100.00m, discount = 0.0m }
+
+example buildQuote
+    | "every rule holds, at the last day a validity may state" :
+        (QuoteNumber("0Q0000000000001"), acmeChampioned, [ platformLine ], Date("2026-08-10"), 90)
+        -> Quote { number = QuoteNumber("0Q0000000000001")
+                 , opportunityId = OpportunityId("006000000000001")
+                 , accountId = AccountId("001000000000100")
+                 , lines = QuoteLines(
+                       [ QuoteLine { product = ProductCode("SW-1001"), name = ProductName("Platform licence")
+                                   , quantity = Quantity(10), listPrice = UnitPrice(1000.00m)
+                                   , discount = DiscountRate(0.10m), net = Amount(9000.00m) } ])
+                 , subtotal = Amount(10000.00m)
+                 , total = Amount(9000.00m)
+                 , issuedOn = Date("2026-08-10")
+                 , expiresOn = Date("2026-11-08")
+                 , approval = NotSubmitted
+                 }
+    | "a zero quantity is no line to quote" :
+        (QuoteNumber("0Q0000000000001"), acmeChampioned,
+         [ LineRequest { ...platformLine, quantity = 0 } ], Date("2026-08-10"), 30)
+        -> NoLines
+    | "no lines at all is the same answer by the list's own rule" :
+        (QuoteNumber("0Q0000000000001"), acmeChampioned, [ ], Date("2026-08-10"), 30)
+        -> NoLines
+    | "one line past half off breaks the per-line cap, however small the line" :
+        (QuoteNumber("0Q0000000000001"), acmeChampioned,
+         [ platformLine, LineRequest { ...supportLine, discount = 0.55m } ], Date("2026-08-10"), 30)
+        -> LineDiscountOverCap
+    | "forty-five per cent off the whole deal passes every line and fails the blend" :
+        (QuoteNumber("0Q0000000000001"), acmeChampioned,
+         [ LineRequest { ...platformLine, discount = 0.45m } ], Date("2026-08-10"), 30)
+        -> BlendedDiscountOverCap
+    | "both caps broken at once, and the per-line cap is the one that answers" :
+        (QuoteNumber("0Q0000000000001"), acmeChampioned,
+         [ LineRequest { ...platformLine, discount = 0.55m } ], Date("2026-08-10"), 30)
+        -> LineDiscountOverCap
+    | "the same product on two lines is one line written twice" :
+        (QuoteNumber("0Q0000000000001"), acmeChampioned,
+         [ platformLine, LineRequest { ...platformLine, discount = 0.0m } ], Date("2026-08-10"), 30)
+        -> DuplicateProduct
+    | "a validity of nought is below the window" :
+        (QuoteNumber("0Q0000000000001"), acmeChampioned, [ platformLine ], Date("2026-08-10"), 0)
+        -> ValidityOutOfRange
+    | "a validity of ninety-one is past it" :
+        (QuoteNumber("0Q0000000000001"), acmeChampioned, [ platformLine ], Date("2026-08-10"), 91)
+        -> ValidityOutOfRange
+
 // === approvalNeeded: the authority matrix ===
 // Ten per cent is a rep's own call; past that somebody signs. The bands are the ones an enterprise sales org
 // runs, and the matrix reads the worst line rather than the blend, because that is the number an approver is
@@ -327,8 +398,10 @@ let rejectedQuote = Quote { ...vpQuote
                                                      , note = RejectionNote("margin too thin") }
                           }
 
-// Four rows, one per band, and both sides of the first two boundaries. A matrix nobody has checked at its
-// edges is a matrix that lets a rep sign off their own thirty per cent.
+// Seven rows: one per band, and both sides of all three boundaries — 10/11, 20/21 and 35/36 hundredths
+// each get a row on each side. A matrix nobody has checked at its edges is a matrix that lets a rep sign
+// off their own thirty per cent, and an edge checked on one side only is a matrix whose bands can drift
+// one step without a row noticing.
 example approvalNeeded
     | "a tenth off is a rep's own call" :
         (quoteAt(DiscountRate(0.10m), Amount(9000.00m)))
@@ -336,10 +409,19 @@ example approvalNeeded
     | "a fraction past a tenth needs a manager" :
         (quoteAt(DiscountRate(0.11m), Amount(8900.00m)))
         -> NeedsApproval { role = SalesManager, worstDiscount = DiscountRate(0.11m) }
-    | "a fifth is still the manager's, and a fraction past it is the VP's" :
+    | "a fifth is the manager's last call" :
+        (quoteAt(DiscountRate(0.20m), Amount(8000.00m)))
+        -> NeedsApproval { role = SalesManager, worstDiscount = DiscountRate(0.20m) }
+    | "a fraction past a fifth is the VP's" :
         (quoteAt(DiscountRate(0.21m), Amount(7900.00m)))
         -> NeedsApproval { role = RegionalVp, worstDiscount = DiscountRate(0.21m) }
-    | "past thirty-five per cent only the CFO signs" :
+    | "thirty-five per cent is the VP's last call" :
+        (quoteAt(DiscountRate(0.35m), Amount(6500.00m)))
+        -> NeedsApproval { role = RegionalVp, worstDiscount = DiscountRate(0.35m) }
+    | "a fraction past thirty-five and only the CFO signs" :
+        (quoteAt(DiscountRate(0.36m), Amount(6400.00m)))
+        -> NeedsApproval { role = Cfo, worstDiscount = DiscountRate(0.36m) }
+    | "deep discounts stay the CFO's however far they go" :
         (quoteAt(DiscountRate(0.40m), Amount(6000.00m)))
         -> NeedsApproval { role = Cfo, worstDiscount = DiscountRate(0.40m) }
 

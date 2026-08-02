@@ -43,6 +43,7 @@
 // two places.
 module example.pipeline exposing (
     acmeInNegotiation,
+    acmeChampioned,
     OpportunityId,
     OpportunityName,
     StageName,
