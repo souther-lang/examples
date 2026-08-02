@@ -7,6 +7,18 @@
 // exists to write down.
 //
 // What is on show:
+//   - **A rate is a fact with a date on it.** Consumption tax has been three per cent, five, eight and
+//     ten, and which one applies is decided by the day of the transaction and not by the day the
+//     question is asked. So what the outside world hands over is not a rate but a schedule — the
+//     changes and the day each took effect — and the rate is read out of it at a date. A schedule
+//     that starts after the date asked about is a real outcome and not a missing row: the reduced
+//     rate did not exist before October 2019, and a line dated before that has no reduced rate rather
+//     than an old one.
+//   - **A total rounded once, then shared out.** The tax on an invoice is rounded per rate, not per
+//     line, and a line-by-line breakdown still has to add up to it. `allocateTax` floors each line and
+//     puts what the flooring lost onto the last line, and `TaxAllocation`'s invariant is that the
+//     lines sum to the total — so an allocation that does not add up is not a value that exists.
+//     `taxRoundedPerLine` at the foot of this file is what happens without that, and it is a yen out.
 //   - Int and Decimal do not mix in an operator. Applying a rate reads
 //     `Decimal.fromInt(net) * rate.value`, so the conversion sits where the value stops being yen.
 //     F# takes the same position (`n * 0.1m` does not compile; `decimal n * 0.1m` does).
@@ -30,11 +42,17 @@ module example.tax exposing (
     TaxCategory,
     StandardRate,
     ReducedRate,
+    RateChange,
+    RateSchedule,
     TaxBreakdown,
-    rateOf,
-    taxFor
+    NoRateYet,
+    LineTax,
+    TaxAllocation,
+    scheduleOf,
+    taxFor,
+    allocateTax
 )
-import List ( map, sum )
+import List ( map, sum, filter, length, indexedMap, reverse, get )
 import example.cart ( Sku, LineItem, PricedCart )
 
 // A rate is at least 0 and below 1. The `m` in `0.10m` marks a Decimal literal; Souther has no
@@ -46,12 +64,58 @@ data TaxRate = Decimal
 // a rate is revised by law, the category it belongs to is not.
 data TaxCategory = StandardRate | ReducedRate
 
-// The rate in force for a category. It is injected, not written here, for the same reason: the
-// figure is administered outside the model (a NUMERIC column read by jOOQ at the boundary), while
-// this module states what is done with it. The `example`s below fake it, so the arithmetic and the
-// rounding are checked at compile time with no database involved.
-behavior rateOf : (category: TaxCategory) -> TaxRate
-    constructs TaxRate
+// === The rate, and the day it started being the rate ===
+// A rate is revised by law on a date, and every figure ever in force stays true of the days it
+// covered — a credit note against a 2019 invoice is taxed at what applied in 2019. So the model holds
+// the changes rather than the current value, and reading "the rate" is a question with a date in it.
+data RateChange =
+    { from: Date
+    , rate: TaxRate
+    }
+
+// The changes for one category, oldest first. Two rules, and the lookup below depends on both: there
+// is at least one change, and they ascend — so the rate on a day is the last change on or before it,
+// and nothing else has to be stored. Ascendingness is a fold over neighbouring pairs rather than a
+// per-element quantifier, which is why it is written as one; an invariant may name a total helper.
+data RateSchedule = List<RateChange>
+    invariant stated = length(value) >= 1
+    invariant ascendingFrom = ascending(value)
+
+// The accumulator carries the previous change's date beside the verdict. The seed is a date before
+// any tax existed, because the fold needs a lower bound and not a real day; carrying an `Option`
+// instead would mean constructing one, and a helper an invariant names may not construct.
+let stillAscending (carried: (Date, Bool), c: RateChange): Bool = {
+    let (previous, sofar) = carried
+    sofar && previous <= c.from
+}
+
+let ascendingStep (carried: (Date, Bool), c: RateChange): (Date, Bool) =
+    (c.from, stillAscending(carried, c))
+
+let ascending (changes: List<RateChange>): Bool = {
+    let (last, sofar) = List.fold((carried, c) -> ascendingStep(carried, c),
+                                  (Date("1000-01-01"), true), changes)
+    sofar
+}
+
+// The schedule for a category. It is injected, not written here, for the reason the rate always was:
+// the figures are administered outside the model — now several rows of a NUMERIC column and a DATE,
+// read by jOOQ at the boundary — while this module states what is done with them. The `example`s
+// below fake it, so the lookup, the arithmetic and the rounding are all checked at compile time with
+// no database involved.
+behavior scheduleOf : (category: TaxCategory) -> RateSchedule
+    constructs RateSchedule, RateChange, TaxRate
+
+// The rate in force on a day: the last change that had already happened. A category whose first
+// change is later than the day asked about has no rate then — the reduced rate did not exist before
+// October 2019 — and that is an `Option`, read by whoever asked and turned into an outcome there.
+let rateAsOf (schedule: RateSchedule, on: Date): Option<TaxRate> =
+    filter(c -> c.from <= on, schedule.value) |> reverse |> get(0) |> Option.map(.rate)
+
+// What a date before a category's first change answers with. It is not a missing row and not a zero
+// rate: nothing was owed under a rate that did not exist, and a caller that treats that as zero and a
+// caller that treats it as an error want to be told apart.
+data NoRateYet = { on: Date }
 
 // The breakdown. net / tax / gross are all yen; the rate is the only Decimal that leaves, and
 // rateLabel is how it is written on an invoice — a qualified invoice states the rate per category, so
@@ -64,9 +128,9 @@ data TaxBreakdown =
     , gross: Int
     }
 
-behavior taxFor : (order: PricedCart, category: TaxCategory) -> TaxBreakdown
-    depends on rateOf
-    constructs TaxBreakdown
+behavior taxFor : (order: PricedCart, category: TaxCategory, on: Date) -> TaxBreakdown | NoRateYet
+    depends on scheduleOf
+    constructs TaxBreakdown, NoRateYet
 
 // The rate as a percentage. `Decimal.round` sets the scale — a rate of 0.10 times 100 is 10.000, and
 // nobody writes "10.000%" — and `String.fromDecimal` renders it in plain notation with that scale
@@ -75,31 +139,125 @@ behavior taxFor : (order: PricedCart, category: TaxCategory) -> TaxBreakdown
 let rateLabel (rate: TaxRate): String =
     String.fromDecimal(Decimal.round(rate.value * 100.0m, 0, HALF_UP)) ++ "%"
 
-// The rate is applied to the order's net total once, and the fraction is dropped downwards.
-let taxFor (order, category, rateOf) = {
-    let rate = rateOf(category)
-    let tax = Decimal.toInt(Decimal.fromInt(order.total) * rate.value, FLOOR)
-    TaxBreakdown { net = order.total, rate = rate, rateLabel = rateLabel(rate), tax = tax,
-        gross = order.total + tax }
-}
+// The rate in force on the day is applied to the order's net total once, and the fraction is dropped
+// downwards.
+let taxFor (order, category, on, scheduleOf) =
+    match rateAsOf(scheduleOf(category), on) with
+        | Some rate -> {
+            let tax = Decimal.toInt(Decimal.fromInt(order.total) * rate.value, FLOOR)
+            TaxBreakdown { net = order.total, rate = rate, rateLabel = rateLabel(rate), tax = tax,
+                gross = order.total + tax }
+          }
+        | None -> NoRateYet { on = on }
 
-fake rateOf
-    | (StandardRate) -> TaxRate(0.10m)
-    | (ReducedRate)  -> TaxRate(0.08m)
+// The real schedule, as far as this example needs it. The standard rate has been revised three times
+// since it was introduced; the reduced rate was introduced with the last of those, which is why its
+// schedule starts in October 2019 and why a date before that has no reduced rate to read.
+fake scheduleOf
+    | (StandardRate) -> RateSchedule(
+        [ RateChange { from = Date("1989-04-01"), rate = TaxRate(0.03m) }
+        , RateChange { from = Date("1997-04-01"), rate = TaxRate(0.05m) }
+        , RateChange { from = Date("2014-04-01"), rate = TaxRate(0.08m) }
+        , RateChange { from = Date("2019-10-01"), rate = TaxRate(0.10m) } ])
+    | (ReducedRate) -> RateSchedule(
+        [ RateChange { from = Date("2019-10-01"), rate = TaxRate(0.08m) } ])
 
 example taxFor
     | "the standard rate is 10%, rounded down" :
         (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 3, unitPrice = 105, weightGrams = 120 } ],
-            total = 315, highValue = false }, StandardRate)
+            total = 315, highValue = false }, StandardRate, Date("2026-07-25"))
         -> TaxBreakdown { net = 315, rate = TaxRate(0.10m), rateLabel = "10%", tax = 31, gross = 346 }
     | "the reduced rate is 8%" :
         (PricedCart { items = [ LineItem { sku = Sku("rice"), quantity = 2, unitPrice = 550, weightGrams = 120 } ],
-            total = 1100, highValue = false }, ReducedRate)
+            total = 1100, highValue = false }, ReducedRate, Date("2026-07-25"))
         -> TaxBreakdown { net = 1100, rate = TaxRate(0.08m), rateLabel = "8%", tax = 88, gross = 1188 }
     | "half a yen is dropped, not rounded up" :
         (PricedCart { items = [ LineItem { sku = Sku("pen"), quantity = 1, unitPrice = 105, weightGrams = 120 } ],
-            total = 105, highValue = false }, StandardRate)
+            total = 105, highValue = false }, StandardRate, Date("2026-07-25"))
         -> TaxBreakdown { net = 105, rate = TaxRate(0.10m), rateLabel = "10%", tax = 10, gross = 115 }
+    | "the day before the last revision is still the old rate" :
+        (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 3, unitPrice = 105, weightGrams = 120 } ],
+            total = 315, highValue = false }, StandardRate, Date("2019-09-30"))
+        -> TaxBreakdown { net = 315, rate = TaxRate(0.08m), rateLabel = "8%", tax = 25, gross = 340 }
+    | "the day itself is the new rate" :
+        (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 3, unitPrice = 105, weightGrams = 120 } ],
+            total = 315, highValue = false }, StandardRate, Date("2019-10-01"))
+        -> TaxBreakdown { net = 315, rate = TaxRate(0.10m), rateLabel = "10%", tax = 31, gross = 346 }
+    | "there was no reduced rate before it was introduced" :
+        (PricedCart { items = [ LineItem { sku = Sku("rice"), quantity = 2, unitPrice = 550, weightGrams = 120 } ],
+            total = 1100, highValue = false }, ReducedRate, Date("2019-09-30"))
+        -> NoRateYet { on = Date("2019-09-30") }
+
+// === allocateTax: the total shared out over the lines, adding up to itself ===
+// A qualified invoice states the tax per rate, and the figure it states is the one `taxFor` produced:
+// rounded once, over the whole net. A breakdown by line is a reading of that figure and not a second
+// computation of it, so the lines have to sum to it — which is what the invariant says, and what
+// makes an allocation that lost a yen a value nobody can build.
+//
+// Where the lost yen goes is a decision and not an accident. It goes on the last line, which is what
+// a Japanese invoice does, and saying so is the whole difference between this and `taxRoundedPerLine`
+// at the foot of the file: the same flooring, one line's worth of remainder put back.
+data LineTax =
+    { sku: Sku
+    , net: Int
+    , tax: Int
+    }
+
+data TaxAllocation =
+    { lines: List<LineTax>
+    , taxTotal: Int
+    }
+    invariant sum(map(.tax, lines)) == taxTotal
+
+behavior allocateTax : (order: PricedCart, category: TaxCategory, on: Date)
+    -> TaxAllocation | NoRateYet
+    depends on scheduleOf
+    constructs TaxAllocation, LineTax, NoRateYet
+
+let lineNet (line: LineItem): Int = line.quantity * line.unitPrice
+
+let lineFloor (line: LineItem, rate: TaxRate): Int =
+    Decimal.toInt(Decimal.fromInt(lineNet(line)) * rate.value, FLOOR)
+
+let allocation (order: PricedCart, rate: TaxRate, taxTotal: Int): List<LineTax> = {
+    let floors = map(line -> lineFloor(line, rate), order.items)
+    let remainder = taxTotal - sum(floors)
+    let last = length(order.items) - 1
+    indexedMap((i, line) -> LineTax { sku = line.sku, net = lineNet(line),
+        tax = lineFloor(line, rate) + (if i == last then remainder else 0) }, order.items)
+}
+
+let allocateTax (order, category, on, scheduleOf) =
+    match rateAsOf(scheduleOf(category), on) with
+        | Some rate -> {
+            let taxTotal = Decimal.toInt(Decimal.fromInt(order.total) * rate.value, FLOOR)
+            TaxAllocation { lines = allocation(order, rate, taxTotal), taxTotal = taxTotal }
+          }
+        | None -> NoRateYet { on = on }
+
+// Three lines of 105 yen at ten per cent: the total is 31, the floors are 10 each, and the yen the
+// flooring lost lands on the third line. The lines add up to 31, which is the invariant, and it is
+// the figure the invoice states.
+example allocateTax
+    | "the yen the flooring lost lands on the last line" :
+        (PricedCart { items =
+            [ LineItem { sku = Sku("pen"), quantity = 1, unitPrice = 105, weightGrams = 120 }
+            , LineItem { sku = Sku("note"), quantity = 1, unitPrice = 105, weightGrams = 120 }
+            , LineItem { sku = Sku("clip"), quantity = 1, unitPrice = 105, weightGrams = 120 } ],
+            total = 315, highValue = false }, StandardRate, Date("2026-07-25"))
+        -> TaxAllocation { lines =
+            [ LineTax { sku = Sku("pen"), net = 105, tax = 10 }
+            , LineTax { sku = Sku("note"), net = 105, tax = 10 }
+            , LineTax { sku = Sku("clip"), net = 105, tax = 11 } ], taxTotal = 31 }
+    | "a single line takes the whole total" :
+        (PricedCart { items = [ LineItem { sku = Sku("rice"), quantity = 2, unitPrice = 550, weightGrams = 120 } ],
+            total = 1100, highValue = false }, ReducedRate, Date("2026-07-25"))
+        -> TaxAllocation { lines = [ LineTax { sku = Sku("rice"), net = 1100, tax = 88 } ],
+                           taxTotal = 88 }
+    | "no rate on the day means no allocation either" :
+        (PricedCart { items = [ LineItem { sku = Sku("rice"), quantity = 2, unitPrice = 550, weightGrams = 120 } ],
+            total = 1100, highValue = false }, ReducedRate, Date("2019-09-30"))
+        -> NoRateYet { on = Date("2019-09-30") }
 
 // === What rounding per line would give instead ===
 // The same cart with the tax taken line by line and summed. An invoice may not be taxed this way,
@@ -107,25 +265,24 @@ example taxFor
 // quietly shifting every total by a yen.
 data PerLineTax = { tax: Int }
 
-behavior taxRoundedPerLine : (order: PricedCart, category: TaxCategory) -> PerLineTax
-    depends on rateOf
-    constructs PerLineTax
+behavior taxRoundedPerLine : (order: PricedCart, category: TaxCategory, on: Date)
+    -> PerLineTax | NoRateYet
+    depends on scheduleOf
+    constructs PerLineTax, NoRateYet
 
-let lineTax (line: LineItem, rate: TaxRate): Int =
-    Decimal.toInt(Decimal.fromInt(line.quantity * line.unitPrice) * rate.value, FLOOR)
-
-let taxRoundedPerLine (order, category, rateOf) = {
-    let rate = rateOf(category)
-    PerLineTax { tax = sum(map(line -> lineTax(line, rate), order.items)) }
-}
+let taxRoundedPerLine (order, category, on, scheduleOf) =
+    match rateAsOf(scheduleOf(category), on) with
+        | Some rate -> PerLineTax { tax = sum(map(line -> lineFloor(line, rate), order.items)) }
+        | None -> NoRateYet { on = on }
 
 // Three lines of 105 yen: taken together 315 × 0.10 = 31.5 → 31 yen; line by line 10.5 → 10 yen
-// three times, which is 30.
+// three times, which is 30. `allocateTax` above floors the same three lines and puts the missing yen
+// back, which is why its lines come to 31 and these come to 30.
 example taxRoundedPerLine
     | "rounding per line loses a yen" :
         (PricedCart { items =
             [ LineItem { sku = Sku("pen"), quantity = 1, unitPrice = 105, weightGrams = 120 }
             , LineItem { sku = Sku("note"), quantity = 1, unitPrice = 105, weightGrams = 120 }
             , LineItem { sku = Sku("clip"), quantity = 1, unitPrice = 105, weightGrams = 120 } ],
-            total = 315, highValue = false }, StandardRate)
+            total = 315, highValue = false }, StandardRate, Date("2026-07-25"))
         -> PerLineTax { tax = 30 }

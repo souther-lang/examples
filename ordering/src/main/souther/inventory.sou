@@ -4,9 +4,20 @@
 // against cart's PricedCart. It is kept separate from ordering so ordering stays the order lifecycle
 // and this stays the warehouse.
 //
-// Six behaviors — allocate, inspectBarcode, verifyShipment, putAway, baySlots, checkExpiry — each
-// checked at compile time by its `example`s. No hand-written Java drives them; the smoke test only
-// runs one to prove the generated types decode / apply / encode.
+// Eight behaviors — allocate, stockFrom, inspectBarcode, toEaches, toCases, putAway, baySlots,
+// checkExpiry — each checked at compile time by its `example`s. No hand-written Java drives them; the
+// smoke test only runs one to prove the generated types decode / apply / encode.
+//
+// Two things this module says that the rest of the project does not:
+//   - **A quantity carries its unit.** `Eaches` and `Cases` both wrap `Int` and neither compares with
+//     the other — `e >= c` is a type error, not a bug found in production — so the only way from one
+//     to the other is `toEaches` / `toCases`, which name the pack size that makes the conversion true.
+//     cart counts units without naming the unit, which is where `.value` shows up and is the honest
+//     place for it: the unit starts at this module's edge.
+//   - **The stock on hand is derived, not held.** `stockFrom` folds the receipts, issues and counts
+//     into a snapshot, so the figure and the movements cannot disagree. `account` keeps a balance and
+//     writes to it; this keeps the movements and reads the balance off them, and the two are the
+//     choice a system makes rather than a rule.
 //
 // example.shipping imports this module, so it now writes an `exposing` list: a module with none
 // exports nothing to import. Writing one turned out to settle three things at once, which is worth
@@ -20,11 +31,28 @@
 module example.inventory exposing (
     Allocated,
     Location,
+    Eaches,
+    Cases,
+    PackSize,
     StockLine,
     StockSnapshot
 )
-import List ( all, indexBy )
+import List ( all, indexBy, fold, map )
 import example.cart ( Sku, LineItem, PricedCart )
+
+// === A quantity and the unit it is counted in ===
+// Both wrap `Int` and neither is the other. A warehouse that says "twelve" has said nothing until it
+// says twelve of what, and the two readings of the same shelf are exactly the confusion this pair
+// makes unwritable: a comparison of an `Eaches` with a `Cases` does not compile.
+data Eaches = Int
+    invariant value >= 0
+data Cases = Int
+    invariant value >= 0
+
+// How many units are in one case. At least one, so the division that turns eaches into cases is safe
+// wherever a `PackSize` reaches it.
+data PackSize = Int
+    invariant value >= 1
 
 // === allocate: read stock, index it, check every line is covered, then commit ===
 // Reads the current on-hand for the order's skus, turns the rows into a lookup map, folds "every line
@@ -39,7 +67,7 @@ import example.cart ( Sku, LineItem, PricedCart )
 // fold-derived, so it is allowed in an invariant).
 data StockLine =
     { sku: Sku
-    , quantity: Int
+    , quantity: Eaches
     }
 data StockSnapshot = { rows: List<StockLine> }
     invariant List.allUniqueBy(.sku, rows)
@@ -61,14 +89,16 @@ behavior commitStock : (order: PricedCart) -> Allocated
 // which is exactly what the uniqueness invariant above rules out.
 let onHand (snap: StockSnapshot): Map<Sku, StockLine> = indexBy(.sku, snap.rows)
 
-// The on-hand for a sku: the indexed row's quantity, or 0 for a sku the snapshot never mentioned (out
-// of stock). Map.get returns an Option, so map then withDefault read through it.
-let currentStock (stock: Map<Sku, StockLine>, sku: Sku): Int =
-    Map.get(sku, stock) |> Option.map(.quantity) |> Option.withDefault(0)
+// The on-hand for a sku: the indexed row's quantity, or none for a sku the snapshot never mentioned
+// (out of stock). Map.get returns an Option, so map then withDefault read through it.
+let currentStock (stock: Map<Sku, StockLine>, sku: Sku): Eaches =
+    Map.get(sku, stock) |> Option.map(.quantity) |> Option.withDefault(Eaches(0))
 
-// One line is allocatable when its on-hand is at least the ordered quantity.
+// One line is allocatable when its on-hand is at least the ordered quantity. cart's `LineItem` counts
+// in bare `Int`s — it prices what somebody put in a basket and has no warehouse to name a unit for —
+// so this is where the number becomes an `Eaches` and where the two are compared as one type.
 let allocatable (i: LineItem, stock: Map<Sku, StockLine>): Bool =
-    currentStock(stock, i.sku) >= i.quantity
+    currentStock(stock, i.sku) >= Eaches(i.quantity)
 
 // read -> index -> aggregate check -> write. The lambda passed to all captures the local index.
 behavior allocate : (order: PricedCart) -> Allocated | InsufficientStock
@@ -83,8 +113,8 @@ let allocate (order, readStock, commitStock) = {
 
 fake readStock
     | (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 } ], total = 300, highValue = false })
-        -> StockSnapshot { rows = [ StockLine { sku = Sku("apple"), quantity = 5 } ] }
-    | _ -> StockSnapshot { rows = [ StockLine { sku = Sku("apple"), quantity = 1 } ] }
+        -> StockSnapshot { rows = [ StockLine { sku = Sku("apple"), quantity = Eaches(5) } ] }
+    | _ -> StockSnapshot { rows = [ StockLine { sku = Sku("apple"), quantity = Eaches(1) } ] }
 
 fake commitStock
     | _ -> Allocated { total = 300 }
@@ -96,6 +126,76 @@ example allocate
     | "one line over stock fails the whole allocation" :
         (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 999, unitPrice = 150, weightGrams = 120 } ], total = 149850, highValue = true })
             -> InsufficientStock
+
+// === stockFrom: the snapshot is a reading of the movements, not a figure kept beside them ===
+// `readStock` above asks the outside world what the on-hand is, which is what a system with a
+// quantity column does. This says where that column comes from: goods received add, goods issued
+// subtract, and a stocktake replaces — a count is somebody standing at the shelf, so it overrides the
+// running figure rather than adjusting it by a difference nobody measured.
+//
+// The two behaviors sit side by side on purpose. `account` keeps a balance and writes to it;
+// `billing` folds a ledger to age it. Which of the two a context does is a decision, and this module
+// is the one place both are written down, so the difference can be read rather than argued about.
+//
+// The fold runs in bare `Int` because the running figure is allowed to be negative on the way — an
+// issue booked before its receipt does that, and it is a real thing that happens to a real warehouse.
+// Only the result is an `Eaches`, built after the guard that discharges its invariant, so a snapshot
+// that would state a negative on-hand is a reported outcome instead of an abort.
+data Receipt = { sku: Sku, quantity: Eaches }
+data Issue = { sku: Sku, quantity: Eaches }
+data Stocktake = { sku: Sku, counted: Eaches }
+data Movement = Receipt | Issue | Stocktake
+
+data WentNegative = { sku: Sku, shortBy: Int }
+
+behavior stockFrom : (movements: List<Movement>) -> StockSnapshot | WentNegative
+    constructs StockSnapshot, StockLine, Eaches, WentNegative
+
+let applyMovement (running: Map<Sku, Int>, movement: Movement): Map<Sku, Int> =
+    match movement with
+        | Receipt { sku, quantity } ->
+            Map.upsert(sku, quantity.value, on -> on + quantity.value, running)
+        | Issue { sku, quantity } ->
+            Map.upsert(sku, 0 - quantity.value, on -> on - quantity.value, running)
+        | Stocktake { sku, counted } -> Map.insert(sku, counted.value, running)
+
+// The first sku that ended below zero, in sku order so the answer does not depend on which way the
+// map happens to be walked.
+let firstNegative (running: Map<Sku, Int>): Option<Sku> =
+    List.sort(Map.keys(Map.filter((sku, on) -> on < 0, running))) |> List.get(0)
+
+let stockFrom (movements) = {
+    let running: Map<Sku, Int> = fold((acc, m) -> applyMovement(acc, m), Map.empty, movements)
+    match firstNegative(running) with
+        | Some sku ->
+            WentNegative { sku = sku, shortBy = Map.get(sku, running) |> Option.withDefault(0) }
+        | None -> StockSnapshot { rows = List.sortBy(.sku, rowsOf(running)) }
+}
+
+// `Map.fold` hands the key and the value separately, so the row is built without a tuple to take
+// apart and without a stand-in for a key that cannot be absent. The rows come out in sku order
+// because a snapshot is read by people, and a map states no order of its own.
+let rowsOf (running: Map<Sku, Int>): List<StockLine> =
+    Map.fold((acc, sku, on) -> acc ++ [ StockLine { sku = sku, quantity = Eaches(on) } ], [], running)
+
+example stockFrom
+    | "receipts add and issues take away" :
+        ([ Receipt { sku = Sku("apple"), quantity = Eaches(10) }
+         , Issue { sku = Sku("apple"), quantity = Eaches(4) }
+         , Receipt { sku = Sku("rice"), quantity = Eaches(2) } ])
+            -> StockSnapshot { rows = [ StockLine { sku = Sku("apple"), quantity = Eaches(6) }
+                                      , StockLine { sku = Sku("rice"), quantity = Eaches(2) } ] }
+    | "a stocktake replaces the running figure rather than adjusting it" :
+        ([ Receipt { sku = Sku("apple"), quantity = Eaches(10) }
+         , Stocktake { sku = Sku("apple"), counted = Eaches(7) }
+         , Issue { sku = Sku("apple"), quantity = Eaches(1) } ])
+            -> StockSnapshot { rows = [ StockLine { sku = Sku("apple"), quantity = Eaches(6) } ] }
+    | "issuing more than ever arrived is reported, not aborted on" :
+        ([ Receipt { sku = Sku("apple"), quantity = Eaches(1) }
+         , Issue { sku = Sku("apple"), quantity = Eaches(3) } ])
+            -> WentNegative { sku = Sku("apple"), shortBy = 0 - 2 }
+    | "no movements is an empty snapshot, not an absent one" :
+        ([]) -> StockSnapshot { rows = [] }
 
 // === inspectBarcode: barcode read verification ===
 // On receiving, a barcode (JAN / EAN-13) is scanned. If the check digit does not match, the read is
@@ -131,27 +231,39 @@ example inspectBarcode
     | "a wrong check digit is a scan error" :
         (Barcode("9784873115659")) -> ScanError
 
-// === verifyShipment: only whole cases ship ===
-// The warehouse ships in case units (units per case). A requested quantity that is not a multiple of
-// the case size is rejected as a remainder; a multiple returns the case count. The remainder is
-// Int.modBy, the case count is integer division. "case size is at least 1" is an invariant.
-data CaseSize = Int
-    invariant value >= 1
-data Shippable = { cases: Int }
-data PartialCase = { leftover: Int }
+// === toEaches / toCases: the two directions between the units, and the pack size that joins them ===
+// The warehouse ships in whole cases. Going down is always exact — a case is a pack size of units, so
+// multiplying can only land on a unit count. Going up is not: a quantity that is not a multiple of the
+// pack size leaves a remainder, and that remainder is `Eaches` and never `Cases`, which is what makes
+// the failure case readable without asking what its number counts.
+//
+// There is no third direction. Adding an `Eaches` to a `Cases` is a type error, so a total over a
+// mixed pick list has to convert first, and the pack size it converted at is named at that call.
+behavior toEaches : (cases: Cases, pack: PackSize) -> Eaches
+    constructs Eaches
 
-behavior verifyShipment : (caseSize: CaseSize, requested: Int) -> Shippable | PartialCase
-    constructs Shippable, PartialCase
+let toEaches (cases, pack) = Eaches(cases.value * pack.value)
 
-let verifyShipment (caseSize, requested) = {
-    let leftover = Int.modBy(caseSize.value, requested)
-    guard leftover == 0 else PartialCase { leftover = leftover }
-    Shippable { cases = requested / caseSize.value }
+data Shippable = { cases: Cases }
+data PartialCase = { leftover: Eaches }
+
+behavior toCases : (eaches: Eaches, pack: PackSize) -> Shippable | PartialCase
+    constructs Shippable, PartialCase, Cases, Eaches
+
+let toCases (eaches, pack) = {
+    let leftover = Int.modBy(pack.value, eaches.value)
+    guard leftover == 0 else PartialCase { leftover = Eaches(leftover) }
+    Shippable { cases = Cases(eaches.value / pack.value) }
 }
 
-example verifyShipment
-    | "a multiple of the case size ships (returns the case count)" : (CaseSize(12), 24) -> Shippable { cases = 2 }
-    | "a remainder is rejected" : (CaseSize(12), 25) -> PartialCase { leftover = 1 }
+example toEaches
+    | "two cases of twelve is twenty-four units" : (Cases(2), PackSize(12)) -> Eaches(24)
+
+example toCases
+    | "a multiple of the pack size ships as whole cases" :
+        (Eaches(24), PackSize(12)) -> Shippable { cases = Cases(2) }
+    | "a remainder is left over, and it is counted in units" :
+        (Eaches(25), PackSize(12)) -> PartialCase { leftover = Eaches(1) }
 
 // === putAway: a passed item onto a shelf location ===
 // A shelf location (aisle-bay-level, e.g. A-03-12). An inspected-and-passed barcode is put away to the

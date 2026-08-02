@@ -1,6 +1,6 @@
 package app.ordering.web;
 
-import app.ordering.JooqRateOf;
+import app.ordering.JooqScheduleOf;
 import app.ordering.JooqRecordOrder;
 import app.ordering.JooqReserveStock;
 
@@ -11,7 +11,8 @@ import example.ordering.Place;
 import example.ordering.RecordOrder;
 import example.ordering.ReserveStock;
 import example.shipping.PlanPicks;
-import example.tax.RateOf;
+import example.tax.AllocateTax;
+import example.tax.ScheduleOf;
 import example.tax.TaxFor;
 
 
@@ -91,15 +92,24 @@ public class OrderingConfig {
         return PlanPicks.of();
     }
 
-    /** tax's injected rate lookup: the one NUMERIC column in the schema (example.tax). */
+    /** tax's injected rate lookup: every rate ever in force for a category, out of the one NUMERIC
+     *  column in the schema and the DATE beside it (example.tax). */
     @Bean
-    public RateOf rateOf(DSLContext dsl) {
-        return new JooqRateOf(dsl);
+    public ScheduleOf scheduleOf(DSLContext dsl) {
+        return new JooqScheduleOf(dsl);
     }
 
-    /** The tax calculation, bound to that lookup. Pure arithmetic once the rate is in hand. */
+    /** The tax calculation, bound to that lookup. Pure arithmetic once the schedule is in hand — the
+     *  date of the transaction picks the rate out of it, inside the domain. */
     @Bean
-    public TaxFor taxFor(RateOf rateOf) {
-        return TaxFor.bind(rateOf);
+    public TaxFor taxFor(ScheduleOf scheduleOf) {
+        return TaxFor.bind(scheduleOf);
+    }
+
+    /** The same schedule read a second way: the tax total shared out over the lines, adding up to
+     *  what {@code taxFor} states. */
+    @Bean
+    public AllocateTax allocateTax(ScheduleOf scheduleOf) {
+        return AllocateTax.bind(scheduleOf);
     }
 }

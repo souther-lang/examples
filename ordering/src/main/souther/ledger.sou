@@ -1,0 +1,239 @@
+// Where order-to-cash lands in the books. Every other module in this project answers a question about
+// one document; this one states the rule that holds across all of them, and states it as a type.
+//
+// **Debits equal credits, and a `JournalEntry` that does not is not a value.** The rule is the whole
+// of double entry, and writing it as an invariant is what makes it unavoidable: not a check somebody
+// runs at month end, not a report that goes red, but a condition on construction. A behavior that
+// built a lopsided entry aborts where it built it, naming the entry, rather than posting it and
+// leaving the trial balance to be argued about a week later.
+//
+// It is expressible because an invariant may name a total helper: `sideTotal` is a `List.fold`, folds
+// are total, and the two totals are compared. The same latitude `socialinsurance`'s grade table uses
+// to state that its rows ascend. What an invariant may *not* do is construct, which is why the totals
+// are compared as bare `Decimal`s and never as `Amount`s.
+//
+// The other thing on show is that a correction posts rather than edits. `postCreditNote` produces an
+// entry with the same accounts and the sides swapped — billing already refuses to rewrite an invoice,
+// and this is what that decision looks like once it reaches the ledger: the original entry stays, the
+// reversal is its own row, and the net is what a fold over both says it is.
+//
+// Three import hops (ledger -> billing -> tax/ordering -> cart) and a second diamond under billing.
+// `Amount` is billing's, imported rather than declared, and named in `constructs` here — a type
+// another module exposes may be built through the same checked entry its own module takes.
+module example.ledger exposing (
+    AccountCode,
+    Side,
+    Debit,
+    Credit,
+    Posting,
+    JournalEntry,
+    ChartOfAccounts,
+    AccountBalance,
+    DebitBalance,
+    CreditBalance,
+    TrialBalance,
+    postInvoice,
+    postCreditNote,
+    balanceOff
+)
+import example.billing ( Amount, InvoiceNo, Invoice, CreditNote, CreditReason, PriceError )
+import example.ordering ( OrderId )
+import List ( fold, filter, map, length, concatMap, sortBy )
+
+// A four-digit account number, the shape a Japanese chart of accounts uses. It arrives from the
+// accounting system, so its format is all this module says about it.
+data AccountCode = String
+    invariant String.matches("[0-9]{4}", value)
+
+// Which side of the account a line falls on. Not a sign on the amount: `Amount` cannot be negative,
+// and a negative debit and a credit are the same thing said two ways, which is one way too many.
+data Side = Debit | Credit
+
+data Posting =
+    { account: AccountCode
+    , side: Side
+    , amount: Amount
+    }
+
+// The totals of one side. A helper an invariant names may not construct, so this answers a bare
+// `Decimal` and never an `Amount` — the accumulator drops to the base type and stays there.
+let sideTotal (wanted: Side, postings: List<Posting>): Decimal =
+    fold((acc, p) -> if p.side == wanted then Decimal.add(acc, p.amount.value) else acc,
+         0.0m, postings)
+
+// One entry in the journal, and the rule that makes it one. Two lines at least, because an entry with
+// one line has nothing to balance against; and the two sides equal, because that is double entry.
+data JournalEntry =
+    { date: Date
+    , source: InvoiceNo
+    , postings: List<Posting>
+    }
+    invariant twoSided = length(postings) >= 2
+    invariant balanced =
+        Decimal.compare(sideTotal(Debit, postings), sideTotal(Credit, postings)) == 0
+
+// Which account each figure goes to. Handed in rather than written here: the numbers are the finance
+// team's and are configured per company, while which *kind* of account each figure belongs to is the
+// domain's and is written in the behaviors below.
+data ChartOfAccounts =
+    { receivable: AccountCode
+    , revenue: AccountCode
+    , taxPayable: AccountCode
+    , salesReturns: AccountCode
+    }
+
+// === postInvoice: an invoice becomes three lines ===
+// The customer owes the gross, the company earned the net, and the tax is somebody else's money the
+// company is holding — which is why it is a liability and not revenue. Three lines, and they balance
+// because the invoice's own arithmetic says gross is net plus tax.
+behavior postInvoice : (invoice: Invoice, chart: ChartOfAccounts) -> JournalEntry
+    constructs JournalEntry, Posting, Debit, Credit
+
+let postInvoice (invoice, chart) =
+    JournalEntry { date = invoice.issuedOn, source = invoice.no, postings =
+        [ Posting { account = chart.receivable, side = Debit, amount = invoice.gross }
+        , Posting { account = chart.revenue, side = Credit, amount = invoice.net }
+        , Posting { account = chart.taxPayable, side = Credit, amount = invoice.tax } ] }
+
+// === postCreditNote: the same three accounts, the sides swapped ===
+// A credit note is not an adjustment to the entry above; it is an entry of its own, dated the day it
+// was issued. The revenue side goes to sales returns rather than back onto revenue, because what was
+// sold and what came back are two figures a reader wants separately — netting them off loses the
+// return rate, which is a number somebody is measured on.
+behavior postCreditNote : (note: CreditNote, chart: ChartOfAccounts) -> JournalEntry
+    constructs JournalEntry, Posting, Debit, Credit
+
+let postCreditNote (note, chart) =
+    JournalEntry { date = note.issuedOn, source = note.against, postings =
+        [ Posting { account = chart.salesReturns, side = Debit, amount = note.net }
+        , Posting { account = chart.taxPayable, side = Debit, amount = note.tax }
+        , Posting { account = chart.receivable, side = Credit, amount = note.gross } ] }
+
+// === balanceOff: the same law again, one level up ===
+// Every entry balances, so the whole journal balances — and stating that as an invariant on the report
+// means a fold that lost a figure is caught where the report is built rather than where somebody
+// reads it. An account whose debits and credits cancel is left off: a trial balance lists what has a
+// balance, and a row of zero is noise.
+data DebitBalance = { account: AccountCode, amount: Amount }
+data CreditBalance = { account: AccountCode, amount: Amount }
+data AccountBalance = DebitBalance | CreditBalance
+
+data TrialBalance =
+    { balances: List<AccountBalance>
+    , debitTotal: Amount
+    , creditTotal: Amount
+    }
+    invariant balanced = Decimal.compare(debitTotal.value, creditTotal.value) == 0
+
+behavior balanceOff : (entries: List<JournalEntry>) -> TrialBalance
+    constructs TrialBalance, DebitBalance, CreditBalance, Amount
+
+// The running figure per account, debits positive and credits negative. It is a `Decimal` and not an
+// `Amount` for the length of the fold, because an account is on one side or the other only once every
+// entry has been counted — which side it lands on is the answer, not an assumption to carry.
+let running (entries: List<JournalEntry>): Map<AccountCode, Decimal> = {
+    let postings = concatMap(.postings, entries)
+    let start: Map<AccountCode, Decimal> = Map.empty
+    fold((acc, p) -> Map.upsert(p.account, signed(p), on -> Decimal.add(on, signed(p)), acc),
+         start, postings)
+}
+
+let signed (p: Posting): Decimal =
+    match p.side with
+        | Debit -> p.amount.value
+        | Credit -> 0.0m - p.amount.value
+
+let balanceOf (account: AccountCode, net: Decimal): AccountBalance =
+    if Decimal.compare(net, 0.0m) > 0
+        then DebitBalance { account = account, amount = Amount(net) }
+        else CreditBalance { account = account, amount = Amount(0.0m - net) }
+
+let amountOf (b: AccountBalance): Decimal =
+    match b with
+        | DebitBalance { amount } -> amount.value
+        | CreditBalance { amount } -> amount.value
+
+let isDebit (b: AccountBalance): Bool =
+    match b with
+        | DebitBalance -> true
+        | CreditBalance -> false
+
+let totalOf (balances: List<AccountBalance>): Decimal =
+    fold((acc, b) -> Decimal.add(acc, amountOf(b)), 0.0m, balances)
+
+let balanceOff (entries) = {
+    let net = running(entries)
+    let standing = filter(a -> Bool.not(Decimal.compare(lookup(net, a), 0.0m) == 0),
+                          List.sort(Map.keys(net)))
+    let balances = map(a -> balanceOf(a, lookup(net, a)), standing)
+    TrialBalance { balances = balances,
+                   debitTotal = Amount(totalOf(filter(b -> isDebit(b), balances))),
+                   creditTotal = Amount(totalOf(filter(b -> Bool.not(isDebit(b)), balances))) }
+}
+
+// The key came out of the map's own key list, so the absent branch is a case the model has ruled out.
+let lookup (net: Map<AccountCode, Decimal>, account: AccountCode): Decimal =
+    Map.get(account, net) |> Option.withDefault(0.0m)
+
+let chart = ChartOfAccounts { receivable = AccountCode("1310"), revenue = AccountCode("4100"),
+                              taxPayable = AccountCode("2170"), salesReturns = AccountCode("4300") }
+
+let julyInvoice = Invoice { no = InvoiceNo("INV-2026-000042"), orderId = OrderId("ORD-1"),
+                            issuedOn = Date("2026-07-25"), dueOn = Date("2026-08-24"),
+                            net = Amount(315.0m), tax = Amount(31.0m), gross = Amount(346.0m) }
+
+let priceErrorNote = CreditNote { no = InvoiceNo("INV-2026-000043"),
+                                  against = InvoiceNo("INV-2026-000042"),
+                                  issuedOn = Date("2026-08-03"), reason = PriceError,
+                                  net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) }
+
+example postInvoice
+    | "the customer owes the gross, the company earned the net, the tax is owed on" :
+        (julyInvoice, chart)
+            -> JournalEntry { date = Date("2026-07-25"), source = InvoiceNo("INV-2026-000042"),
+                postings =
+                    [ Posting { account = AccountCode("1310"), side = Debit, amount = Amount(346.0m) }
+                    , Posting { account = AccountCode("4100"), side = Credit, amount = Amount(315.0m) }
+                    , Posting { account = AccountCode("2170"), side = Credit, amount = Amount(31.0m) } ] }
+
+example postCreditNote
+    | "the correction is its own entry, dated when it was issued, with the sides swapped" :
+        (priceErrorNote, chart)
+            -> JournalEntry { date = Date("2026-08-03"), source = InvoiceNo("INV-2026-000042"),
+                postings =
+                    [ Posting { account = AccountCode("4300"), side = Debit, amount = Amount(100.0m) }
+                    , Posting { account = AccountCode("2170"), side = Debit, amount = Amount(10.0m) }
+                    , Posting { account = AccountCode("1310"), side = Credit, amount = Amount(110.0m) } ] }
+
+example balanceOff
+    | "one invoice, and the two sides agree" :
+        ([ JournalEntry { date = Date("2026-07-25"), source = InvoiceNo("INV-2026-000042"),
+            postings =
+                [ Posting { account = AccountCode("1310"), side = Debit, amount = Amount(346.0m) }
+                , Posting { account = AccountCode("4100"), side = Credit, amount = Amount(315.0m) }
+                , Posting { account = AccountCode("2170"), side = Credit, amount = Amount(31.0m) } ] } ])
+            -> TrialBalance { balances =
+                [ DebitBalance { account = AccountCode("1310"), amount = Amount(346.0m) }
+                , CreditBalance { account = AccountCode("2170"), amount = Amount(31.0m) }
+                , CreditBalance { account = AccountCode("4100"), amount = Amount(315.0m) } ],
+                debitTotal = Amount(346.0m), creditTotal = Amount(346.0m) }
+    | "the credit note nets the receivable down and puts the return on its own account" :
+        ([ JournalEntry { date = Date("2026-07-25"), source = InvoiceNo("INV-2026-000042"),
+            postings =
+                [ Posting { account = AccountCode("1310"), side = Debit, amount = Amount(346.0m) }
+                , Posting { account = AccountCode("4100"), side = Credit, amount = Amount(315.0m) }
+                , Posting { account = AccountCode("2170"), side = Credit, amount = Amount(31.0m) } ] }
+         , JournalEntry { date = Date("2026-08-03"), source = InvoiceNo("INV-2026-000042"),
+            postings =
+                [ Posting { account = AccountCode("4300"), side = Debit, amount = Amount(100.0m) }
+                , Posting { account = AccountCode("2170"), side = Debit, amount = Amount(10.0m) }
+                , Posting { account = AccountCode("1310"), side = Credit, amount = Amount(110.0m) } ] } ])
+            -> TrialBalance { balances =
+                [ DebitBalance { account = AccountCode("1310"), amount = Amount(236.0m) }
+                , CreditBalance { account = AccountCode("2170"), amount = Amount(21.0m) }
+                , CreditBalance { account = AccountCode("4100"), amount = Amount(315.0m) }
+                , DebitBalance { account = AccountCode("4300"), amount = Amount(100.0m) } ],
+                debitTotal = Amount(336.0m), creditTotal = Amount(336.0m) }
+    | "an empty journal balances at nothing" :
+        ([]) -> TrialBalance { balances = [], debitTotal = Amount(0.0m),
+                               creditTotal = Amount(0.0m) }
