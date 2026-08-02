@@ -111,31 +111,40 @@ here.
 
 A finding the compiler fixes is removed from here rather than kept as a resolved entry — the model is
 rewritten to the form it was asking for, and the commit that does it tells the story; git history is
-where that log belongs, not this file.
+where that log belongs, not this file. One that has been filed against `souther-lang/souther` carries
+the issue on its heading, with the repro that was compiled standalone before filing.
 
-**F24 — a range fact does not survive a `let`.** `Eaches(Int.modBy(pack.value, e.value))` written
-inline is accepted; bound to a name first and constructed from afterwards it warns that the guards do
-not establish the invariant. Same expression, same facts, different answer depending on whether it
-went through a name — so the readable form is the one that gets told off. `inventory`'s `toCases` and
-`billing`'s credit-note arithmetic both sit on this.
+**F24 (souther#290) — the same expression is silent written inline and warned about once it is
+named.** `Eaches(Int.modBy(pack.value, e.value))` written inline draws nothing; bound to `leftover`
+first and constructed from afterwards it warns that the guards do not establish the invariant. The
+silence is not a proof — the inline form stays just as silent against an invariant the expression can
+actually violate, because a call is a term the checker cannot express and a non-expressible invariant
+says nothing. Naming the call is what makes it expressible, and then it is unproven. A `let` over
+ordinary arithmetic does carry what is known about it; a `let` over a stdlib call carries nothing.
+`inventory`'s `toCases` and `billing`'s credit-note arithmetic both sit on this, and both keep the
+name.
 
-**F25 — a warning has no position.** An error is reported with `file:line:col`, the offending line and
-a caret. A warning is one line of prose with `here` in it and nothing to say where `here` is. Three
-warnings on one module could not be attributed to their constructions without bisecting the file.
-
-**F26 — warnings do not reach the Maven build.** The same constructions warn through `souther compile`
-and are silent through `SoutherProcessor`, so the build every example is actually verified by shows
-none of them. A warning nobody sees is not a warning.
+**F25 (souther#285) — a warning is not reported the way a diagnostic is.** An error is reported with
+`file:line:col`, the offending line and a caret. A warning is one line of prose with `here` in it and
+nothing to say where `here` is, and neither `--lang` nor `--format json` reaches it. Through
+`SoutherProcessor` it is not reported at all, so the build every example is actually verified by shows
+none of them: `ordering` warns seven times through `souther compile` and passes `mvn verify` in
+silence. Three warnings on one module could not be attributed to their constructions without bisecting
+the file.
 
 **F27 — silence is not proof.** `Eaches(Map.fold((acc, k, v) -> acc + v, 0, m))` can be negative and
 draws no warning, while `Eaches(line.quantity)` — equally unproven, and readable — draws one. The
 checker speaks up about what it can see and says nothing about what it cannot, which reads to a
-newcomer as the opposite.
+newcomer as the opposite. F24 is the same rule met from the other side: there the two answers land on
+the two spellings of one expression.
 
-**F28 — the hint the warning gives does not work.** "Reify the relation into an input's invariant so
-it is assumed here" is what it says; putting `invariant all(i -> i.quantity >= 1, items)` on the input
-and constructing from `i.quantity` inside a `map` warns exactly as before. A quantified invariant over
-a list is not carried into the element binding.
+**F28 (souther#288) — neither remedy the warning names is available on a list.** "Guard it, or reify
+the relation into an input's invariant so it is assumed here" is what it says. Putting `invariant
+List.all(i -> i.quantity >= 1, items)` on the input and constructing from `i.quantity` inside a `map`
+warns exactly as before, and so does guarding the same `List.all` immediately before the map. A
+relation quantified over a list is not assumed of the element the closure is handed — where the same
+relation stated on the element's own type is, which is the workaround `cart`'s bare `Int` quantity
+denies `inventory`.
 
 **F29 — a `Set` crosses the boundary in no particular order.** The derived encoder emits whatever
 order the set happens to hold, so a response body is not byte-stable and a test cannot assert on the

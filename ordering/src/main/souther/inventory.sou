@@ -28,7 +28,7 @@
 //   - what an injected Java implementation may construct — an injected behavior's `constructs` needs
 //     its types exposed or E1305 rejects it, which is why StockSnapshot is listed even though no
 //     other module imports it. readStock builds it from the outside.
-// Findings recorded here: F24 at toCases, F27 and F28 at allocatable.
+// Findings recorded here: F24 (souther#290) at toCases, F27 and F28 (souther#288) at allocatable.
 module example.inventory exposing (
     Allocated,
     Location,
@@ -98,10 +98,11 @@ let currentStock (stock: Map<Sku, StockLine>, sku: Sku): Eaches =
 // One line is allocatable when its on-hand is at least the ordered quantity. cart's `LineItem` counts
 // in bare `Int`s — it prices what somebody put in a basket and has no warehouse to name a unit for —
 // so this is where the number becomes an `Eaches` and where the two are compared as one type.
-// F27 and F28 are here. `cart`'s quantity is a bare Int, so this construction is genuinely unproven
-// and warns — while an opaque fold of the same kind of number does not warn at all, and putting the
-// relation on `PricedCart`'s own invariant, which is what the warning's hint says to do, changes
-// nothing.
+// F27 and F28 (souther#288) are here. `cart`'s quantity is a bare Int, so this construction is
+// genuinely unproven and warns — while an opaque fold of the same kind of number does not warn at
+// all, and neither remedy the warning names reaches it: putting the relation on `PricedCart`'s own
+// invariant changes nothing, and neither does guarding the same `List.all` before the map. Stating it
+// on the element's own type is what would work, and `LineItem` belongs to cart.
 let allocatable (i: LineItem, stock: Map<Sku, StockLine>): Bool =
     currentStock(stock, i.sku) >= Eaches(i.quantity)
 
@@ -255,8 +256,10 @@ data PartialCase = { leftover: Eaches }
 behavior toCases : (eaches: Eaches, pack: PackSize) -> Shippable | PartialCase
     constructs Shippable, PartialCase, Cases, Eaches
 
-// F24 is here: `Eaches(Int.modBy(…))` written inline is accepted, and the same expression bound to
-// `leftover` first is not. The name is worth more than the silence, so the name stays.
+// F24 (souther#290) is here: `Eaches(Int.modBy(…))` written inline draws nothing, and the same
+// expression bound to `leftover` first warns. The silence on the inline form is not a proof — a call
+// is a term the checker cannot express — so the name costs a warning and hides nothing. The guard and
+// the failure case both read `leftover`, so the name stays.
 let toCases (eaches, pack) = {
     let leftover = Int.modBy(pack.value, eaches.value)
     guard leftover == 0 else PartialCase { leftover = Eaches(leftover) }
