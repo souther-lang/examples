@@ -28,6 +28,7 @@
 //   - what an injected Java implementation may construct — an injected behavior's `constructs` needs
 //     its types exposed or E1305 rejects it, which is why StockSnapshot is listed even though no
 //     other module imports it. readStock builds it from the outside.
+// Findings recorded here: F24 at toCases, F27 and F28 at allocatable.
 module example.inventory exposing (
     Allocated,
     Location,
@@ -97,6 +98,10 @@ let currentStock (stock: Map<Sku, StockLine>, sku: Sku): Eaches =
 // One line is allocatable when its on-hand is at least the ordered quantity. cart's `LineItem` counts
 // in bare `Int`s — it prices what somebody put in a basket and has no warehouse to name a unit for —
 // so this is where the number becomes an `Eaches` and where the two are compared as one type.
+// F27 and F28 are here. `cart`'s quantity is a bare Int, so this construction is genuinely unproven
+// and warns — while an opaque fold of the same kind of number does not warn at all, and putting the
+// relation on `PricedCart`'s own invariant, which is what the warning's hint says to do, changes
+// nothing.
 let allocatable (i: LineItem, stock: Map<Sku, StockLine>): Bool =
     currentStock(stock, i.sku) >= Eaches(i.quantity)
 
@@ -250,6 +255,8 @@ data PartialCase = { leftover: Eaches }
 behavior toCases : (eaches: Eaches, pack: PackSize) -> Shippable | PartialCase
     constructs Shippable, PartialCase, Cases, Eaches
 
+// F24 is here: `Eaches(Int.modBy(…))` written inline is accepted, and the same expression bound to
+// `leftover` first is not. The name is worth more than the silence, so the name stays.
 let toCases (eaches, pack) = {
     let leftover = Int.modBy(pack.value, eaches.value)
     guard leftover == 0 else PartialCase { leftover = Eaches(leftover) }

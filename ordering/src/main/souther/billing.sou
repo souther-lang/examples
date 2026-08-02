@@ -30,6 +30,7 @@
 //     a payment landed.
 //   - `List.foldr` walking the ledger from the end, and `List.filter` / `List.map` reading it two
 //     more ways.
+// Findings recorded here: F24 again, at issueCreditNote.
 module example.billing exposing (
     InvoiceNo,
     Amount,
@@ -406,6 +407,8 @@ behavior issueCreditNote : (invoice: Invoice, existing: List<CreditNote>, reason
 let creditedSoFar (existing: List<CreditNote>): Decimal =
     fold((acc, n) -> Decimal.add(acc, n.gross.value), 0.0m, existing)
 
+// F24 again: `credited` and `asked` are sums of non-negative Amounts and cannot be negative, and
+// naming them is what the arithmetic needs to be readable at all — so this warns, and stays.
 let issueCreditNote (invoice, existing, reason, net, tax, issuedOn, sequence) = {
     let credited = creditedSoFar(existing)
     let remaining = Decimal.subtract(invoice.gross.value, credited)
