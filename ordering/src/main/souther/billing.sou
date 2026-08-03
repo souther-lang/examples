@@ -225,8 +225,6 @@ let issueInvoice (recorded, breakdown, terms, issuedOn, sequence, calendar) =
 
 // The calendar the examples below are written against: the eleventh of August is a holiday, the weeks
 // are counted from a Sunday in January, and a due date that lands on a closed day is pulled forward.
-// A body writes `[ … ]` for a list, so the `holidays` set is built with `Set.fromList`; a fixture is
-// decoded instead, and a Set decodes from an array, so the rows below write the brackets directly.
 let payerCalendar = PaymentCalendar { holidays = Set.fromList([ Date("2026-08-11") ]),
                                       aSunday = Date("2026-01-04"),
                                       rule = PrecedingBusinessDay }
@@ -240,10 +238,11 @@ example unpayableDueDates
     | "every due date in an ordinary July lands on a day money moves" :
         (payerCalendar, Date("2026-07-01"), 30) -> [ ]
     | "a sixteen-day closure is longer than the walk looks, and the stuck date names itself" :
-        (PaymentCalendar { holidays = [ Date("2026-08-03"), Date("2026-08-04"), Date("2026-08-05")
-                                      , Date("2026-08-06"), Date("2026-08-07"), Date("2026-08-10")
-                                      , Date("2026-08-11"), Date("2026-08-12"), Date("2026-08-13")
-                                      , Date("2026-08-14") ]
+        (PaymentCalendar { holidays = Set.fromList(
+                                        [ Date("2026-08-03"), Date("2026-08-04"), Date("2026-08-05")
+                                        , Date("2026-08-06"), Date("2026-08-07"), Date("2026-08-10")
+                                        , Date("2026-08-11"), Date("2026-08-12"), Date("2026-08-13")
+                                        , Date("2026-08-14") ])
                          , aSunday = Date("2026-01-04")
                          , rule = SameDay }
         , Date("2026-08-05"), 0)

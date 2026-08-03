@@ -243,7 +243,7 @@ example weightedForecast
             { owner = UserId("u-001")
             , currency = CurrencyCode("JPY")
             , periods = [ FiscalPeriod("FY26-Q3") ]
-            , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(100000.00m)) ]
+            , byPeriod = Map.fromList([ (FiscalPeriod("FY26-Q3"), Amount(100000.00m)) ])
             , total = Amount(100000.00m)
             , dealCount = 1
             }
@@ -257,7 +257,7 @@ example weightedForecast
             { owner = UserId("u-001")
             , currency = CurrencyCode("JPY")
             , periods = [ FiscalPeriod("FY26-Q3") ]
-            , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ]
+            , byPeriod = Map.fromList([ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ])
             , total = Amount(150000.00m)
             , dealCount = 2
             }
@@ -271,7 +271,7 @@ example weightedForecast
             { owner = UserId("u-001")
             , currency = CurrencyCode("JPY")
             , periods = [ FiscalPeriod("FY26-Q3") ]
-            , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(115000.00m)) ]
+            , byPeriod = Map.fromList([ (FiscalPeriod("FY26-Q3"), Amount(115000.00m)) ])
             , total = Amount(115000.00m)
             , dealCount = 2
             }
@@ -288,7 +288,7 @@ example weightedForecast
             { owner = UserId("u-001")
             , currency = CurrencyCode("JPY")
             , periods = [ ]
-            , byPeriod = [ ]
+            , byPeriod = Map.empty
             , total = Amount(0.0m)
             , dealCount = 0
             }
@@ -511,8 +511,6 @@ let repForecast = Forecast
     , dealCount = 1
     }
 
-// A fixture is decoded rather than evaluated, so the rows below write an empty map as `[ ]` where the
-// behavior's own body seeds its fold with `Map.empty`.
 let acmeOrg = RoleNode { role = RoleName("Manager"), holder = UserId("u-mgr"), reports =
     [ RoleNode { role = RoleName("Rep"), holder = UserId("u-rep"), reports = [] }
     , RoleNode { role = RoleName("Rep"), holder = UserId("u-rep2"), reports = [] } ] }
@@ -522,13 +520,13 @@ example rollupThrough
         (acmeOrg,
             [ (UserId("u-rep"), repForecast)
             , (UserId("u-rep2"), Forecast { ...repForecast, owner = UserId("u-rep2")
-                                          , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(50000.00m)) ]
+                                          , byPeriod = Map.fromList([ (FiscalPeriod("FY26-Q3"), Amount(50000.00m)) ])
                                           , total = Amount(50000.00m) }) ])
         -> Forecast
             { owner = UserId("u-mgr")
             , currency = CurrencyCode("JPY")
             , periods = [ FiscalPeriod("FY26-Q3") ]
-            , byPeriod = [ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ]
+            , byPeriod = Map.fromList([ (FiscalPeriod("FY26-Q3"), Amount(150000.00m)) ])
             , total = Amount(150000.00m)
             , dealCount = 2
             }
