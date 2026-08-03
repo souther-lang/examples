@@ -156,13 +156,10 @@ data GradeTable = List<GradeRow>
 // carried as a bare Int rather than as a Yen, because a helper an invariant names may not construct data
 // and the fold's seed would be a construction — the accumulator drops to the base type at the seed and
 // nowhere else.
-let stillAscending (carried: (Int, Bool), r: GradeRow): Bool = {
+let ascendingStep (carried: (Int, Bool), r: GradeRow): (Int, Bool) = {
     let (previous, ascending) = carried
-    ascending && previous <= r.lowerBound.value
+    (r.lowerBound.value, ascending && previous <= r.lowerBound.value)
 }
-
-let ascendingStep (carried: (Int, Bool), r: GradeRow): (Int, Bool) =
-    (r.lowerBound.value, stillAscending(carried, r))
 
 let ascendingFrom (rows: List<GradeRow>): Bool = {
     let (last, ascending) = List.fold((carried, r) -> ascendingStep(carried, r), (0, true), rows)

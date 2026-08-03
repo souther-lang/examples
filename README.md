@@ -123,27 +123,11 @@ ordinary arithmetic does carry what is known about it; a `let` over a stdlib cal
 `inventory`'s `toCases` and `billing`'s credit-note arithmetic both sit on this, and both keep the
 name.
 
-**F25 (souther#285) — a warning is not reported the way a diagnostic is.** An error is reported with
-`file:line:col`, the offending line and a caret. A warning is one line of prose with `here` in it and
-nothing to say where `here` is, and neither `--lang` nor `--format json` reaches it. Through
-`SoutherProcessor` it is not reported at all, so the build every example is actually verified by shows
-none of them: `ordering` warns seven times through `souther compile` and passes `mvn verify` in
-silence. Three warnings on one module could not be attributed to their constructions without bisecting
-the file.
-
 **F27 — silence is not proof.** `Eaches(Map.fold((acc, k, v) -> acc + v, 0, m))` can be negative and
 draws no warning, while `Eaches(line.quantity)` — equally unproven, and readable — draws one. The
 checker speaks up about what it can see and says nothing about what it cannot, which reads to a
 newcomer as the opposite. F24 is the same rule met from the other side: there the two answers land on
 the two spellings of one expression.
-
-**F28 (souther#288) — neither remedy the warning names is available on a list.** "Guard it, or reify
-the relation into an input's invariant so it is assumed here" is what it says. Putting `invariant
-List.all(i -> i.quantity >= 1, items)` on the input and constructing from `i.quantity` inside a `map`
-warns exactly as before, and so does guarding the same `List.all` immediately before the map. A
-relation quantified over a list is not assumed of the element the closure is handed — where the same
-relation stated on the element's own type is, which is the workaround `cart`'s bare `Int` quantity
-denies `inventory`.
 
 **F29 — a `Set` crosses the boundary in no particular order.** The derived encoder emits whatever
 order the set happens to hold, so a response body is not byte-stable and a test cannot assert on the
@@ -154,28 +138,13 @@ to be forced into everywhere.
 never mention it again, and nothing says so — through the CLI or through the build. `shipping` carried
 one for a while and no reader of the file could have told.
 
-**F31 — the same brackets mean two things.** In a body `[ … ]` is a `List`, so a `Set` field is filled
-with `Set.fromList`; in an `example` fixture the same characters decode to whatever the field is, so
-`holidays = [ Date(…) ]` is a `Set` there and does not compile in `billing`'s `payerCalendar` two
-screens above it. The asymmetry runs the other way too: `Map.empty` may be named in a body and not in
-a fixture, so `forecasting`'s empty-team row is written `[ ]` while the behavior beside it writes
-`Map.empty`. A reader who learns the rule in one place has learned the wrong rule for the other, and
-neither spelling is wrong often enough to be memorable.
-
-**F32 — a result line that begins with `(` is read as applying the line above.** A block's last
-expression is its value, and layout does not end a statement, so
-
-```
-let ascendingStep (carried: (Date, Bool), c: RateChange): (Date, Bool) = {
-    let (previous, sofar) = carried
-    (c.from, sofar && previous <= c.from)
-}
-```
-
-parses as `carried (c.from, …)` and reports a block with no result. Returning a tuple from a block is
-the natural way to write a fold's step, and `socialinsurance` already splits its ascendingness check
-into two helpers to avoid this; `tax`'s rate schedule now does the same, for the same reason and
-without either file being able to say so in one line.
+**F31 (souther#298) — a collection is written one way in a body and another in a fixture.** In a body
+`[ … ]` is a `List` and only a `List`, so a `Set` field is filled with `Set.fromList` — `billing`'s
+`payerCalendar` does. A fixture is decoded instead, so the same brackets there are whatever the field
+holds, which is how the row two screens below writes the same holiday. The asymmetry runs the other
+way too, and further: a fixture takes `Map.fromList([ ])` and refuses `Map.empty`, which a body names
+freely. Of two spellings of one empty map, the call is allowed in both places and the value in only
+one.
 
 ## Running
 

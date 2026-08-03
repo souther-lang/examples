@@ -82,19 +82,14 @@ data RateSchedule = List<RateChange>
     invariant stated = length(value) >= 1
     invariant ascendingFrom = ascending(value)
 
-// The accumulator carries the previous change's date beside the verdict. The seed is a date before
-// any tax existed, because the fold needs a lower bound and not a real day; carrying an `Option`
-// instead would mean constructing one, and a helper an invariant names may not construct.
-let stillAscending (carried: (Date, Bool), c: RateChange): Bool = {
+// The accumulator carries the previous change's date beside the verdict, so the step answers with
+// both: this change's date becomes the previous one, and the verdict carries on. The seed is a date
+// before any tax existed, because the fold needs a lower bound and not a real day; carrying an
+// `Option` instead would mean constructing one, and a helper an invariant names may not construct.
+let ascendingStep (carried: (Date, Bool), c: RateChange): (Date, Bool) = {
     let (previous, sofar) = carried
-    sofar && previous <= c.from
+    (c.from, sofar && previous <= c.from)
 }
-
-// The step itself: this change's date becomes the previous one, and the verdict carries on. Written
-// as its own helper whose whole body is the tuple, which is how `socialinsurance`'s grade table
-// writes the same check.
-let ascendingStep (carried: (Date, Bool), c: RateChange): (Date, Bool) =
-    (c.from, stillAscending(carried, c))
 
 let ascending (changes: List<RateChange>): Bool = {
     let (last, sofar) = List.fold((carried, c) -> ascendingStep(carried, c),
