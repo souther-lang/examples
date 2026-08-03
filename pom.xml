@@ -26,6 +26,7 @@
         <module>member</module>
         <module>ordering</module>
         <module>whodunit</module>
+        <module>shippingfee</module>
     </modules>
 
     <properties>
