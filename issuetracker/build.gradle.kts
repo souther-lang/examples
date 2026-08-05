@@ -12,7 +12,7 @@ plugins {
 }
 
 val southerVersion = "0.1.0-SNAPSHOT"
-val raohVersion = "0.6.0"
+val raohVersion = "0.7.0"
 
 java {
     // Built with the JDK the rest of the examples are built with, but everything this build emits

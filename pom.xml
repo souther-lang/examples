@@ -33,7 +33,7 @@
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <souther.version>0.1.0-SNAPSHOT</souther.version>
-        <raoh.version>0.6.0</raoh.version>
+        <raoh.version>0.7.0</raoh.version>
         <junit.version>5.11.3</junit.version>
         <spring.version>7.0.8</spring.version>
         <jooq.version>3.20.11</jooq.version>

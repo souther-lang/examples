@@ -89,7 +89,7 @@ import example.dependents (
 // which is why it has a type of its own rather than being another TotalIncome that happens to be
 // smaller.
 data TaxableIncome = Int
-    invariant value >= 0 && Int.modBy(1000, value) == 0
+    invariant value >= 0 && Int.floorMod(value, 1000) == 0
 
 data DeclarationStatus = DeclarationFiled | NoDeclarationFiled
 
@@ -286,7 +286,7 @@ behavior yearEndTaxFor : (taxable: TaxableIncome, housingLoanCredit: Yen) -> Yen
 
 let yearEndTaxFor (taxable, housingLoanCredit) = {
     let afterCredit = Int.max(0, incomeTaxOn(taxable).value - housingLoanCredit.value)
-    Yen(Decimal.toInt(Decimal.fromInt(afterCredit) * 1.021m, DOWN) / 100 * 100)
+    Yen(Decimal.toInt(DOWN, Decimal.fromInt(afterCredit) * 1.021m) / 100 * 100)
 }
 
 // === The difference ===

@@ -119,12 +119,11 @@ behavior upliftPay : (rate: HourlyRate, tally: MonthlyTally, rates: UpliftRates)
     constructs Yen
 
 let upliftPay (rate, tally, rates) =
-    Yen(Decimal.toInt(
+    Yen(Decimal.toInt(HALF_UP,
         rate.value * ( tally.overtimeWithinSixty.value * (1.0m + rates.overtime)
                      + tally.overtimeBeyondSixty.value * (1.0m + rates.extendedOvertime)
                      + tally.lateNight.value * rates.lateNight
-                     + tally.statutoryHoliday.value * (1.0m + rates.statutoryHoliday) ),
-        HALF_UP))
+                     + tally.statutoryHoliday.value * (1.0m + rates.statutoryHoliday) )))
 
 // === Deductions ===
 

@@ -11,7 +11,7 @@
 // The features on show:
 //   - **A due date lands on a day somebody works.** Payment terms give a nominal date, and money does
 //     not move on a Sunday or a bank holiday, so the nominal date is walked to a business day in the
-//     direction the trading agreement states. The walk is `List.range` and `List.find` over ten
+//     direction the trading agreement states. The walk is `List.rangeInclusive` and `List.find` over ten
 //     candidate days rather than a recursive step, because a recursion on a computed date is not
 //     structural and would need `partial` — a finite search says the same thing and stays total.
 //     Which day of the week a date falls on is worked out here from a Sunday the calendar carries,
@@ -28,7 +28,7 @@
 //     as it checks one that arrived from outside.
 //   - `Date.addDays` / `Date.addMonths` for payment terms, `Date.daysBetween` for how early or late
 //     a payment landed.
-//   - `List.foldr` walking the ledger from the end, and `List.filter` / `List.map` reading it two
+//   - `List.foldRight` walking the ledger from the end, and `List.filter` / `List.map` reading it two
 //     more ways.
 module example.billing exposing (
     InvoiceNo,
@@ -63,7 +63,7 @@ module example.billing exposing (
 import example.cart ( Sku, LineItem )
 import example.ordering ( OrderId, RecordedOrder )
 import example.tax ( TaxRate, TaxBreakdown, TaxCategory )
-import List ( map, filter, fold, foldr, length, find, range, concatMap )
+import List ( map, filter, fold, foldRight, length, find, rangeInclusive, flatMap )
 
 // An invoice number: series, year, and a sequence within the year. It is assembled by this module
 // (see `issueInvoice`) and also arrives from outside on a payment, so the format is an invariant
@@ -106,7 +106,7 @@ data PaymentCalendar =
     }
 
 let weekday (calendar: PaymentCalendar, d: Date): Int =
-    Int.modBy(7, Date.daysBetween(calendar.aSunday, d))
+    Int.floorMod(Date.daysBetween(calendar.aSunday, d), 7)
 
 let isBusinessDay (calendar: PaymentCalendar, d: Date): Bool =
     weekday(calendar, d) >= 1 && weekday(calendar, d) <= 5
@@ -117,7 +117,7 @@ let isBusinessDay (calendar: PaymentCalendar, d: Date): Bool =
 // recursively until a business day turns up recurses on a computed date, which is not structural, and
 // `partial` would be a promise this makes without needing to.
 let firstBusinessDay (calendar: PaymentCalendar, from: Date, step: Int): Date =
-    range(0, 10)
+    rangeInclusive(0, 10)
         |> map(n -> Date.addDays(n * step, from))
         |> find(d -> isBusinessDay(calendar, d))
         |> Option.withDefault(from)
@@ -151,9 +151,9 @@ behavior unpayableDueDates : (calendar: PaymentCalendar, from: Date, days: Int)
 // Every nominal date from `from` through `days` more, under each walking rule. The calendar's own
 // rule is not read: the sweep asks about both directions whatever the trading agreement says.
 let unpayableDueDates (calendar, from, days) =
-    concatMap(rule -> {
+    flatMap(rule -> {
         let ruled = PaymentCalendar { ...calendar, rule = rule }
-        range(0, days)
+        rangeInclusive(0, days)
             |> map(n -> {
                 let nominal = Date.addDays(n, from)
                 DueDateViolation { rule = rule, nominal = nominal,
@@ -349,9 +349,10 @@ example settle
 
 // === ageing: the ledger read by how late it is ===
 // Collections works from buckets, so the report states each one rather than a list the caller has to
-// bucket again. `List.filter` selects each band and `List.foldr` sums it from the end — the direction
+// bucket again. `List.filter` selects each band and `List.foldRight` sums it from the end — the direction
 // matters to nobody here, which is the point of showing it: the same sum is available walking either
-// way, and `foldr` is what a caller reaches for when it does matter.
+// way, and `foldRight` is what a caller reaches for when it does matter. Its step takes the element
+// first and the accumulator second, the opposite of `fold`'s.
 //
 // `Decimal.max` and `Decimal.clamp` keep the readouts inside what they claim: the worst overdue is at
 // least zero even when everything is current, and the exposure figure is capped at the credit limit
@@ -370,7 +371,7 @@ behavior ageing : (invoices: List<Invoice>, today: Date, creditLimit: Amount) ->
 let daysLate (invoice: Invoice, today: Date): Int = Date.daysBetween(invoice.dueOn, today)
 
 let totalOf (invoices: List<Invoice>): Decimal =
-    foldr((acc, i) -> Decimal.add(acc, i.gross.value), 0.0m, invoices)
+    foldRight((i, acc) -> Decimal.add(acc, i.gross.value), 0.0m, invoices)
 
 let inBand (invoices: List<Invoice>, today: Date, from: Int, to: Int): List<Invoice> =
     filter(i -> daysLate(i, today) >= from && daysLate(i, today) < to, invoices)

@@ -62,7 +62,7 @@ data PackSize = Int
 
 // One snapshot row: a sku and its current on-hand. sku is unique per snapshot — two rows for the same
 // sku would collapse into one entry when the rows are indexed — so the uniqueness is an invariant.
-// List.allUniqueBy(.sku, rows) says "pull the sku out and there are no duplicates" in one line (a
+// List.allDistinctBy(.sku, rows) says "pull the sku out and there are no duplicates" in one line (a
 // property of the List, not of any single row; internally map -> distinct -> length compare, all
 // fold-derived, so it is allowed in an invariant).
 data StockLine =
@@ -70,7 +70,7 @@ data StockLine =
     , quantity: Eaches
     }
 data StockSnapshot = { rows: List<StockLine> }
-    invariant List.allUniqueBy(.sku, rows)
+    invariant List.allDistinctBy(.sku, rows)
 
 data Allocated = { total: Int }
 
@@ -154,15 +154,15 @@ behavior stockFrom : (movements: List<Movement>) -> StockSnapshot | WentNegative
 let applyMovement (running: Map<Sku, Int>, movement: Movement): Map<Sku, Int> =
     match movement with
         | Receipt { sku, quantity } ->
-            Map.upsert(sku, quantity.value, on -> on + quantity.value, running)
+            Map.updateOrInsert(sku, quantity.value, on -> on + quantity.value, running)
         | Issue { sku, quantity } ->
-            Map.upsert(sku, 0 - quantity.value, on -> on - quantity.value, running)
+            Map.updateOrInsert(sku, 0 - quantity.value, on -> on - quantity.value, running)
         | Stocktake { sku, counted } -> Map.insert(sku, counted.value, running)
 
 // The first sku that ended below zero, in sku order so the answer does not depend on which way the
 // map happens to be walked.
 let firstNegative (running: Map<Sku, Int>): Option<Sku> =
-    List.sort(Map.keys(Map.filter((sku, on) -> on < 0, running))) |> List.get(0)
+    List.sort(Map.keys(Map.filterEntries((sku, on) -> on < 0, running))) |> List.get(0)
 
 let stockFrom (movements) = {
     let running: Map<Sku, Int> = fold((acc, m) -> applyMovement(acc, m), Map.empty, movements)
@@ -212,16 +212,18 @@ behavior inspectBarcode : (barcode: Barcode) -> InspectionPassed | ScanError
 
 // EAN-13 weighted sum: positions 1,3,5.. (even index from 0) weigh 1, positions 2,4,6.. (odd index)
 // weigh 3. A valid code has its 13-digit weighted sum divisible by 10 (the 13th check digit is chosen
-// so). Digits are numeric by the invariant, so digitValue = toCode(ch) - toCode("0") is total.
-// List.indexedMap (map with the index) weights each digit; List.sum adds them.
-let digitValue (ch: String) = String.toCode(ch) - String.toCode("0")
+// so). String.codePoints reads the digits as numbers, and a digit's value is its code point less that
+// of "0" — read from the string itself rather than written as 48, so the arithmetic says where the
+// number comes from. Digits are numeric by the invariant, so the subtraction is total.
+// List.mapIndexed (map with the index) weights each digit; List.sum adds them.
+let zeroCode = List.get(0, String.codePoints("0")) |> Option.withDefault(0)
 let weightedSum (code: String) =
-    String.toChars(code)
-        |> List.indexedMap((i, ch) -> (if Int.modBy(2, i) == 0 then 1 else 3) * digitValue(ch))
+    String.codePoints(code)
+        |> List.mapIndexed((i, c) -> (if Int.floorMod(i, 2) == 0 then 1 else 3) * (c - zeroCode))
         |> List.sum
 
 let inspectBarcode (barcode) = {
-    guard Int.modBy(10, weightedSum(barcode.value)) == 0 else ScanError
+    guard Int.floorMod(weightedSum(barcode.value), 10) == 0 else ScanError
     InspectionPassed { code = barcode }
 }
 
@@ -253,7 +255,7 @@ behavior toCases : (eaches: Eaches, pack: PackSize) -> Shippable | PartialCase
 // The remainder is named because both lines below read it: the guard asks whether there is one, and
 // the failure case reports it.
 let toCases (eaches, pack) = {
-    let leftover = Int.modBy(pack.value, eaches.value)
+    let leftover = Int.floorMod(eaches.value, pack.value)
     guard leftover == 0 else PartialCase { leftover = Eaches(leftover) }
     Shippable { cases = Cases(eaches.value / pack.value) }
 }
@@ -292,7 +294,7 @@ example putAway
 // bay 3 is "03" — and the Location invariant then checks the result exactly as it checks one that came
 // in over the wire, so a bay past 99 is rejected at construction rather than shipped as a bad code.
 //
-// The levels of a bay are 1 to 4 by the racking, not a list anyone stores, so `List.range` produces
+// The levels of a bay are 1 to 4 by the racking, not a list anyone stores, so `List.rangeInclusive` produces
 // them. That is what it is for: a walk over positions with nothing to walk over yet.
 data BayCandidates = { locations: List<Location> }
 
@@ -306,7 +308,7 @@ let locationOf (aisle: String, bay: Int, level: Int): Location =
 
 let baySlots (aisle, bay) =
     BayCandidates { locations =
-        List.range(1, 4) |> List.map(level -> locationOf(aisle, bay, level)) }
+        List.rangeInclusive(1, 4) |> List.map(level -> locationOf(aisle, bay, level)) }
 
 example baySlots
     | "a bay offers its four levels, each a well-formed code" :

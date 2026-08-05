@@ -147,7 +147,7 @@ data Yen = Int
 // above it (通貨の単位及び貨幣の発行等に関する法律第3条), which is exactly HALF_DOWN. Both insurance
 // modules deduct at a rate and both settle it this way, so the rule is written once here rather than
 // twice under two comments that could drift apart.
-let toYen (amount: Decimal): Yen = Yen(Decimal.toInt(amount, HALF_DOWN))
+let toYen (amount: Decimal): Yen = Yen(Decimal.toInt(HALF_DOWN, amount))
 
 // Why: the social-insurance and employment-insurance coverage tests are both stated in hours per week,
 // and a week of scheduled hours is a contract term rather than a measurement. 37.5 is an ordinary
@@ -378,14 +378,15 @@ let separate (employee, on, reason) = {
 // (行政手続における特定の個人を識別するための番号の利用等に関する法律施行令第8条). A transposed pair of
 // digits is what it catches, which is the mistake a person typing a number from a card actually makes.
 
-let digitAt (ch: String): Int = String.toCode(ch) - String.toCode("0")
+// A digit's value is its code point less that of "0", read from the string rather than written as 48.
+let zeroCode = List.get(0, String.codePoints("0")) |> Option.withDefault(0)
 
-let weightedSum (body: List<String>): Int =
-    List.sum(List.indexedMap((i, ch) -> (if i <= 5 then i + 2 else i - 4) * digitAt(ch),
+let weightedSum (body: List<Int>): Int =
+    List.sum(List.mapIndexed((i, c) -> (if i <= 5 then i + 2 else i - 4) * (c - zeroCode),
                              List.reverse(body)))
 
-let expectedCheckDigit (body: List<String>): Int = {
-    let r = Int.modBy(11, weightedSum(body))
+let expectedCheckDigit (body: List<Int>): Int = {
+    let r = Int.floorMod(weightedSum(body), 11)
     if r <= 1 then 0 else 11 - r
 }
 
@@ -393,13 +394,13 @@ behavior verifyMyNumber : (number: MyNumber) -> MyNumberVerified | CheckDigitMis
     constructs MyNumberVerified, CheckDigitMismatch
 
 let verifyMyNumber (number) = {
-    let chars = String.toChars(number.value)
-    let body = List.take(11, chars)
-    let check = List.drop(11, chars)
+    let codes = String.codePoints(number.value)
+    let body = List.take(11, codes)
+    let check = List.drop(11, codes)
     // The invariant proved there are twelve digits, so the twelfth is there; List.get still answers an
     // optional, and the absent arm is the one the type has already ruled out.
     match List.get(0, check) with
-        | Some c -> if digitAt(c) == expectedCheckDigit(body)
+        | Some c -> if (c - zeroCode) == expectedCheckDigit(body)
                     then MyNumberVerified
                     else CheckDigitMismatch
         | None   -> CheckDigitMismatch
