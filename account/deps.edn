@@ -12,7 +12,7 @@
 
         ;; the Souther runtime + Raoh codecs the generated classes call into
         org.souther-lang/souther-runtime {:mvn/version "0.1.0-SNAPSHOT"}
-        net.unit8.raoh/raoh {:mvn/version "0.6.0"}
+        net.unit8.raoh/raoh {:mvn/version "0.7.0"}
         tools.jackson.core/jackson-databind {:mvn/version "3.1.5"}
 
         io.pedestal/pedestal.service {:mvn/version "0.6.4"}
