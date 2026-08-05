@@ -149,7 +149,7 @@ data GradeRow =
 // work `List.all` would do for a per-element rule.
 data GradeTable = List<GradeRow>
     invariant fiftyRows = List.length(value) == 50
-    invariant distinctGrades = List.allUniqueBy(.grade, value)
+    invariant distinctGrades = List.allDistinctBy(.grade, value)
     invariant ascendingBounds = ascendingFrom(value)
 
 // The step of that fold, carrying the previous row's lower bound beside the verdict so far. The bound is
@@ -539,7 +539,7 @@ data Premium =
 // 5,450 and 5,451. Naming the mode at the call is what makes that visible instead of accidental.
 let shareOf (standard: Yen, rate: ContributionRate): PremiumShare = {
     let exact = Decimal.fromInt(standard.value) * rate.value
-    let total = Decimal.toInt(exact, DOWN)
+    let total = Decimal.toInt(DOWN, exact)
     let employee = toYen(exact * 0.5m)
     PremiumShare { employee = employee, employer = Yen(total - employee.value) }
 }

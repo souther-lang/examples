@@ -6,10 +6,10 @@
 //
 // What is on show:
 //   - Enumeration without recursion. The candidate worlds are a fixed product — three rooms handed
-//     to three suspects, one of the three named as culprit — written as nested `concatMap` over
+//     to three suspects, one of the three named as culprit — written as nested `flatMap` over
 //     the same list of rooms. Nothing recurses, so nothing needs `partial` and the totality
 //     checker has nothing to ask: the search is bounded because the domain is.
-//   - `allUniqueBy` as a constraint. "Everyone stood in a different room" is one call that keeps a
+//   - `allDistinctBy` as a constraint. "Everyone stood in a different room" is one call that keeps a
 //     seating injective, not a hand-rolled pairwise comparison.
 //   - A verdict as a sum. Solving ends three ways — one story stands, none does, several do — and
 //     the sum names all three, so an over- or under-constrained puzzle is an answer, not an error.
@@ -17,7 +17,7 @@
 //     solves each one to check the book, every build.
 module example.whodunit
 
-import List ( concatMap, map, filter, all, any, allUniqueBy, length, get )
+import List ( flatMap, map, filter, all, any, allDistinctBy, length, get )
 
 // === The world of the puzzle ===
 
@@ -40,25 +40,25 @@ data Clue = CulpritWasIn | SawIn | WasElsewhere | Innocent
 
 // === Every world there could be ===
 // Three nested passes over the same three rooms give every way to seat the suspects, and
-// `allUniqueBy` keeps the seatings where no room is shared: 27 candidates come in, 6 go out.
+// `allDistinctBy` keeps the seatings where no room is shared: 27 candidates come in, 6 go out.
 // Naming each suspect as culprit multiplies that to the 18 worlds a clue ever gets to judge.
 
 let rooms    = [ Kitchen, Study, Garden ]
 let suspects = [ Alice, Bob, Carol ]
 
 let seatings =
-    concatMap(a ->
-        concatMap(b ->
+    flatMap(a ->
+        flatMap(b ->
             map(c -> [ Placement { who = Alice, room = a }
                      , Placement { who = Bob,   room = b }
                      , Placement { who = Carol, room = c } ],
                 rooms),
             rooms),
         rooms)
-        |> filter(seating -> allUniqueBy(p -> p.room, seating))
+        |> filter(seating -> allDistinctBy(p -> p.room, seating))
 
 let worlds =
-    concatMap(culprit -> map(seating -> World { culprit = culprit, places = seating }, seatings),
+    flatMap(culprit -> map(seating -> World { culprit = culprit, places = seating }, seatings),
               suspects)
 
 // === Judging a world against the clues ===

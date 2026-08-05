@@ -24,7 +24,7 @@
 //   - `Decimal` arithmetic where the rounding is named at the call: a weighted figure is
 //     probability × amount ÷ 100, and dividing by a hundred is the one division in the project that has to be
 //     a division, so the scale and the mode are stated where it happens.
-//   - `Map.upsert` where the absent branch inserts this deal's own figure and the present branch adds to it.
+//   - `Map.updateOrInsert` where the absent branch inserts this deal's own figure and the present branch adds to it.
 //     Writing a zero into the absent branch and adding afterwards would lose the first deal of every period.
 //   - `Map.union`'s absence as the lesson. A manager's forecast is the reps' forecasts summed, and union is
 //     left-biased and never merges values, so it would silently drop a rep's number on a shared period.
@@ -106,10 +106,10 @@ let fiscalYearOf (d: Date, fyStart: Int): Int =
     if Date.month(d) >= fyStart then Date.year(d) else Date.year(d) - 1
 
 let quarterOf (d: Date, fyStart: Int): Int =
-    Int.modBy(12, Date.month(d) - fyStart + 12) / 3 + 1
+    Int.floorMod(Date.month(d) - fyStart + 12, 12) / 3 + 1
 
 let periodLabel (d: Date, fyStart: Int): String =
-    "FY" ++ String.padLeft(2, "0", String.fromInt(Int.modBy(100, fiscalYearOf(d, fyStart))))
+    "FY" ++ String.padLeft(2, "0", String.fromInt(Int.floorMod(fiscalYearOf(d, fyStart), 100)))
          ++ "-Q" ++ String.fromInt(quarterOf(d, fyStart))
 
 behavior periodOf : (closeDate: Date, fiscalYearStartMonth: Int) -> FiscalPeriod | InvalidFiscalYearStart
@@ -191,8 +191,8 @@ let yenRates = RateTable { base = CurrencyCode("JPY"), rates = Map.fromList(
 // This is where the module used to sum a dollar deal and a yen deal without noticing.
 let weightedOf (opp: OpenOpportunity, rates: RateTable): Option<Decimal> =
     Map.get(opp.currency, rates.rates)
-        |> Option.map(rate -> Decimal.round(Decimal.fromInt(probabilityFor(opp).value)
-                                            * opp.amount.value * rate.value * 0.01m, 2, HALF_UP))
+        |> Option.map(rate -> Decimal.round(2, HALF_UP, Decimal.fromInt(probabilityFor(opp).value)
+                                            * opp.amount.value * rate.value * 0.01m))
 
 let weightedEntry (opp: OpenOpportunity, fyStart: Int, rates: RateTable)
         : Option<(FiscalPeriod, Decimal)> =
@@ -202,7 +202,7 @@ let weightedEntry (opp: OpenOpportunity, fyStart: Int, rates: RateTable)
 let addEntry (acc: Map<FiscalPeriod, Decimal>, entry: (FiscalPeriod, Decimal))
         : Map<FiscalPeriod, Decimal> = {
     let (period, weighted) = entry
-    Map.upsert(period, weighted, running -> Decimal.add(running, weighted), acc)
+    Map.updateOrInsert(period, weighted, running -> Decimal.add(running, weighted), acc)
 }
 
 // The currencies no rate covers, which is what the failure has to name: telling a manager the forecast
@@ -230,7 +230,7 @@ let weightedForecast (owner, opps, fiscalYearStartMonth, rates) = {
     Forecast { owner = owner
              , currency = rates.base
              , periods = List.sort(Map.keys(byPeriod))
-             , byPeriod = Map.map((period, weighted) -> Amount(weighted), byPeriod)
+             , byPeriod = Map.mapValues((period, weighted) -> Amount(weighted), byPeriod)
              , total = Amount(List.sum(Map.values(byPeriod)))
              , dealCount = List.length(opps)
              }
@@ -314,12 +314,12 @@ behavior categoryRollupOf : (opps: List<Opportunity>) -> CategoryRollup
 
 let categoryRollupOf (opps) = {
     let money: Map<ForecastCategory, Decimal> =
-        List.fold((acc, opp) -> Map.upsert(categoryOf(opp), amountOfAny(opp),
+        List.fold((acc, opp) -> Map.updateOrInsert(categoryOf(opp), amountOfAny(opp),
                                            running -> Decimal.add(running, amountOfAny(opp)), acc),
                   Map.empty, opps)
     CategoryRollup
-        { byCategory = Map.map((category, total) -> Amount(total), money)
-        , countByCategory = List.fold((acc, opp) -> Map.upsert(categoryOf(opp), 1, n -> n + 1, acc),
+        { byCategory = Map.mapValues((category, total) -> Amount(total), money)
+        , countByCategory = List.fold((acc, opp) -> Map.updateOrInsert(categoryOf(opp), 1, n -> n + 1, acc),
                                       Map.empty, opps)
         }
 }
@@ -360,7 +360,7 @@ behavior quotaFor : (owner: UserId, period: FiscalPeriod) -> Quota
 // never return.
 let attainmentOf (forecast: Decimal, quota: Decimal): Attainment =
     Attainment(Int.clamp(0, 999,
-        Decimal.toInt(Decimal.round(forecast * 100.0m, 0, HALF_UP), FLOOR) / Decimal.toInt(quota, FLOOR)))
+        Decimal.toInt(FLOOR, Decimal.round(0, HALF_UP, forecast * 100.0m)) / Decimal.toInt(FLOOR, quota)))
 
 behavior quotaGap : (forecast: Forecast, quota: Quota, period: FiscalPeriod)
         -> OnTrack | ShortOfQuota | NoForecastForPeriod
@@ -447,14 +447,14 @@ let dealsAtRisk (opps, stale, staleAfter) = {
 // A manager's number is the reps' numbers summed, and Map.union is the wrong tool for it: union is left-biased
 // and never merges values, so two reps with deals in the same quarter would leave one of them out of the
 // manager's forecast entirely — silently, and by the same amount every quarter. Combining two values under one
-// key is a domain decision, so the rollup is a fold with upsert and the decision is written down here.
+// key is a domain decision, so the rollup is a fold with updateOrInsert and the decision is written down here.
 let mergeForecast (acc: Map<FiscalPeriod, Decimal>, one: Forecast): Map<FiscalPeriod, Decimal> =
     List.fold((inner, entry) -> mergeEntry(inner, entry), acc, Map.toList(one.byPeriod))
 
 let mergeEntry (acc: Map<FiscalPeriod, Decimal>, entry: (FiscalPeriod, Amount))
         : Map<FiscalPeriod, Decimal> = {
     let (period, amount) = entry
-    Map.upsert(period, amount.value, running -> Decimal.add(running, amount.value), acc)
+    Map.updateOrInsert(period, amount.value, running -> Decimal.add(running, amount.value), acc)
 }
 
 // Which forecasts a manager's number is made of is not a list somebody assembles at the call: it is
@@ -489,7 +489,7 @@ let rollupThrough (node, byOwner) = {
     Forecast { owner = node.holder
              , currency = currencyOf(forecasts)
              , periods = List.sort(Map.keys(byPeriod))
-             , byPeriod = Map.map((period, total) -> Amount(total), byPeriod)
+             , byPeriod = Map.mapValues((period, total) -> Amount(total), byPeriod)
              , total = Amount(List.sum(Map.values(byPeriod)))
              , dealCount = List.sum(List.map(one -> one.dealCount, forecasts))
              }
@@ -544,7 +544,7 @@ example rollupThrough
 // back is the owners — a leaderboard is an order, and publishing the figures beside the names is a different
 // decision that whoever displays it can make.
 let wonByOwner (won: List<ClosedWon>): Map<UserId, Decimal> =
-    List.fold((acc, w) -> Map.upsert(w.owner, w.wonAmount.value,
+    List.fold((acc, w) -> Map.updateOrInsert(w.owner, w.wonAmount.value,
                                      running -> Decimal.add(running, w.wonAmount.value), acc),
               Map.empty, won)
 

@@ -66,11 +66,11 @@ data Requirement =
 behavior explode : (kit: Component, orderQuantity: Int) -> Requirement
     constructs Requirement
 
-// The accumulator goes in and comes back, so the walk is one pass. `Map.upsert` adds to a sku already
+// The accumulator goes in and comes back, so the walk is one pass. `Map.updateOrInsert` adds to a sku already
 // reached — the same sub-assembly under two parents is one line, not two.
 let needFrom (need: Map<Sku, Int>, c: Component, parentTakes: Int): Map<Sku, Int> = {
     let taken = c.quantity * parentTakes
-    let here = Map.upsert(c.sku, taken, running -> running + taken, need)
+    let here = Map.updateOrInsert(c.sku, taken, running -> running + taken, need)
     fold((acc, p) -> needFrom(acc, p, taken), here, c.parts)
 }
 

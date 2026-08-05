@@ -38,7 +38,7 @@ module example.ledger exposing (
 )
 import example.billing ( Amount, InvoiceNo, Invoice, CreditNote, CreditReason, PriceError )
 import example.ordering ( OrderId )
-import List ( fold, filter, map, length, concatMap, sortBy )
+import List ( fold, filter, map, length, flatMap, sortBy )
 
 // A four-digit account number, the shape a Japanese chart of accounts uses. It arrives from the
 // accounting system, so its format is all this module says about it.
@@ -132,9 +132,9 @@ behavior balanceOff : (entries: List<JournalEntry>) -> TrialBalance
 // `Amount` for the length of the fold, because an account is on one side or the other only once every
 // entry has been counted — which side it lands on is the answer, not an assumption to carry.
 let running (entries: List<JournalEntry>): Map<AccountCode, Decimal> = {
-    let postings = concatMap(.postings, entries)
+    let postings = flatMap(.postings, entries)
     let start: Map<AccountCode, Decimal> = Map.empty
-    fold((acc, p) -> Map.upsert(p.account, signed(p), on -> Decimal.add(on, signed(p)), acc),
+    fold((acc, p) -> Map.updateOrInsert(p.account, signed(p), on -> Decimal.add(on, signed(p)), acc),
          start, postings)
 }
 

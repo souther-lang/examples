@@ -18,8 +18,8 @@
 //   - `Set` as the working collection: what came back, what was expected back, and what is still
 //     outstanding are three sets, and `difference` / `intersect` / `union` / `contains` say how they
 //     relate. A list would need a scan per question.
-//   - `Map.intersect` and `Map.difference` reconciling two keyed readings of the same shipment.
-//   - `List.member` / `reverse` / `take` for the recent-returns readout.
+//   - `Map.intersection` and `Map.difference` reconciling two keyed readings of the same shipment.
+//   - `List.contains` / `reverse` / `take` for the recent-returns readout.
 //   - A return window measured with `Date.daysBetween`, and a refund that is never negative, so an
 //     over-refund would be a different event rather than a sign.
 module example.returns exposing (
@@ -39,7 +39,7 @@ module example.returns exposing (
 import example.cart ( Sku )
 import example.billing ( Amount, InvoiceNo )
 import example.shipping ( PickLine, ShipmentId )
-import List ( map, fold, filter, length, member, reverse, take )
+import List ( map, fold, filter, length, contains, reverse, take )
 
 // A return authorisation number. It arrives from the customer service system, so its format is all
 // this module says about it.
@@ -94,7 +94,7 @@ let requestReturn (request, shipped, dispatchedOn, windowDays) = {
     let age = Date.daysBetween(dispatchedOn, request.requestedOn)
     guard age <= windowDays
         else OutsideWindow { rma = request.rma, daysSinceDispatch = age, windowDays = windowDays }
-    Accepted { rma = request.rma, skus = Set.intersect(asked, shipped), daysSinceDispatch = age }
+    Accepted { rma = request.rma, skus = Set.intersection(asked, shipped), daysSinceDispatch = age }
 }
 
 example requestReturn
@@ -121,7 +121,7 @@ example requestReturn
 // === reconcile: what went out against what came back ===
 // The warehouse counts what physically arrived; the request says what was declared. The two are
 // keyed the same way, so the comparison is `Map` arithmetic rather than a nested walk:
-// `Map.intersect` keeps the skus both readings mention, and `Map.difference` each side's surplus.
+// `Map.intersection` keeps the skus both readings mention, and `Map.difference` each side's surplus.
 // What is left in each direction is the discrepancy the credit note has to explain.
 data Reconciliation =
     { agreed: Map<Sku, Int>
@@ -134,7 +134,7 @@ behavior reconcile : (declared: Map<Sku, Int>, received: Map<Sku, Int>) -> Recon
     constructs Reconciliation
 
 let reconcile (declared, received) = {
-    let agreed = Map.intersect(declared, received)
+    let agreed = Map.intersection(declared, received)
     let declaredOnly = Map.difference(declared, received)
     let receivedOnly = Map.difference(received, declared)
     Reconciliation {
@@ -164,7 +164,7 @@ example reconcile
 // would be is a refund of nothing, not a charge.
 //
 // The recent-returns readout walks the history backwards with `List.reverse` and cuts it with
-// `List.take`, and `List.member` answers whether this customer has returned this sku before — the
+// `List.take`, and `List.contains` answers whether this customer has returned this sku before — the
 // question that decides whether a human looks at the case.
 data RefundPlan =
     { rma: Rma
@@ -203,7 +203,7 @@ let planRefund (accepted, reconciliation, unitPrices, invoiceNo, invoicedGross, 
         // reads billing's Amount and compares against it. Reading across a module is what
         // importing is for; building across one is what ADR-0015 closes.
         withinInvoiced = Decimal.compare(net, invoicedGross.value) <= 0,
-        repeatReturn = Set.fold((acc, sku) -> acc || member(sku, previousSkus), false, accepted.skus),
+        repeatReturn = Set.fold((acc, sku) -> acc || contains(sku, previousSkus), false, accepted.skus),
         recentRmas = take(3, reverse(history))
     }
 }

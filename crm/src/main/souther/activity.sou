@@ -17,7 +17,7 @@
 //   - `Set` where the question is membership. Multi-threading a deal — how many people at the account have
 //     been in a room with us — is the best-known predictor of a loss, and it is a set question: two
 //     meetings with the same person are not two people.
-//   - `Map.upsert` folding to a minimum rather than a sum, which is what recency is: the freshest touch per
+//   - `Map.updateOrInsert` folding to a minimum rather than a sum, which is what recency is: the freshest touch per
 //     account, not the total.
 //   - `Map<Date, Int>` as an output, keyed by a temporal that crosses the boundary as its ISO form.
 //   - The next-step playbook: an eight-arm match over the open stages, prescribing what that stage's exit
@@ -330,14 +330,14 @@ let lastActivityOn (activities, today) = {
 }
 
 // === staleAccounts: the freshest touch per account ===
-// A fold with Map.upsert, and the combining function is a minimum rather than a sum — recency is the
+// A fold with Map.updateOrInsert, and the combining function is a minimum rather than a sum — recency is the
 // closest touch, not the total of them. The absent branch inserts this activity's own figure, which is what
 // makes the first activity of every account count.
 //
 // The projection to a key is where absence is the model's own: an activity about a lead has no account to
 // roll up to. List.filterMap serves absence the model reads — a `?` field, a lookup that misses — and this
 // absence is a case of RelatedTo, which nothing can turn into an optional. So the projection answers with a
-// list of nought or one and concatMap does the work.
+// list of nought or one and flatMap does the work.
 let accountKeyOf (a: Activity): List<AccountId> =
     match relatedOf(a) with
         | RelatedToAccount { accountId }     -> [ accountId ]
@@ -353,18 +353,18 @@ behavior staleAccounts : (activities: List<Activity>, today: Date, staleAfter: C
     constructs StaleReport
 
 let staleAccounts (activities, today, staleAfter) = {
-    let pairs: List<(AccountId, Date)> = List.concatMap(a -> accountDatesOf(a), activities)
+    let pairs: List<(AccountId, Date)> = List.flatMap(a -> accountDatesOf(a), activities)
     let since: Map<AccountId, Int> =
-        List.fold((acc, pair) -> upsertRecency(acc, pair, today), Map.empty, pairs)
+        List.fold((acc, pair) -> recencyOf(acc, pair, today), Map.empty, pairs)
     StaleReport { daysSince = since
-                , stale = List.sort(Map.keys(Map.filter((k, days) -> days >= staleAfter.value, since)))
+                , stale = List.sort(Map.keys(Map.filterEntries((k, days) -> days >= staleAfter.value, since)))
                 }
 }
 
-let upsertRecency (acc: Map<AccountId, Int>, pair: (AccountId, Date), today: Date): Map<AccountId, Int> = {
+let recencyOf (acc: Map<AccountId, Int>, pair: (AccountId, Date), today: Date): Map<AccountId, Int> = {
     let (accountId, on) = pair
     let days = Date.daysBetween(on, today)
-    Map.upsert(accountId, days, seen -> Int.min(seen, days), acc)
+    Map.updateOrInsert(accountId, days, seen -> Int.min(seen, days), acc)
 }
 
 // === multiThreaded: the coverage question ===
@@ -389,7 +389,7 @@ behavior sharedAttendees : (a: Meeting, b: Meeting) -> Coverage
     constructs Coverage
 
 let sharedAttendees (a, b) = {
-    let both: Set<ContactId> = Set.intersect(a.attendees.value, b.attendees.value)
+    let both: Set<ContactId> = Set.intersection(a.attendees.value, b.attendees.value)
     Coverage { contacts = both, count = Set.size(both), singleThreaded = Set.size(both) <= 1 }
 }
 
@@ -449,9 +449,9 @@ behavior dayLoadOf : (activities: List<Activity>, owner: UserId) -> DayLoad
     constructs DayLoad
 
 let dayLoadOf (activities, owner) = {
-    let mine: List<Meeting> = List.concatMap(a -> meetingOf(a, owner), activities)
+    let mine: List<Meeting> = List.flatMap(a -> meetingOf(a, owner), activities)
     let minutes: Map<Date, Int> =
-        List.fold((acc, m) -> Map.upsert(DateTime.toDate(m.startAt), m.minutes.value,
+        List.fold((acc, m) -> Map.updateOrInsert(DateTime.toDate(m.startAt), m.minutes.value,
                                          sofar -> sofar + m.minutes.value, acc),
                   Map.empty, mine)
     DayLoad { minutesPerDay = minutes
