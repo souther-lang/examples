@@ -1,4 +1,45 @@
-module example.identity
+// Identity: who somebody is, how they prove it, and who they follow.
+//
+// exposing has two readers here, which is why it is long. The other .sou modules need very little —
+// articles and comments only have to say who wrote something, so Profile and the types it carries.
+// The Java boundary needs the rest: an injected behavior's implementation lives outside this module
+// and writes its input and output types when it overrides apply, so every type on the edge of one is
+// on this list. A module with no exposing at all exports nothing, which is why the list exists rather
+// than being omitted as issuetracker's is.
+module example.identity exposing (
+    Username,
+    Email,
+    Password,
+    PasswordHash,
+    Bio,
+    ImageUrl,
+    Profile,
+    User,
+    Registration,
+    Credentials,
+    Credentialed,
+    Followees,
+    UserNotFound,
+    EmailTaken,
+    UsernameTaken,
+    InvalidCredentials,
+    CannotFollowSelf,
+    hashPassword,
+    verifyPassword,
+    findUserByEmail,
+    findUserByName,
+    findLogin,
+    storeUser,
+    storeUserUpdate,
+    storePassword,
+    readFollowees,
+    storeFollow,
+    storeUnfollow,
+    registerUser,
+    loginUser,
+    updateUser,
+    follow
+)
 
 data Username = String
     invariant String.length(value) >= 1 && String.length(value) <= 40
