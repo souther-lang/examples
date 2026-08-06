@@ -3,9 +3,20 @@
 // bound to them, and the two boundary tools the domain knows nothing about — bcrypt and JWT.
 package app.realworld;
 
+import app.realworld.web.ArticleViews;
 import app.realworld.web.Following;
 import app.realworld.web.JwtTokens;
 
+import example.articles.CreateArticle;
+import example.articles.DeleteArticle;
+import example.articles.ReadArticle;
+import example.articles.ReadArticles;
+import example.articles.ReadFavoriteCounts;
+import example.articles.ReadFavorited;
+import example.articles.RemoveArticle;
+import example.articles.SlugExists;
+import example.articles.StoreArticle;
+import example.articles.UpdateArticle;
 import example.identity.FindLogin;
 import example.identity.FindUserByEmail;
 import example.identity.FindUserByName;
@@ -144,5 +155,65 @@ public class RealWorldConfig {
     @Bean
     public Follow follow(StoreFollow storeFollow) {
         return Follow.bind(storeFollow);
+    }
+
+    // --- articles ---
+
+    @Bean
+    public SlugExists slugExists(DSLContext dsl) {
+        return new JooqArticles.SlugIsTaken(dsl);
+    }
+
+    @Bean
+    public StoreArticle storeArticle(DSLContext dsl) {
+        return new JooqArticles.Store(dsl);
+    }
+
+    @Bean
+    public ReadArticle readArticle(DSLContext dsl) {
+        return new JooqArticles.Read(dsl);
+    }
+
+    @Bean
+    public RemoveArticle removeArticle(DSLContext dsl) {
+        return new JooqArticles.Remove(dsl);
+    }
+
+    @Bean
+    public ReadArticles readArticles(DSLContext dsl) {
+        return new JooqArticles.ReadPage(dsl);
+    }
+
+    @Bean
+    public ReadFavorited readFavorited(DSLContext dsl) {
+        return new JooqArticles.ReadFavoritedSlugs(dsl);
+    }
+
+    @Bean
+    public ReadFavoriteCounts readFavoriteCounts(DSLContext dsl) {
+        return new JooqArticles.ReadCounts(dsl);
+    }
+
+    @Bean
+    public CreateArticle createArticle(SlugExists slugExists, StoreArticle storeArticle) {
+        return CreateArticle.bind(slugExists, storeArticle);
+    }
+
+    @Bean
+    public UpdateArticle updateArticle(StoreArticle storeArticle) {
+        return UpdateArticle.bind(storeArticle);
+    }
+
+    @Bean
+    public DeleteArticle deleteArticle(RemoveArticle removeArticle) {
+        return DeleteArticle.bind(removeArticle);
+    }
+
+    /** The three request-shaped facts every article response carries, read once per response. */
+    @Bean
+    public ArticleViews articleViews(ReadFavorited readFavorited,
+                                     ReadFavoriteCounts readFavoriteCounts,
+                                     Following following) {
+        return new ArticleViews(readFavorited, readFavoriteCounts, following);
     }
 }

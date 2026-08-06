@@ -57,7 +57,29 @@ public final class ConduitJson {
         return out;
     }
 
-    /** Rewrites Souther's rendering of a DateTime into the spec's. */
+    /**
+     * An article or a summary as the spec states it. All three of this class's reasons to exist meet
+     * here: the two flags and the author's are facts about the request, the timestamps are rewritten,
+     * and the nested author gets its absent optionals back.
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> article(Map<String, Object> encodedArticle,
+                                              boolean favorited,
+                                              int favoritesCount,
+                                              boolean authorFollowed) {
+        Map<String, Object> out = new LinkedHashMap<>(encodedArticle);
+        out.put("createdAt", timestamp(out.get("createdAt")));
+        out.put("updatedAt", timestamp(out.get("updatedAt")));
+        out.put("author", profile((Map<String, Object>) out.get("author"), authorFollowed));
+        out.put("favorited", favorited);
+        out.put("favoritesCount", favoritesCount);
+        return out;
+    }
+
+    /**
+     * Rewrites Souther's rendering of a DateTime into the spec's. Souther's DateTime is a
+     * LocalDateTime, so what arrives has no zone and may have no fractional part at all.
+     */
     public static String timestamp(Object encodedDateTime) {
         return LocalDateTime.parse((String) encodedDateTime).format(SPEC_TIMESTAMP);
     }

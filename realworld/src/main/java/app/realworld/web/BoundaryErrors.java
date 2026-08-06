@@ -40,9 +40,9 @@ public class BoundaryErrors {
         return unprocessable(messages);
     }
 
-    /** A name in the path with nobody behind it. Nothing was asked of the domain, so it is not a case. */
-    @ExceptionHandler(ProfileController.NoSuchProfile.class)
-    public ResponseEntity<Object> onNoSuchProfile(ProfileController.NoSuchProfile e) {
+    /** A name in the path with nothing behind it. Nothing was asked of the domain, so it is not a case. */
+    @ExceptionHandler(NotFound.class)
+    public ResponseEntity<Object> onNotFound(NotFound e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
     }
 

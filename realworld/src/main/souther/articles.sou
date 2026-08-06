@@ -21,6 +21,9 @@ module example.articles exposing (
     TitleHasNoSlug,
     NotTheAuthor,
     ArticleNotFound,
+    Removed,
+    removeArticle,
+    deleteArticle,
     Limit,
     Offset,
     Paging,
@@ -160,6 +163,20 @@ let changedBody (change: ArticleChange, current: Body): Body =
         | None    -> current
         | Some b   -> b
 
+// Deleting carries the same rule as editing and answers it the same way, so the two read alike. A
+// boundary that checked the author itself for one and asked the domain for the other would be stating
+// one rule in two places.
+behavior removeArticle : (article: Article) -> Removed
+    constructs Removed
+
+behavior deleteArticle : (article: Article, remover: Username) -> Removed | NotTheAuthor
+    depends on removeArticle
+
+let deleteArticle (article, remover, removeArticle) = {
+    guard remover == article.author.username else NotTheAuthor
+    removeArticle(article)
+}
+
 // === asking for a page of articles ===
 // A search is a value. Limit and Offset carry their bounds as invariants, so a request for a page of
 // a thousand rows is refused by the decoder and the SQL is never shown one — the bound is stated once,
@@ -286,3 +303,12 @@ example updateArticle
                                                     , description = None, body = None
                                                     , at = DateTime("2026-08-06T04:00:00") })
         -> NotTheAuthor
+
+fake removeArticle
+    | _ -> Removed
+
+example deleteArticle
+    | "the author may delete it" :
+        (dragons, Username("jake")) -> Removed
+    | "somebody who is not the author may not" :
+        (dragons, Username("gerome")) -> NotTheAuthor

@@ -90,11 +90,7 @@ public class ProfileController {
         Username name = decodeOrFail(Username.decoder(), username);
         return switch (findUserByName.apply(name)) {
             case User user -> user;
-            case UserNotFound _ -> throw new NoSuchProfile();
+            case UserNotFound _ -> throw new NotFound();
         };
-    }
-
-    /** Mapped to 404 by {@link BoundaryErrors}. */
-    public static final class NoSuchProfile extends RuntimeException {
     }
 }

@@ -17,3 +17,29 @@ CREATE TABLE follows (
     followee VARCHAR(40) NOT NULL,
     PRIMARY KEY (follower, followee)
 );
+
+-- The slug is the key because it is how an article is addressed, and it does not move when the title
+-- does. `body` is its own column so the listing queries can leave it unread — which is the whole
+-- reason ArticleSummary exists beside Article.
+CREATE TABLE articles (
+    slug        VARCHAR(255)  NOT NULL PRIMARY KEY,
+    title       VARCHAR(255)  NOT NULL,
+    description VARCHAR(1000) NOT NULL,
+    body        CLOB          NOT NULL,
+    author      VARCHAR(40)   NOT NULL,
+    created_at  TIMESTAMP     NOT NULL,
+    updated_at  TIMESTAMP     NOT NULL
+);
+
+CREATE TABLE article_tags (
+    slug VARCHAR(255) NOT NULL,
+    tag  VARCHAR(60)  NOT NULL,
+    PRIMARY KEY (slug, tag)
+);
+
+-- Favoriting twice is favoriting once, for the same reason following twice is.
+CREATE TABLE favorites (
+    username VARCHAR(40)  NOT NULL,
+    slug     VARCHAR(255) NOT NULL,
+    PRIMARY KEY (username, slug)
+);
