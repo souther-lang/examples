@@ -16,7 +16,6 @@ import example.pipeline.ValueProposition;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
@@ -99,7 +98,7 @@ class QuotingTest {
                 "quantity", 10L,
                 "listPrice", new BigDecimal("1000.00"),
                 "discount", new BigDecimal("0.10"),
-                "net", new BigDecimal("9500.00")), Path.ROOT);
+                "net", new BigDecimal("9500.00")));
         assertInstanceOf(Err.class, bad);
 
         assertInstanceOf(Ok.class, QuoteLine.decoder().decode(Map.of(
@@ -108,7 +107,7 @@ class QuotingTest {
                 "quantity", 10L,
                 "listPrice", new BigDecimal("1000.00"),
                 "discount", new BigDecimal("0.10"),
-                "net", new BigDecimal("9000.00")), Path.ROOT));
+                "net", new BigDecimal("9000.00"))));
     }
 
     @Test
@@ -210,15 +209,15 @@ class QuotingTest {
                         Map.of("role", "VP Sales", "holder", "u-vp", "reports", List.of(
                                 Map.of("role", "Manager", "holder", "u-manager", "reports", List.of(
                                         Map.of("role", "Rep", "holder", "u-rep",
-                                                "reports", List.of()))))))), Path.ROOT));
+                                                "reports", List.of())))))))));
     }
 
     private static ApproverRole regionalVp() {
-        return ok(ApproverRole.decoder().decode("RegionalVp", Path.ROOT));
+        return ok(ApproverRole.decoder().decode("RegionalVp"));
     }
 
     private static ApproverRole cfo() {
-        return ok(ApproverRole.decoder().decode("Cfo", Path.ROOT));
+        return ok(ApproverRole.decoder().decode("Cfo"));
     }
 
     // --- fixtures: the state is earned by walking the pipeline --------------------------------------
@@ -232,7 +231,7 @@ class QuotingTest {
                 "amount", new BigDecimal("11000.00"),
                 "currency", "JPY",
                 "closeDate", LocalDate.parse("2026-09-30"),
-                "openedOn", LocalDate.parse("2026-07-20")), Path.ROOT));
+                "openedOn", LocalDate.parse("2026-07-20"))));
 
         Qualification qualified = assertInstanceOf(Qualification.class, QualifyOpportunity.of()
                 .apply(prospecting, LocalDate.parse("2026-07-25"), contact("003000000000100")));
@@ -252,27 +251,27 @@ class QuotingTest {
                 "name", "Line " + product,
                 "quantity", (long) qty,
                 "listPrice", new BigDecimal(list),
-                "discount", new BigDecimal(discount)), Path.ROOT));
+                "discount", new BigDecimal(discount))));
     }
 
     private static QuoteNumber quoteNumber() {
-        return ok(QuoteNumber.decoder().decode("0Q0000000000001", Path.ROOT));
+        return ok(QuoteNumber.decoder().decode("0Q0000000000001"));
     }
 
     private static example.crm.ContactId contact(String id) {
-        return ok(example.crm.ContactId.decoder().decode(id, Path.ROOT));
+        return ok(example.crm.ContactId.decoder().decode(id));
     }
 
     private static UserId user(String id) {
-        return ok(UserId.decoder().decode(id, Path.ROOT));
+        return ok(UserId.decoder().decode(id));
     }
 
     private static Verdict approve() {
-        return ok(Verdict.decoder().decode("Approve", Path.ROOT));
+        return ok(Verdict.decoder().decode("Approve"));
     }
 
     private static Verdict reject() {
-        return ok(Verdict.decoder().decode("Reject", Path.ROOT));
+        return ok(Verdict.decoder().decode("Reject"));
     }
 
     private static <T> T ok(Result<T> result) {

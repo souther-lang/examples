@@ -2,7 +2,6 @@ package blog.articles;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 
 import org.junit.jupiter.api.Test;
 
@@ -20,22 +19,22 @@ class ArticleQueryTest {
 
     @Test
     void anOrdinaryPageDecodes() {
-        assertInstanceOf(Ok.class, ArticleQuery.decoder().decode(global(20, 0), Path.ROOT));
+        assertInstanceOf(Ok.class, ArticleQuery.decoder().decode(global(20, 0)));
     }
 
     @Test
     void aPageOfNothingIsRefused() {
-        assertInstanceOf(Err.class, ArticleQuery.decoder().decode(global(0, 0), Path.ROOT));
+        assertInstanceOf(Err.class, ArticleQuery.decoder().decode(global(0, 0)));
     }
 
     @Test
     void aPageOfAThousandIsRefused() {
-        assertInstanceOf(Err.class, ArticleQuery.decoder().decode(global(1000, 0), Path.ROOT));
+        assertInstanceOf(Err.class, ArticleQuery.decoder().decode(global(1000, 0)));
     }
 
     @Test
     void aNegativeOffsetIsRefused() {
-        assertInstanceOf(Err.class, ArticleQuery.decoder().decode(global(20, -1), Path.ROOT));
+        assertInstanceOf(Err.class, ArticleQuery.decoder().decode(global(20, -1)));
     }
 
     @Test
@@ -46,7 +45,7 @@ class ArticleQueryTest {
                 "offset", 0,
                 "followees", List.of("jake", "gerome"));
 
-        assertInstanceOf(Ok.class, ArticleQuery.decoder().decode(feed, Path.ROOT));
+        assertInstanceOf(Ok.class, ArticleQuery.decoder().decode(feed));
     }
 
     private static Map<String, Object> global(int limit, int offset) {

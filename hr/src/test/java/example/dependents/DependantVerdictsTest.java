@@ -2,7 +2,6 @@ package example.dependents;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
@@ -74,7 +73,7 @@ class DependantVerdictsTest {
         raw.put("relationship", Map.of("type", "Cousin"));
         raw.put("cohabitation", livingTogether());
 
-        Result<RelativeTie> decoded = RelativeTie.decoder().decode(raw, Path.ROOT);
+        Result<RelativeTie> decoded = RelativeTie.decoder().decode(raw);
         Err<RelativeTie> failure = assertInstanceOf(Err.class, decoded);
         assertTrue(failure.issues().asList().toString().contains("relationship"),
                 "the path names the field the unknown tag was under: " + failure.issues().asList());
@@ -133,7 +132,7 @@ class DependantVerdictsTest {
     }
 
     private static <I, T> T decode(net.unit8.raoh.decode.Decoder<I, T> decoder, I raw) {
-        return switch (decoder.decode(raw, Path.ROOT)) {
+        return switch (decoder.decode(raw)) {
             case Ok<T> ok -> ok.value();
             case Err<T> e -> throw new IllegalStateException(e.issues().asList().toString());
         };

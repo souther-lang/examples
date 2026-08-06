@@ -31,11 +31,6 @@ import blog.identity.StoreUserUpdate;
 import blog.identity.User;
 import blog.identity.Username;
 
-import net.unit8.raoh.Err;
-import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
-import net.unit8.raoh.Result;
-
 import org.jooq.DSLContext;
 import org.jooq.Record;
 
@@ -106,7 +101,7 @@ public final class JooqUsers {
             Map<String, Object> raw = Map.of(
                     "user", userMap(row),
                     "hash", row.get(field(name("password_hash"), String.class)));
-            return decodeOrThrow(Credentialed.decoder().decode(raw, Path.ROOT));
+            return Credentialed.decoder().decode(raw).getOrThrow();
         }
     }
 
@@ -280,7 +275,7 @@ public final class JooqUsers {
     }
 
     private static User decodeUser(Record row) {
-        return decodeOrThrow(User.decoder().decode(userMap(row), Path.ROOT));
+        return User.decoder().decode(userMap(row)).getOrThrow();
     }
 
     private static void deleteFollow(DSLContext dsl, String follower, String followee) {
@@ -295,20 +290,7 @@ public final class JooqUsers {
                 .from(table(name("follows")))
                 .where(field(name("follower"), String.class).eq(follower))
                 .fetch(field(name("followee"), String.class));
-        return decodeOrThrow(Followees.decoder()
-                .decode(Map.of("usernames", List.copyOf(names)), Path.ROOT));
-    }
-
-    /**
-     * A stored row that no longer meets the domain's invariants is not a domain outcome — no case was
-     * declared for it — so it is a platform failure, and the boundary answers 500 rather than dressing
-     * corrupt storage up as a business answer.
-     */
-    private static <T> T decodeOrThrow(Result<T> result) {
-        return switch (result) {
-            case Ok<T> ok -> ok.value();
-            case Err<T> err -> throw new IllegalStateException(
-                    "a stored row no longer meets the domain's invariants: " + err.issues().asList());
-        };
+        return Followees.decoder()
+                .decode(Map.of("usernames", List.copyOf(names))).getOrThrow();
     }
 }

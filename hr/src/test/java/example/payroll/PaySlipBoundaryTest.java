@@ -4,7 +4,6 @@ import example.employee.Yen;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
@@ -67,7 +66,7 @@ class PaySlipBoundaryTest {
         raw.put("deductions", rawJulyDeductions());
         raw.put("net", 270_036);   // one yen out
 
-        Result<PaySlip> decoded = PaySlip.decoder().decode(raw, Path.ROOT);
+        Result<PaySlip> decoded = PaySlip.decoder().decode(raw);
         Err<PaySlip> failure = assertInstanceOf(Err.class, decoded);
         assertTrue(failure.issues().asList().toString().contains("invariant"),
                 "the slip's own clause is what refuses it: " + failure.issues().asList());
@@ -171,7 +170,7 @@ class PaySlipBoundaryTest {
     }
 
     private static <I, T> T decode(net.unit8.raoh.decode.Decoder<I, T> decoder, I raw) {
-        return switch (decoder.decode(raw, Path.ROOT)) {
+        return switch (decoder.decode(raw)) {
             case Ok<T> ok -> ok.value();
             case Err<T> e -> throw new IllegalStateException(e.issues().asList().toString());
         };

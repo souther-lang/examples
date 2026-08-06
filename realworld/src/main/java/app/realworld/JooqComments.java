@@ -14,7 +14,6 @@ import blog.comments.Removed;
 import blog.comments.StoreComment;
 import blog.identity.Profile;
 
-import net.unit8.raoh.Path;
 
 import org.jooq.DSLContext;
 import org.jooq.Record;
@@ -24,7 +23,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static app.realworld.JooqArticles.decodeOrThrow;
 import static org.jooq.impl.DSL.field;
 import static org.jooq.impl.DSL.name;
 import static org.jooq.impl.DSL.table;
@@ -65,7 +63,7 @@ public final class JooqComments {
             raw.put("author", profile);
             raw.put("createdAt", at.toString());
             raw.put("updatedAt", at.toString());
-            return decodeOrThrow(Comment.decoder().decode(raw, Path.ROOT));
+            return Comment.decoder().decode(raw).getOrThrow();
         }
     }
 
@@ -86,8 +84,8 @@ public final class JooqComments {
                     .orderBy(field(name("c", "id")).asc())
                     .fetch()
                     .map(JooqComments::commentMap);
-            return decodeOrThrow(CommentThread.decoder()
-                    .decode(Map.of("comments", comments), Path.ROOT));
+            return CommentThread.decoder()
+                    .decode(Map.of("comments", comments)).getOrThrow();
         }
     }
 
@@ -108,7 +106,7 @@ public final class JooqComments {
                     .fetchOne();
             return row == null
                     ? CommentNotFound()
-                    : decodeOrThrow(Comment.decoder().decode(commentMap(row), Path.ROOT));
+                    : Comment.decoder().decode(commentMap(row)).getOrThrow();
         }
     }
 

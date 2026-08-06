@@ -10,7 +10,6 @@ import example.pipeline.Prospecting;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
@@ -168,7 +167,7 @@ class ForecastTest {
         @Override
         public Quota apply(UserId owner, FiscalPeriod period) {
             String amount = owner.value().equals("u-001") ? "100000.00" : "500000.00";
-            return ok(Quota.decoder().decode(new BigDecimal(amount), Path.ROOT));
+            return ok(Quota.decoder().decode(new BigDecimal(amount)));
         }
     }
 
@@ -187,7 +186,7 @@ class ForecastTest {
                 "amount", new BigDecimal(amount),
                 "currency", currency,
                 "closeDate", LocalDate.parse(closeDate),
-                "openedOn", LocalDate.parse("2026-07-20")), Path.ROOT));
+                "openedOn", LocalDate.parse("2026-07-20"))));
     }
 
     /** Yen is the reporting currency and sits in the table at one, which {@code RateTable}'s invariant
@@ -195,7 +194,7 @@ class ForecastTest {
     private static RateTable yenRates() {
         return ok(RateTable.decoder().decode(Map.of(
                 "base", "JPY",
-                "rates", Map.of("JPY", BigDecimal.ONE, "USD", new BigDecimal("150.0"))), Path.ROOT));
+                "rates", Map.of("JPY", BigDecimal.ONE, "USD", new BigDecimal("150.0")))));
     }
 
     /** A manager with the two reps reporting to them. */
@@ -203,19 +202,19 @@ class ForecastTest {
         return ok(RoleNode.decoder().decode(Map.of(
                 "role", "Manager", "holder", "u-manager", "reports", List.of(
                         Map.of("role", "Rep", "holder", "u-001", "reports", List.of()),
-                        Map.of("role", "Rep", "holder", "u-002", "reports", List.of()))), Path.ROOT));
+                        Map.of("role", "Rep", "holder", "u-002", "reports", List.of())))));
     }
 
     private static UserId user(String id) {
-        return ok(UserId.decoder().decode(id, Path.ROOT));
+        return ok(UserId.decoder().decode(id));
     }
 
     private static Quota quota(String amount) {
-        return ok(Quota.decoder().decode(new BigDecimal(amount), Path.ROOT));
+        return ok(Quota.decoder().decode(new BigDecimal(amount)));
     }
 
     private static FiscalPeriod period(String label) {
-        return ok(FiscalPeriod.decoder().decode(label, Path.ROOT));
+        return ok(FiscalPeriod.decoder().decode(label));
     }
 
     private static <T> T ok(Result<T> result) {

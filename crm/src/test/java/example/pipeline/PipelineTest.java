@@ -5,7 +5,6 @@ import example.crm.ContactId;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
@@ -191,7 +190,7 @@ class PipelineTest {
                 "amount", new BigDecimal(amount),
                 "currency", "JPY",
                 "closeDate", LocalDate.parse("2026-09-30"),
-                "openedOn", LocalDate.parse("2026-07-20")), Path.ROOT));
+                "openedOn", LocalDate.parse("2026-07-20"))));
     }
 
     private static Qualification qualification() {
@@ -224,19 +223,19 @@ class PipelineTest {
         Map<String, Object> raw = company == null
                 ? Map.of("type", tag)
                 : Map.of("type", tag, tag.equals("CompetitorLoss") ? "competitor" : "incumbent", company);
-        return ok(LossReason.decoder().decode(raw, Path.ROOT));
+        return ok(LossReason.decoder().decode(raw));
     }
 
     private static Amount amount(String value) {
-        return ok(Amount.decoder().decode(new BigDecimal(value), Path.ROOT));
+        return ok(Amount.decoder().decode(new BigDecimal(value)));
     }
 
     private static ContactId contact(String id) {
-        return ok(ContactId.decoder().decode(id, Path.ROOT));
+        return ok(ContactId.decoder().decode(id));
     }
 
     private static QuoteNumber quoteNumber(String number) {
-        return ok(QuoteNumber.decoder().decode(number, Path.ROOT));
+        return ok(QuoteNumber.decoder().decode(number));
     }
 
     private static LocalDate date(String iso) {

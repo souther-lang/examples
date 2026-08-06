@@ -2,7 +2,6 @@ package example.shippingfee;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -23,7 +22,7 @@ class ShippingFeeTest {
     private static 注文 order(String number, long total, String region, String membership) {
         Map<String, Object> raw = Map.of("番号", number, "合計", total,
                 "地域", region, "会員", membership);
-        return switch (注文.decoder().decode(raw, Path.ROOT)) {
+        return switch (注文.decoder().decode(raw)) {
             case Ok<注文> ok -> ok.value();
             case Err<注文> err -> throw new AssertionError("decode failed: " + err.issues());
         };
@@ -42,7 +41,7 @@ class ShippingFeeTest {
         Map<String, Object> raw = Map.of("番号", "1-2", "合計", 4999L,
                 "地域", "本州", "会員", "一般");
 
-        assertInstanceOf(Err.class, 注文.decoder().decode(raw, Path.ROOT),
+        assertInstanceOf(Err.class, 注文.decoder().decode(raw),
                 "the format rule is enforced where the value is built, not where it is used");
     }
 }

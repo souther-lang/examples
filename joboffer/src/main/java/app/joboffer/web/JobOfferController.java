@@ -18,7 +18,6 @@ import example.joboffer.総額未定;
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Issue;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -60,7 +59,7 @@ public final class JobOfferController {
 
     @PostMapping
     public ResponseEntity<Object> create(@RequestBody JsonNode body) {
-        return switch (依頼.jsonDecoder().decode(body, Path.ROOT)) {
+        return switch (依頼.jsonDecoder().decode(body)) {
             // decode 失敗: どのフィールドがどの規則で落ちたかを Issues が持っている。入れ子の直和で
             // 落ちても、パスは壊れた場所まで降りている（精算/予算枠/上限 など）。
             case Err<依頼>(var issues) -> ResponseEntity.badRequest().body(Map.of(

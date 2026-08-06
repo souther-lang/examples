@@ -29,11 +29,6 @@ import blog.articles.TagList;
 import blog.articles.Tag;
 import blog.identity.Username;
 
-import net.unit8.raoh.Err;
-import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
-import net.unit8.raoh.Result;
-
 import org.jooq.Condition;
 import org.jooq.DSLContext;
 import org.jooq.Record;
@@ -137,7 +132,7 @@ public final class JooqArticles {
             Record row = articleRow(dsl, Slug.encoder().encode(slug));
             return row == null
                     ? ArticleNotFound()
-                    : decodeOrThrow(Article.decoder().decode(articleMap(dsl, row, true), Path.ROOT));
+                    : Article.decoder().decode(articleMap(dsl, row, true)).getOrThrow();
         }
     }
 
@@ -204,8 +199,8 @@ public final class JooqArticles {
             for (Slug slug : slugs) {
                 counts.putIfAbsent(Slug.encoder().encode(slug), 0);
             }
-            return decodeOrThrow(FavoriteCounts.decoder()
-                    .decode(Map.of("counts", counts), Path.ROOT));
+            return FavoriteCounts.decoder()
+                    .decode(Map.of("counts", counts)).getOrThrow();
         }
     }
 
@@ -253,8 +248,8 @@ public final class JooqArticles {
             int total = dsl.fetchCount(
                     dsl.selectFrom(table(name("articles")).as("a")).where(where));
 
-            return decodeOrThrow(ArticlePage.decoder()
-                    .decode(Map.of("articles", articles, "total", total), Path.ROOT));
+            return ArticlePage.decoder()
+                    .decode(Map.of("articles", articles, "total", total)).getOrThrow();
         }
 
         private static Condition globalCondition(GlobalQuery q) {
@@ -341,8 +336,8 @@ public final class JooqArticles {
                     .from(table(name("article_tags")))
                     .orderBy(field(name("tag"), String.class))
                     .fetch(field(name("tag"), String.class));
-            return decodeOrThrow(TagList.decoder()
-                    .decode(Map.of("tags", List.copyOf(tags)), Path.ROOT));
+            return TagList.decoder()
+                    .decode(Map.of("tags", List.copyOf(tags))).getOrThrow();
         }
     }
 
@@ -358,8 +353,8 @@ public final class JooqArticles {
                 .from(table(name("favorites")))
                 .where(field(name("username"), String.class).eq(username))
                 .fetch(field(name("slug"), String.class));
-        return decodeOrThrow(FavoritedSlugs.decoder()
-                .decode(Map.of("slugs", List.copyOf(slugs)), Path.ROOT));
+        return FavoritedSlugs.decoder()
+                .decode(Map.of("slugs", List.copyOf(slugs))).getOrThrow();
     }
 
     private static <T> String orNull(Option<T> option, java.util.function.Function<T, String> encode) {
@@ -438,11 +433,4 @@ public final class JooqArticles {
         }
     }
 
-    static <T> T decodeOrThrow(Result<T> result) {
-        return switch (result) {
-            case Ok<T> ok -> ok.value();
-            case Err<T> err -> throw new IllegalStateException(
-                    "a stored row no longer meets the domain's invariants: " + err.issues().asList());
-        };
-    }
 }

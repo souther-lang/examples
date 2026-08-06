@@ -101,8 +101,10 @@ carry a single minimal `package-info.java` to trigger the processor (javac does 
 processing unless there is at least one source). One is enough however many Souther modules a project
 holds: `hr` has eight, generating into eight packages, and still carries exactly one `package-info.java`,
 because the processor reads the source directory it is handed and not the list of packages. The smoke tests call the generated
-`decoder()`/`encoder()` in a typed way (`decoder()` is `Decoder<…, T>`; `decode(input, Path.ROOT)`
-returns `Result<T>`, and `Ok`/`Err` are told apart by pattern match — no wildcard, no cast).
+`decoder()`/`encoder()` in a typed way (`decoder()` is `Decoder<…, T>`; `decode(input)` returns
+`Result<T>`, and `Ok`/`Err` are told apart by pattern match — no wildcard, no cast). A `Path` is
+passed only where the decoder is handed one field of a larger input and could not otherwise know
+where it came from.
 
 ## Dogfooding findings
 

@@ -21,7 +21,6 @@ import example.socialinsurance.RegularRoute;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
@@ -130,7 +129,7 @@ class EmploymentLifecycleTest {
         Map<String, Object> identity = (Map<String, Object>) raw.get("identity");
         identity.put("myNumber", "12345678901");   // eleven digits
 
-        Result<Prospective> decoded = Prospective.decoder().decode(raw, Path.ROOT);
+        Result<Prospective> decoded = Prospective.decoder().decode(raw);
         Err<Prospective> failure = assertInstanceOf(Err.class, decoded);
         assertTrue(failure.issues().asList().toString().contains("myNumber"),
                 "the path says which field was refused: " + failure.issues().asList());
@@ -147,7 +146,7 @@ class EmploymentLifecycleTest {
         }
 
         private ContributionRate rate(String value) {
-            return switch (ContributionRate.decoder().decode(new BigDecimal(value), Path.ROOT)) {
+            return switch (ContributionRate.decoder().decode(new BigDecimal(value))) {
                 case Ok<ContributionRate> ok -> ok.value();
                 case Err<ContributionRate> e -> throw new IllegalStateException(e.issues().asList().toString());
             };
@@ -234,7 +233,7 @@ class EmploymentLifecycleTest {
     }
 
     private static <I, T> T decode(net.unit8.raoh.decode.Decoder<I, T> decoder, I raw) {
-        return switch (decoder.decode(raw, Path.ROOT)) {
+        return switch (decoder.decode(raw)) {
             case Ok<T> ok -> ok.value();
             case Err<T> e -> throw new IllegalStateException(e.issues().asList().toString());
         };

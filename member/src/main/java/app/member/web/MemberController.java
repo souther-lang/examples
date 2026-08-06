@@ -10,8 +10,9 @@ import example.member.会員を照会し整形する;
 import example.member.会員表示;
 import example.member.保存データ不正;
 
+import net.unit8.raoh.Err;
+import net.unit8.raoh.Issue;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -45,26 +47,39 @@ public final class MemberController {
 
     @GetMapping("/{id}")
     public ResponseEntity<Object> get(@PathVariable String id) {
-        // 1. 入力を境界で decode する。会員ID は newtype なので裸の String から読む。
-        //    decoder() は Decoder<Object, 会員ID> なので decode は Result<会員ID>。Ok を record パターンで
-        //    分解し、Err なら 400 で早期に返す（生成物の外では data を作れない。spec 8.5）。
-        if (!(会員ID.decoder().decode(id, Path.ROOT) instanceof Ok<会員ID>(var memberId))) {
-            return ResponseEntity.badRequest().body(Map.of("error", "invalid_member_id"));
-        }
+        // 入力を境界で decode する。会員ID は newtype なので裸の String から読む。decoder() は
+        // Decoder<Object, 会員ID> なので decode は Result<会員ID>、これも sealed なので Ok/Err の
+        // switch は網羅性を検査される（生成物の外では data を作れない。spec 8.5）。
+        //
+        // Err が持っているのは「どこが」「どの規則で」落ちたかで、それをそのまま応答に載せる。捨てれば
+        // raoh が組み立てたものを受け取っておいて使わないことになる。
+        return switch (会員ID.decoder().decode(id)) {
+            case Err<会員ID>(var issues) -> ResponseEntity.badRequest().body(Map.of(
+                    "error", "invalid_member_id",
+                    "issues", issues.asList().stream().map(MemberController::describe).toList()));
 
-        // 2. パイプラインを走らせ、ドメインの出力ケースを畳んで HTTP へ。
-        //    会員なし/保存データ不正 は findMember から整形段を素通りしてここへ届く（sealed で網羅的）。
-        //    DB ダウン等のプラットフォーム障害はここに来ず、例外として抜ける（onPlatformFailure が受ける）。
-        //    照会 は interface（会員を照会し整形する）なので apply は型付き。出力は 会員を照会し整形するResult。
-        return switch (照会.apply(memberId)) {
-            case 会員表示 v ->
-                    // encode は素の Map（外部表現。spec 6）を返す。Spring/Jackson がそのまま JSON 化する。
-                    ResponseEntity.ok(会員表示.encoder().encode(v));
-            case 会員なし _ ->
-                    ResponseEntity.notFound().build();
-            case 保存データ不正 _ ->
-                    ResponseEntity.status(500).body(Map.of("error", "corrupt_stored_data"));
+            // パイプラインを走らせ、ドメインの出力ケースを畳んで HTTP へ。会員なし/保存データ不正 は
+            // findMember から整形段を素通りしてここへ届く（sealed で網羅的）。DB ダウン等のプラット
+            // フォーム障害はここに来ず、例外として抜ける（onPlatformFailure が受ける）。
+            case Ok<会員ID>(var memberId) -> switch (照会.apply(memberId)) {
+                case 会員表示 v ->
+                        // encode は素の Map（外部表現。spec 6）を返す。Spring/Jackson がそのまま JSON 化する。
+                        ResponseEntity.ok(会員表示.encoder().encode(v));
+                case 会員なし _ ->
+                        ResponseEntity.notFound().build();
+                case 保存データ不正 _ ->
+                        ResponseEntity.status(500).body(Map.of("error", "corrupt_stored_data"));
+            };
         };
+    }
+
+    /** decode エラー1件を、壊れた場所（パス）と規則（コード）で表す。ordering / joboffer と同じ形。 */
+    private static Map<String, Object> describe(Issue issue) {
+        Map<String, Object> m = new LinkedHashMap<>();     // message が null でも入る
+        m.put("path", issue.path().toString());
+        m.put("code", issue.code());
+        m.put("message", issue.message());
+        return m;
     }
 
     /**

@@ -2,7 +2,6 @@ package blog.articles;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
@@ -29,9 +28,9 @@ class ArticleTest {
 
     @Test
     void anArticleCarriesItsBodyAndASummaryDoesNot() {
-        Map<String, Object> article = Article.encoder().encode(ok(Article.decoder().decode(full(), Path.ROOT)));
+        Map<String, Object> article = Article.encoder().encode(ok(Article.decoder().decode(full())));
         Map<String, Object> summary = ArticleSummary.encoder()
-                .encode(ok(ArticleSummary.decoder().decode(full(), Path.ROOT)));
+                .encode(ok(ArticleSummary.decoder().decode(full())));
 
         assertTrue(article.containsKey("body"));
         assertFalse(summary.containsKey("body"), "a list entry carries no body");
@@ -40,7 +39,7 @@ class ArticleTest {
     @Test
     void anAuthorArrivesAsANestedProfileRatherThanAName() {
         Map<String, Object> encoded =
-                Article.encoder().encode(ok(Article.decoder().decode(full(), Path.ROOT)));
+                Article.encoder().encode(ok(Article.decoder().decode(full())));
 
         assertInstanceOf(Map.class, encoded.get("author"));
         assertEquals("jake", ((Map<?, ?>) encoded.get("author")).get("username"));
@@ -49,7 +48,7 @@ class ArticleTest {
     @Test
     void anAbsentBioIsLeftOutOfTheEncodedAuthorRatherThanWrittenAsNull() {
         Map<String, Object> encoded =
-                Article.encoder().encode(ok(Article.decoder().decode(full(), Path.ROOT)));
+                Article.encoder().encode(ok(Article.decoder().decode(full())));
 
         // The spec writes "bio": null, so ConduitJson puts the key back on the way out. This is the
         // behaviour it exists to correct.
@@ -58,12 +57,12 @@ class ArticleTest {
 
     @Test
     void aSlugWithSpacesInItIsNotASlug() {
-        assertInstanceOf(Err.class, Slug.decoder().decode("how to train", Path.ROOT));
+        assertInstanceOf(Err.class, Slug.decoder().decode("how to train"));
     }
 
     @Test
     void anEmptyTagIsRefused() {
-        assertInstanceOf(Err.class, Tag.decoder().decode("", Path.ROOT));
+        assertInstanceOf(Err.class, Tag.decoder().decode(""));
     }
 
     private static Map<String, Object> full() {

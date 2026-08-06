@@ -3,7 +3,6 @@ package example.joboffer;
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Issue;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
@@ -32,7 +31,7 @@ class JobOfferDecodeTest {
 
     private Result<依頼> decode(String body) {
         JsonNode node = json.readTree(body);
-        return 依頼.jsonDecoder().decode(node, Path.ROOT);
+        return 依頼.jsonDecoder().decode(node);
     }
 
     /** 読めたはずの body を読む。読めなければ Issues を添えて落とす。 */

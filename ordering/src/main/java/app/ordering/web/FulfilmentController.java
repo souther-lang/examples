@@ -29,7 +29,6 @@ import example.shipping.PlanPicks;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.springframework.http.ResponseEntity;
@@ -82,7 +81,7 @@ public final class FulfilmentController {
             return ResponseEntity.badRequest().body(Map.of("error", "invalid_shelf", "at", e.at));
         }
 
-        return switch (Cart.decoder().decode(rawCart, Path.ROOT)) {
+        return switch (Cart.decoder().decode(rawCart)) {
             case Err<Cart> _ -> ResponseEntity.badRequest().body(Map.of("error", "invalid_cart"));
             case Ok<Cart>(var cart) -> switch (quote.apply(cart)) {
                 case PricedCart priced -> tx.execute(status -> switch (place.apply(priced)) {
@@ -113,8 +112,8 @@ public final class FulfilmentController {
         Map<Sku, Location> shelf = new LinkedHashMap<>();
         for (Map.Entry<?, ?> e : raw.entrySet()) {
             String key = String.valueOf(e.getKey());
-            Result<Sku> sku = Sku.decoder().decode(key, Path.ROOT);
-            Result<Location> location = Location.decoder().decode(e.getValue(), Path.ROOT);
+            Result<Sku> sku = Sku.decoder().decode(key);
+            Result<Location> location = Location.decoder().decode(e.getValue());
             if (!(sku instanceof Ok<Sku>(var s)) || !(location instanceof Ok<Location>(var l))) {
                 throw new BadShelf(key);
             }

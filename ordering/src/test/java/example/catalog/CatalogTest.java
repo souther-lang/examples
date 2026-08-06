@@ -2,7 +2,6 @@ package example.catalog;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
@@ -30,7 +29,7 @@ class CatalogTest {
     }
 
     private static Component decode(Map<String, Object> json) {
-        Result<Component> r = Component.decoder().decode(json, Path.ROOT);
+        Result<Component> r = Component.decoder().decode(json);
         if (r instanceof Err<Component> e) {
             throw new AssertionError("should decode: " + e.issues().asList());
         }
@@ -58,7 +57,7 @@ class CatalogTest {
         Map<String, Object> broken = Map.of("sku", "desk", "quantity", 1L, "parts", List.of(
                 Map.of("sku", "leg-set", "quantity", 0L, "parts", List.of())));
 
-        Result<Component> r = Component.decoder().decode(broken, Path.ROOT);
+        Result<Component> r = Component.decoder().decode(broken);
 
         Err<Component> err = (Err<Component>) r;
         assertEquals("/parts/0", err.issues().asList().get(0).path().toString());

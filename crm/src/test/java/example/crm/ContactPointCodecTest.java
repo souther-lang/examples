@@ -2,7 +2,6 @@ package example.crm;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
@@ -29,7 +28,7 @@ class ContactPointCodecTest {
         Map<String, Object> raw = Map.of("type", "EmailAndPhone",
                 "email", "ceo@acme.example.com", "phone", "+81-3-1234-5678");
 
-        switch (ContactPoint.decoder().decode(raw, Path.ROOT)) {
+        switch (ContactPoint.decoder().decode(raw)) {
             case Ok<ContactPoint> ok -> {
                 Map<String, Object> encoded = ContactPoint.encoder().encode(ok.value());
                 assertEquals("EmailAndPhone", encoded.get("type"), "the tag is the case name");
@@ -43,20 +42,20 @@ class ContactPointCodecTest {
 
     @Test
     void anUnknownDiscriminatorIsAnErrAtTheTopLevel() {
-        assertInstanceOf(Err.class, ContactPoint.decoder().decode(Map.of("type", "Fax"), Path.ROOT));
+        assertInstanceOf(Err.class, ContactPoint.decoder().decode(Map.of("type", "Fax")));
         // No tag at all is a failure too: the discriminator is not optional, and a decoder does not
         // guess which case a bare object meant.
-        assertInstanceOf(Err.class, ContactPoint.decoder().decode(Map.of("email", "a@example.com"), Path.ROOT));
+        assertInstanceOf(Err.class, ContactPoint.decoder().decode(Map.of("email", "a@example.com")));
     }
 
     @Test
     void aNewtypeInvariantInsideASumCaseIsEnforcedThroughTheDiscriminatedDecoder() {
         assertInstanceOf(Ok.class,
-                ContactPoint.decoder().decode(Map.of("type", "PhoneOnly", "phone", "+81-3-1234-5678"), Path.ROOT));
+                ContactPoint.decoder().decode(Map.of("type", "PhoneOnly", "phone", "+81-3-1234-5678")));
         assertInstanceOf(Err.class,
-                ContactPoint.decoder().decode(Map.of("type", "PhoneOnly", "phone", "1234"), Path.ROOT));
+                ContactPoint.decoder().decode(Map.of("type", "PhoneOnly", "phone", "1234")));
         assertInstanceOf(Err.class,
-                ContactPoint.decoder().decode(Map.of("type", "EmailOnly", "email", "no-at-sign"), Path.ROOT));
+                ContactPoint.decoder().decode(Map.of("type", "EmailOnly", "email", "no-at-sign")));
     }
 
     @Test
@@ -65,7 +64,7 @@ class ContactPointCodecTest {
                 "id", "003000000000001",
                 "accountId", "001000000000001",
                 "name", "Aoyagi",
-                "reach", Map.of("type", "EmailOnly", "email", "no-at-sign")), Path.ROOT);
+                "reach", Map.of("type", "EmailOnly", "email", "no-at-sign")));
 
         switch (bad) {
             case Err<Contact>(var issues) -> assertTrue(issues.asList().size() >= 1,
@@ -82,7 +81,7 @@ class ContactPointCodecTest {
                 "id", "003-not-an-id",
                 "accountId", "001000000000001",
                 "name", "Aoyagi",
-                "reach", Map.of("type", "EmailOnly", "email", "no-at-sign")), Path.ROOT);
+                "reach", Map.of("type", "EmailOnly", "email", "no-at-sign")));
 
         switch (bad) {
             case Err<Contact>(var issues) -> assertEquals(2, issues.asList().size(), issues.asList().toString());
@@ -100,7 +99,7 @@ class ContactPointCodecTest {
                 "name", "Aoyagi",
                 "reach", Map.of("type", "PhoneOnly", "phone", "+81-3-1234-5678"));
 
-        Map<String, Object> encoded = Contact.encoder().encode(ok(Contact.decoder().decode(raw, Path.ROOT)));
+        Map<String, Object> encoded = Contact.encoder().encode(ok(Contact.decoder().decode(raw)));
         assertEquals(null, encoded.get("title"), "None omits the key rather than writing a null");
         assertEquals("PhoneOnly", ((Map<?, ?>) encoded.get("reach")).get("type"));
     }
@@ -113,13 +112,13 @@ class ContactPointCodecTest {
         // a lead's source was.
         Map<String, Object> raw = Map.of("type", "PartnerReferral", "partner", "001000000000009");
 
-        Map<String, Object> encoded = LeadSource.encoder().encode(ok(LeadSource.decoder().decode(raw, Path.ROOT)));
+        Map<String, Object> encoded = LeadSource.encoder().encode(ok(LeadSource.decoder().decode(raw)));
         assertEquals("PartnerReferral", encoded.get("type"));
         assertEquals("001000000000009", encoded.get("partner"));
         assertEquals(2, encoded.size(), "no wrapper layer for the sum in between: " + encoded);
 
         // The tag of an intermediate layer is not a tag anything answers to.
-        assertInstanceOf(Err.class, LeadSource.decoder().decode(Map.of("type", "Referral"), Path.ROOT));
+        assertInstanceOf(Err.class, LeadSource.decoder().decode(Map.of("type", "Referral")));
     }
 
     private static <T> T ok(Result<T> result) {

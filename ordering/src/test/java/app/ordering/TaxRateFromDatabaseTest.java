@@ -11,7 +11,6 @@ import example.tax.TaxRate;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.jooq.DSLContext;
@@ -74,7 +73,7 @@ class TaxRateFromDatabaseTest {
     /** A category is decoded, not constructed: nothing outside the generated code can build one.
      *  Every case is a unit data, so it decodes from the case's name. */
     private TaxCategory category(String name) {
-        return ok(TaxCategory.decoder().decode(name, Path.ROOT));
+        return ok(TaxCategory.decoder().decode(name));
     }
 
     private <T> T ok(Result<T> r) {
@@ -88,7 +87,7 @@ class TaxRateFromDatabaseTest {
         return ok(PricedCart.decoder().decode(Map.of(
                 "items", List.of(Map.of("sku", "apple", "quantity", 3L, "unitPrice", 105L, "weightGrams", 120L)),
                 "total", total,
-                "highValue", false), Path.ROOT));
+                "highValue", false)));
     }
 
     private TaxBreakdown breakdown(long total, String category, LocalDate on) {
@@ -178,7 +177,7 @@ class TaxRateFromDatabaseTest {
                         Map.of("sku", "note", "quantity", 1L, "unitPrice", 105L, "weightGrams", 120L),
                         Map.of("sku", "clip", "quantity", 1L, "unitPrice", 105L, "weightGrams", 120L)),
                 "total", 315L,
-                "highValue", false), Path.ROOT));
+                "highValue", false)));
 
         TaxAllocation allocation = assertInstanceOf(TaxAllocation.class,
                 allocateTax.apply(threeLines, category("StandardRate"), TODAY));

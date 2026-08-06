@@ -2,7 +2,6 @@ package example.ledger;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
@@ -40,7 +39,7 @@ class LedgerTest {
         Result<JournalEntry> r = JournalEntry.decoder().decode(entry(List.of(
                 posting("1310", "Debit", "346.0"),
                 posting("4100", "Credit", "315.0"),
-                posting("2170", "Credit", "31.0"))), Path.ROOT);
+                posting("2170", "Credit", "31.0"))));
 
         JournalEntry decoded = ((Ok<JournalEntry>) assertInstanceOf(Ok.class, r)).value();
         assertEquals(3, decoded.postings().size());
@@ -53,7 +52,7 @@ class LedgerTest {
         Result<JournalEntry> r = JournalEntry.decoder().decode(entry(List.of(
                 posting("1310", "Debit", "346.0"),
                 posting("4100", "Credit", "315.0"),
-                posting("2170", "Credit", "30.0"))), Path.ROOT);
+                posting("2170", "Credit", "30.0"))));
 
         Err<JournalEntry> err = (Err<JournalEntry>) assertInstanceOf(Err.class, r);
         assertTrue(err.issues().asList().toString().contains("balanced"),
@@ -64,7 +63,7 @@ class LedgerTest {
     @Test
     void aSinglePostingIsNotAnEntry() {
         Result<JournalEntry> r = JournalEntry.decoder().decode(
-                entry(List.of(posting("1310", "Debit", "0.0"))), Path.ROOT);
+                entry(List.of(posting("1310", "Debit", "0.0"))));
 
         Err<JournalEntry> err = (Err<JournalEntry>) assertInstanceOf(Err.class, r);
         assertTrue(err.issues().asList().toString().contains("twoSided"),
@@ -79,11 +78,11 @@ class LedgerTest {
         JournalEntry invoice = ok(JournalEntry.decoder().decode(entry(List.of(
                 posting("1310", "Debit", "346.0"),
                 posting("4100", "Credit", "315.0"),
-                posting("2170", "Credit", "31.0"))), Path.ROOT));
+                posting("2170", "Credit", "31.0")))));
         JournalEntry credit = ok(JournalEntry.decoder().decode(entry(List.of(
                 posting("4300", "Debit", "100.0"),
                 posting("2170", "Debit", "10.0"),
-                posting("1310", "Credit", "110.0"))), Path.ROOT));
+                posting("1310", "Credit", "110.0")))));
 
         TrialBalance trial = BalanceOff.of().apply(List.of(invoice, credit));
 

@@ -15,7 +15,6 @@ import example.ordering.ReserveStockResult;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 
 import org.jooq.DSLContext;
 
@@ -73,7 +72,7 @@ public final class JooqReserveStock extends ReserveStock {
 
         // Every line reserved. ConfirmedOrder holds fields, so build it through the decoder.
         Map<String, Object> raw = Map.of("orderId", orderId, "total", total);
-        return switch (ConfirmedOrder.decoder().decode(raw, Path.ROOT)) {
+        return switch (ConfirmedOrder.decoder().decode(raw)) {
             case Ok<ConfirmedOrder>(var order) -> order;
             case Err<ConfirmedOrder>(var issues) ->
                     throw new IllegalStateException("failed to build ConfirmedOrder: " + issues.asList());

@@ -2,7 +2,6 @@ package example.inventory;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
@@ -19,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 class InventoryTest {
 
     private Barcode barcode(String raw) {
-        Result<Barcode> r = Barcode.decoder().decode(raw, Path.ROOT);
+        Result<Barcode> r = Barcode.decoder().decode(raw);
         if (r instanceof Err<Barcode> e) {
             throw new AssertionError("should decode: " + e.issues().asList());
         }
@@ -81,14 +80,14 @@ class InventoryTest {
     }
 
     private Eaches eaches(long n) {
-        return ((Ok<Eaches>) Eaches.decoder().decode(n, Path.ROOT)).value();
+        return ((Ok<Eaches>) Eaches.decoder().decode(n)).value();
     }
 
     private Cases cases(long n) {
-        return ((Ok<Cases>) Cases.decoder().decode(n, Path.ROOT)).value();
+        return ((Ok<Cases>) Cases.decoder().decode(n)).value();
     }
 
     private PackSize packSize(long n) {
-        return ((Ok<PackSize>) PackSize.decoder().decode(n, Path.ROOT)).value();
+        return ((Ok<PackSize>) PackSize.decoder().decode(n)).value();
     }
 }

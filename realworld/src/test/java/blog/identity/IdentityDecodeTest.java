@@ -2,7 +2,6 @@ package blog.identity;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
@@ -23,7 +22,7 @@ class IdentityDecodeTest {
 
     @Test
     void aProfileWithNoBioOrImageDecodesWithBothFieldsAbsent() {
-        Profile profile = ok(Profile.decoder().decode(Map.of("username", "jake"), Path.ROOT));
+        Profile profile = ok(Profile.decoder().decode(Map.of("username", "jake")));
         assertInstanceOf(Option.None.class, profile.bio());
         assertInstanceOf(Option.None.class, profile.image());
     }
@@ -31,13 +30,13 @@ class IdentityDecodeTest {
     @Test
     void anEmptyUsernameFailsTheLengthInvariant() {
         assertInstanceOf(Err.class,
-                Profile.decoder().decode(Map.of("username", ""), Path.ROOT));
+                Profile.decoder().decode(Map.of("username", "")));
     }
 
     @Test
     void aStringWithNoAtSignIsNotAnEmail() {
         assertInstanceOf(Err.class,
-                Email.decoder().decode("not-an-email", Path.ROOT));
+                Email.decoder().decode("not-an-email"));
     }
 
     private static <T> T ok(Result<T> result) {

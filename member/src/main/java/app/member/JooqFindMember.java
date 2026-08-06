@@ -11,7 +11,6 @@ import example.member.会員ID;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 
 import org.jooq.DSLContext;
 import org.jooq.Record4;
@@ -78,7 +77,7 @@ public final class JooqFindMember extends FindMember {
                 "表示名", row.value3());
 
         // 会員.decoder() は Decoder<Map<String,Object>, 会員>。decode は Result<会員> を返す。
-        return switch (会員.decoder().decode(raw, Path.ROOT)) {
+        return switch (会員.decoder().decode(raw)) {
             case Ok<会員>(var 会員) -> 会員;               // 会員（本線）
             case Err<会員> _ -> 保存データ不正();   // 保存値がドメイン不変条件を破っていた
         };

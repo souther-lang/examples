@@ -2,7 +2,6 @@ package example.activity;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
@@ -98,7 +97,7 @@ class ActivityTest {
                 "related", Map.of("type", "RelatedToAccount", "accountId", "001000000000100"),
                 "startAt", LocalDateTime.parse(startAt),
                 "minutes", minutes,
-                "attendees", attendees), Path.ROOT));
+                "attendees", attendees)));
     }
 
     private static CallTask call(String id, String dueOn, String accountId) {
@@ -108,15 +107,15 @@ class ActivityTest {
                 "owner", "u-001",
                 "related", Map.of("type", "RelatedToAccount", "accountId", accountId),
                 "dueOn", LocalDate.parse(dueOn),
-                "outcome", Map.of("type", "Connected", "minutes", 20)), Path.ROOT));
+                "outcome", Map.of("type", "Connected", "minutes", 20))));
     }
 
     private static example.crm.UserId user(String id) {
-        return ok(example.crm.UserId.decoder().decode(id, Path.ROOT));
+        return ok(example.crm.UserId.decoder().decode(id));
     }
 
     private static CadenceDays cadence(int days) {
-        return ok(CadenceDays.decoder().decode((long) days, Path.ROOT));
+        return ok(CadenceDays.decoder().decode((long) days));
     }
 
     private static <T> T ok(Result<T> result) {

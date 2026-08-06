@@ -5,7 +5,6 @@ import shared.money.Currency;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
@@ -26,8 +25,7 @@ class CrossProjectImportTest {
     void 別プロジェクトの型を自分のdataのフィールドに持てる() {
         Result<Invoice> decoded = Invoice.decoder().decode(
                 Map.of("currency", "JPY",
-                        "line", Map.of("description", "consulting", "amount", 1200L)),
-                Path.ROOT);
+                        "line", Map.of("description", "consulting", "amount", 1200L)));
 
         assertInstanceOf(Ok.class, decoded);
         assertEquals(1200L, value(decoded).line().amount().value());
@@ -35,15 +33,15 @@ class CrossProjectImportTest {
 
     @Test
     void 別プロジェクトが宣言したinvariantがここでも効く() {
-        assertInstanceOf(Err.class, Amount.decoder().decode(-1L, Path.ROOT));
-        assertInstanceOf(Err.class, Currency.decoder().decode("JPYEN", Path.ROOT));
+        assertInstanceOf(Err.class, Amount.decoder().decode(-1L));
+        assertInstanceOf(Err.class, Currency.decoder().decode("JPYEN"));
     }
 
     @Test
     void 別プロジェクトの型を受け取るbehaviorを呼べる() {
         Line line = value(Line.decoder().decode(
-                Map.of("description", "consulting", "amount", 1200L), Path.ROOT));
-        Currency jpy = value(Currency.decoder().decode("JPY", Path.ROOT));
+                Map.of("description", "consulting", "amount", 1200L)));
+        Currency jpy = value(Currency.decoder().decode("JPY"));
 
         Invoice invoice = Issue.of().apply(line, jpy);
 

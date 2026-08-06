@@ -22,7 +22,6 @@ import example.ordering.Place;
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Issue;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
@@ -69,7 +68,7 @@ public final class CheckoutController {
     @PostMapping
     public ResponseEntity<Object> checkout(@RequestBody Map<String, Object> body) {
         // Decode the input at the boundary; data cannot be built outside the generated code (spec 8.5).
-        return switch (Cart.decoder().decode(body, Path.ROOT)) {
+        return switch (Cart.decoder().decode(body)) {
             // Decode failure: keep the Issues (which field broke which rule) and return them at 400.
             case Err<Cart>(var issues) -> ResponseEntity.badRequest().body(Map.of(
                     "error", "invalid_cart",

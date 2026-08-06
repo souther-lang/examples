@@ -10,7 +10,6 @@ import example.member.送信済み;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
@@ -30,17 +29,17 @@ class MemberLifecycleTest {
 
     @Test
     void 会員IDはnewtypeとして裸の文字列からdecodeされる() {
-        Result<会員ID> ok = 会員ID.decoder().decode("m-001", Path.ROOT);
+        Result<会員ID> ok = 会員ID.decoder().decode("m-001");
         assertInstanceOf(Ok.class, ok);
 
-        Result<会員ID> empty = 会員ID.decoder().decode("", Path.ROOT);
+        Result<会員ID> empty = 会員ID.decoder().decode("");
         assertInstanceOf(Err.class, empty, "invariant length(value) > 0 に反する");
     }
 
     @Test
     void メールアドレスのinvariantが検査される() {
-        assertInstanceOf(Ok.class, メールアドレス.decoder().decode("a@example.com", Path.ROOT));
-        assertInstanceOf(Err.class, メールアドレス.decoder().decode("no-at-sign", Path.ROOT));
+        assertInstanceOf(Ok.class, メールアドレス.decoder().decode("a@example.com"));
+        assertInstanceOf(Err.class, メールアドレス.decoder().decode("no-at-sign"));
     }
 
     @Test
@@ -49,12 +48,12 @@ class MemberLifecycleTest {
         Map<String, Object> good = Map.of("id", "m-001",
                 "メール", Map.of("type", "未アクティベート", "value", "a@example.com"),
                 "表示名", "Bob");
-        assertInstanceOf(Ok.class, 会員.decoder().decode(good, Path.ROOT));
+        assertInstanceOf(Ok.class, 会員.decoder().decode(good));
 
         Map<String, Object> bad = Map.of("id", "",
                 "メール", Map.of("type", "未アクティベート", "value", "nope"),
                 "表示名", "Bob");
-        Result<会員> err = 会員.decoder().decode(bad, Path.ROOT);
+        Result<会員> err = 会員.decoder().decode(bad);
         assertInstanceOf(Err.class, err);
         if (err instanceof Err<会員> e) {
             assertTrue(e.issues().asList().size() >= 1, "id / メール の invariant 違反が集積される");
@@ -76,7 +75,7 @@ class MemberLifecycleTest {
         Map<String, Object> raw = Map.of("id", "m-1",
                 "メール", Map.of("type", activated ? "アクティベート済み" : "未アクティベート", "value", "a@example.com"),
                 "表示名", "A");
-        return switch (会員.decoder().decode(raw, Path.ROOT)) {
+        return switch (会員.decoder().decode(raw)) {
             case Ok<会員>(var 会員) -> 会員;
             case Err<会員>(var issues) -> throw new AssertionError(issues.asList().toString());
         };
@@ -85,7 +84,7 @@ class MemberLifecycleTest {
     @Test
     void 会員表示はdecodeしてencodeで往復する() {
         Map<String, Object> raw = Map.of("id", "m-001", "メール", "a@example.com", "表示名", "Bob");
-        Result<会員表示> decoded = 会員表示.decoder().decode(raw, Path.ROOT);
+        Result<会員表示> decoded = 会員表示.decoder().decode(raw);
 
         switch (decoded) {
             case Ok<会員表示> ok -> {

@@ -4,7 +4,6 @@ package app.realworld.web;
 import blog.identity.Username;
 
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 
 import org.springframework.core.MethodParameter;
 import org.springframework.web.bind.support.WebDataBinderFactory;
@@ -55,7 +54,7 @@ public final class ViewerArgumentResolver implements HandlerMethodArgumentResolv
      * that ever leaked could not put an unrepresentable name into one.
      */
     private static Optional<Username> asUsername(String subject) {
-        return Username.decoder().decode(subject, Path.ROOT) instanceof Ok<Username> ok
+        return Username.decoder().decode(subject) instanceof Ok<Username> ok
                 ? Optional.of(ok.value())
                 : Optional.empty();
     }

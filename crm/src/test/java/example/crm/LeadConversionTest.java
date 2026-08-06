@@ -11,7 +11,6 @@ import example.pipeline.Prospecting;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
@@ -200,7 +199,7 @@ class LeadConversionTest {
             if (row == null) {
                 return AccountNotFound();
             }
-            return switch (Account.decoder().decode(row, Path.ROOT)) {
+            return switch (Account.decoder().decode(row)) {
                 case Ok<Account> ok -> ok.value();
                 case Err<Account> e -> throw new IllegalStateException("stored account is not one: " + e.issues().asList());
             };
@@ -226,7 +225,7 @@ class LeadConversionTest {
         raw.put("qualifiedOn", LocalDate.parse("2026-07-15"));
         raw.put("score", 72);
         raw.put("budgetConfirmed", budgetConfirmed);
-        return ok(QualifiedLead.decoder().decode(raw, Path.ROOT));
+        return ok(QualifiedLead.decoder().decode(raw));
     }
 
     private static ConversionRequest request(String convertedOn, String closeDate) {
@@ -239,7 +238,7 @@ class LeadConversionTest {
                 "accountType", Map.of("type", "Prospect"),
                 "industry", "Technology",
                 "employees", 420,
-                "currency", "JPY"), Path.ROOT));
+                "currency", "JPY")));
     }
 
     private static ConversionRequest requestWithoutOpportunity() {
@@ -251,7 +250,7 @@ class LeadConversionTest {
                 "accountType", Map.of("type", "Prospect"),
                 "industry", "Technology",
                 "employees", 420,
-                "currency", "JPY"), Path.ROOT));
+                "currency", "JPY")));
     }
 
     private static NewLead newLead(String email) {
@@ -263,7 +262,7 @@ class LeadConversionTest {
                 "source", Map.of("type", "WebForm"),
                 "campaigns", List.of(),
                 "owner", "u-001",
-                "createdOn", LocalDate.parse("2026-07-01")), Path.ROOT));
+                "createdOn", LocalDate.parse("2026-07-01"))));
     }
 
     private static NewLead phoneOnlyLead() {
@@ -275,7 +274,7 @@ class LeadConversionTest {
                 "source", Map.of("type", "PhoneInquiry"),
                 "campaigns", List.of(),
                 "owner", "u-002",
-                "createdOn", LocalDate.parse("2026-07-01")), Path.ROOT));
+                "createdOn", LocalDate.parse("2026-07-01"))));
     }
 
     private static Map<String, Object> account(String domain) {
@@ -291,15 +290,15 @@ class LeadConversionTest {
     }
 
     private static AccountBook emptyAccounts() {
-        return ok(AccountBook.decoder().decode(List.of(), Path.ROOT));
+        return ok(AccountBook.decoder().decode(List.of()));
     }
 
     private static AccountBook accountsOn(String domain) {
-        return ok(AccountBook.decoder().decode(List.of(account(domain)), Path.ROOT));
+        return ok(AccountBook.decoder().decode(List.of(account(domain))));
     }
 
     private static ContactBook emptyContacts() {
-        return ok(ContactBook.decoder().decode(List.of(), Path.ROOT));
+        return ok(ContactBook.decoder().decode(List.of()));
     }
 
     private static <T> T ok(Result<T> result) {

@@ -2,7 +2,6 @@ package example.whodunit;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -19,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 class WhodunitTest {
 
     private static Clue clue(Map<String, Object> raw) {
-        return switch (Clue.decoder().decode(raw, Path.ROOT)) {
+        return switch (Clue.decoder().decode(raw)) {
             case Ok<Clue> ok -> ok.value();
             case Err<Clue> err -> throw new AssertionError("decode failed: " + err.issues());
         };

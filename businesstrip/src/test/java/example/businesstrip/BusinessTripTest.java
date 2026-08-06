@@ -2,7 +2,6 @@ package example.businesstrip;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
-import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
@@ -61,7 +60,7 @@ class BusinessTripTest {
 
     @Test
     void 入れ子の直和とスプレッドしたフィールドをdecodeする() {
-        申請準備中 準備中 = ok(申請準備中.decoder().decode(申請(交通費明細(28000L, "立替")), Path.ROOT));
+        申請準備中 準備中 = ok(申請準備中.decoder().decode(申請(交通費明細(28000L, "立替"))));
 
         Map<String, Object> 復元 = 申請準備中.encoder().encode(準備中);
 
@@ -76,14 +75,14 @@ class BusinessTripTest {
                 "費目", Map.of("type", "宿泊費", "金額", 12000L, "インボイス登録番号", "X999"),
                 "負担", "先方負担");
 
-        Result<申請準備中> 結果 = 申請準備中.decoder().decode(申請(不正な宿泊費), Path.ROOT);
+        Result<申請準備中> 結果 = 申請準備中.decoder().decode(申請(不正な宿泊費));
 
         assertInstanceOf(Err.class, 結果);
     }
 
     @Test
     void 一般社員の申請は事前承認待ちになる() {
-        申請準備中 準備中 = ok(申請準備中.decoder().decode(申請(交通費明細(3000L, "立替")), Path.ROOT));
+        申請準備中 準備中 = ok(申請準備中.decoder().decode(申請(交通費明細(3000L, "立替"))));
 
         出張申請を提出するResult 結果 =
                 出張申請を提出する.of().apply(準備中, LocalDateTime.parse("2026-07-27T09:00:00"));
@@ -94,10 +93,10 @@ class BusinessTripTest {
 
     @Test
     void 提出から承認完了まで運ぶと精算額は立替分だけになる() {
-        従業員ID 上長 = ok(従業員ID.decoder().decode("m-001", Path.ROOT));
+        従業員ID 上長 = ok(従業員ID.decoder().decode("m-001"));
         LocalDateTime 提出日時 = LocalDateTime.parse("2026-07-27T09:00:00");
 
-        申請準備中 準備中 = ok(申請準備中.decoder().decode(申請(交通費明細(28000L, "立替")), Path.ROOT));
+        申請準備中 準備中 = ok(申請準備中.decoder().decode(申請(交通費明細(28000L, "立替"))));
         事前承認待ち 待ち =
                 assertInstanceOf(事前承認待ち.class, 出張申請を提出する.of().apply(準備中, 提出日時));
         事前承認済み 承認済み = assertInstanceOf(事前承認済み.class,
@@ -105,8 +104,8 @@ class BusinessTripTest {
 
         // 実費用は立替31000円と会社カード12000円。払い戻すのは立替だけ。
         List<費用明細> 実費 = List.of(
-                ok(費用明細.decoder().decode(交通費明細(31000L, "立替"), Path.ROOT)),
-                ok(費用明細.decoder().decode(交通費明細(12000L, "会社カード"), Path.ROOT)));
+                ok(費用明細.decoder().decode(交通費明細(31000L, "立替"))),
+                ok(費用明細.decoder().decode(交通費明細(12000L, "会社カード"))));
         出張完了 完了 = assertInstanceOf(出張完了.class,
                 出張を完了する.of().apply(承認済み, 実費, "訪問して受注",
                         LocalDateTime.parse("2026-08-05T18:00:00")));
@@ -120,8 +119,8 @@ class BusinessTripTest {
 
     @Test
     void 上長でない承認者は承認権限なしで返る() {
-        従業員ID 他人 = ok(従業員ID.decoder().decode("m-999", Path.ROOT));
-        申請準備中 準備中 = ok(申請準備中.decoder().decode(申請(交通費明細(3000L, "立替")), Path.ROOT));
+        従業員ID 他人 = ok(従業員ID.decoder().decode("m-999"));
+        申請準備中 準備中 = ok(申請準備中.decoder().decode(申請(交通費明細(3000L, "立替"))));
         事前承認待ち 待ち = assertInstanceOf(事前承認待ち.class,
                 出張申請を提出する.of().apply(準備中, LocalDateTime.parse("2026-07-27T09:00:00")));
 
