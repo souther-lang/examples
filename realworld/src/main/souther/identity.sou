@@ -1,0 +1,21 @@
+module example.identity
+
+data Username = String
+    invariant String.length(value) >= 1 && String.length(value) <= 40
+
+// The email format check follows crm.sou's EmailAddress: String.matches takes the pattern first
+// and the value second, and the match is already anchored to the whole string, so no ^ / $.
+data Email = String
+    invariant String.matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+", value)
+
+data Password = String
+    invariant String.length(value) >= 8
+
+data PasswordHash = String
+    invariant String.length(value) >= 1
+
+data Bio = String
+
+data ImageUrl = String
+
+data Profile = { username: Username, bio: Bio?, image: ImageUrl? }

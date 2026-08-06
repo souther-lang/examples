@@ -1,0 +1,53 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>example.souther</groupId>
+        <artifactId>souther-examples</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>realworld</artifactId>
+
+    <description>
+        The RealWorld/Conduit API: a Spring Boot backend whose domain types are Souther value types and
+        whose HTTP boundary decodes into them and encodes them back out. Like ordering, this module
+        actually runs: it starts Boot and connects to H2 through jOOQ.
+    </description>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>4.1.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- Souther 生成物のランタイム(decoder/encoder。jOOQ Record 源は raoh-jooq) -->
+        <dependency><groupId>org.souther-lang</groupId><artifactId>souther-runtime</artifactId></dependency>
+        <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh</artifactId></dependency>
+        <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh-jooq</artifactId></dependency>
+
+        <!-- 実行する境界:Spring Boot の標準スターター。DataSource / DSLContext / TransactionManager /
+             schema.sql 実行はすべて autoconfig に任せる。 -->
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-jooq</artifactId></dependency>
+        <dependency><groupId>com.h2database</groupId><artifactId>h2</artifactId><scope>runtime</scope></dependency>
+
+        <!-- Password hashing and JWT issuance for the auth boundary. -->
+        <dependency><groupId>org.springframework.security</groupId><artifactId>spring-security-crypto</artifactId></dependency>
+        <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-api</artifactId><version>0.13.0</version></dependency>
+        <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-impl</artifactId><version>0.13.0</version><scope>runtime</scope></dependency>
+        <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-jackson</artifactId><version>0.13.0</version><scope>runtime</scope></dependency>
+
+        <!-- テスト:@SpringBootTest で実際に Boot を起動し、MockMvc で本物の HTTP を通す -->
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+    </dependencies>
+</project>

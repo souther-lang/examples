@@ -1,0 +1,1 @@
+-- Placeholder. Later tasks add the tables (users, articles, comments, tags, favorites, follows).

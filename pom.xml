@@ -27,6 +27,7 @@
         <module>ordering</module>
         <module>whodunit</module>
         <module>shippingfee</module>
+        <module>realworld</module>
     </modules>
 
     <properties>
