@@ -96,6 +96,56 @@ example registerUser
                       , password = Password("jakejake") })
         -> UsernameTaken
 
+// === updating the current user ===
+// The boundary works out which fields the request actually changed and hands over the user it wants
+// stored; what the domain decides is whether the two names it may have moved are free. The check is
+// skipped when a name did not move, so re-saving a profile unchanged is no lookup at all — and an
+// address only this user holds is not reported as taken against itself.
+behavior storeUserUpdate : (previous: Username, user: User) -> User
+
+behavior updateUser : (current: User, wanted: User) -> User | EmailTaken | UsernameTaken
+    depends on findUserByEmail, findUserByName, storeUserUpdate
+
+let updateUser (current, wanted, findUserByEmail, findUserByName, storeUserUpdate) = {
+    let emailFree =
+        if wanted.email == current.email
+        then true
+        else match findUserByEmail(wanted.email) with
+                 | User         -> false
+                 | UserNotFound -> true
+    guard emailFree else EmailTaken
+
+    let usernameFree =
+        if wanted.username == current.username
+        then true
+        else match findUserByName(wanted.username) with
+                 | User         -> false
+                 | UserNotFound -> true
+    guard usernameFree else UsernameTaken
+
+    storeUserUpdate(current.username, wanted)
+}
+
+// A password is a credential rather than part of a User, so changing one writes nowhere near this
+// behavior. It has one rule — Password's invariant — and the decoder is what enforces it, so there
+// is nothing left for a composed behavior to decide and the boundary calls this write directly.
+behavior storePassword : (username: Username, hash: PasswordHash) -> PasswordHash
+
+fake storeUserUpdate
+    | _ -> jake
+
+example updateUser
+    | "a user who moved neither name is written back with no lookup at all" :
+        (jake, jake) -> jake
+    | "moving to an address somebody else holds is refused" :
+        (jake, User { username = Username("jake"), bio = None, image = None
+                    , email = Email("taken@example.com") })
+        -> EmailTaken
+    | "moving to a username somebody else holds is refused" :
+        (jake, User { username = Username("taken"), bio = None, image = None
+                    , email = Email("jake@jake.jake") })
+        -> UsernameTaken
+
 // === logging in ===
 // What a login reads is one row: the user and the hash to check the password against. They are read
 // together because they are read for one purpose, and Credentialed is where the hash is allowed to
