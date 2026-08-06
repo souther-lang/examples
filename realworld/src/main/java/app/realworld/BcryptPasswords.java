@@ -3,10 +3,10 @@
 // algorithm is a boundary decision that can change without touching a .sou.
 package app.realworld;
 
-import example.identity.HashPassword;
-import example.identity.Password;
-import example.identity.PasswordHash;
-import example.identity.VerifyPassword;
+import blog.identity.HashPassword;
+import blog.identity.Password;
+import blog.identity.PasswordHash;
+import blog.identity.VerifyPassword;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 

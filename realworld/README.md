@@ -69,6 +69,13 @@ article is, how its slug is made, and who may change it. `comments.sou` hangs co
 The chain runs comments → articles → identity, and articles → identity, so the two paths to `Profile`
 meet and agree.
 
+They are `blog.identity`, `blog.articles` and `blog.comments` rather than `example.*` like the rest of
+this repository, and the root is the point: what these three model is a blogging platform, and the
+RealWorld API is one way to reach it. Naming them `app.realworld.*` would have put the domain under
+the name of an API it does not know exists, and the whole shape of this module — the boundary
+reconciling two JSONs — depends on that being true. `shared.money` names its root for the same kind of
+reason.
+
 Some things are worth pointing at:
 
 - **A `User` does not carry its password hash.** A `User` is what a response is built from and a

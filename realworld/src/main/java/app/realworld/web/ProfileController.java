@@ -1,14 +1,14 @@
 // The HTTP boundary for profiles and the follow graph.
 package app.realworld.web;
 
-import example.identity.CannotFollowSelf;
-import example.identity.FindUserByName;
-import example.identity.Follow;
-import example.identity.Followees;
-import example.identity.StoreUnfollow;
-import example.identity.User;
-import example.identity.UserNotFound;
-import example.identity.Username;
+import blog.identity.CannotFollowSelf;
+import blog.identity.FindUserByName;
+import blog.identity.Follow;
+import blog.identity.Followees;
+import blog.identity.StoreUnfollow;
+import blog.identity.User;
+import blog.identity.UserNotFound;
+import blog.identity.Username;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;

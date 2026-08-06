@@ -6,7 +6,7 @@
 // and writes its input and output types when it overrides apply, so every type on the edge of one is
 // on this list. A module with no exposing at all exports nothing, which is why the list exists rather
 // than being omitted as issuetracker's is.
-module example.identity exposing (
+module blog.identity exposing (
     Username,
     Email,
     Password,

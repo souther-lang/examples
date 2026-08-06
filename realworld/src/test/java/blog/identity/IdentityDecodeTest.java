@@ -1,4 +1,4 @@
-package example.identity;
+package blog.identity;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;

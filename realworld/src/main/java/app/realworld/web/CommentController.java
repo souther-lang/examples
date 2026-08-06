@@ -5,22 +5,22 @@
 // between the two routes is the same asymmetry the .sou has.
 package app.realworld.web;
 
-import example.articles.Article;
-import example.comments.Comment;
-import example.comments.CommentBody;
-import example.comments.CommentId;
-import example.comments.CommentNotFound;
-import example.comments.CommentThread;
-import example.comments.DeleteComment;
-import example.comments.FindComment;
-import example.comments.NotTheAuthor;
-import example.comments.ReadComments;
-import example.comments.Removed;
-import example.comments.StoreComment;
-import example.identity.FindUserByName;
-import example.identity.User;
-import example.identity.UserNotFound;
-import example.identity.Username;
+import blog.articles.Article;
+import blog.comments.Comment;
+import blog.comments.CommentBody;
+import blog.comments.CommentId;
+import blog.comments.CommentNotFound;
+import blog.comments.CommentThread;
+import blog.comments.DeleteComment;
+import blog.comments.FindComment;
+import blog.comments.NotTheAuthor;
+import blog.comments.ReadComments;
+import blog.comments.Removed;
+import blog.comments.StoreComment;
+import blog.identity.FindUserByName;
+import blog.identity.User;
+import blog.identity.UserNotFound;
+import blog.identity.Username;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -133,10 +133,10 @@ public class CommentController {
         };
     }
 
-    private static example.identity.Profile profileOf(User author) {
+    private static blog.identity.Profile profileOf(User author) {
         Map<String, Object> raw = new LinkedHashMap<>(User.encoder().encode(author));
         raw.remove("email");
-        return decodeOrFail(example.identity.Profile.decoder(), raw);
+        return decodeOrFail(blog.identity.Profile.decoder(), raw);
     }
 
     private static LocalDateTime now() {

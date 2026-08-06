@@ -7,22 +7,22 @@
 // a behavior's output in a .sou fails this file to compile rather than falling through at runtime.
 package app.realworld.web;
 
-import example.identity.EmailTaken;
-import example.identity.Credentials;
-import example.identity.FindUserByName;
-import example.identity.FindUserByNameResult;
-import example.identity.HashPassword;
-import example.identity.InvalidCredentials;
-import example.identity.LoginUser;
-import example.identity.Password;
-import example.identity.Registration;
-import example.identity.RegisterUser;
-import example.identity.StorePassword;
-import example.identity.UpdateUser;
-import example.identity.User;
-import example.identity.UserNotFound;
-import example.identity.Username;
-import example.identity.UsernameTaken;
+import blog.identity.EmailTaken;
+import blog.identity.Credentials;
+import blog.identity.FindUserByName;
+import blog.identity.FindUserByNameResult;
+import blog.identity.HashPassword;
+import blog.identity.InvalidCredentials;
+import blog.identity.LoginUser;
+import blog.identity.Password;
+import blog.identity.Registration;
+import blog.identity.RegisterUser;
+import blog.identity.StorePassword;
+import blog.identity.UpdateUser;
+import blog.identity.User;
+import blog.identity.UserNotFound;
+import blog.identity.Username;
+import blog.identity.UsernameTaken;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

@@ -3,7 +3,7 @@
 // a header.
 package app.realworld.web;
 
-import example.identity.Username;
+import blog.identity.Username;
 
 import java.util.Optional;
 

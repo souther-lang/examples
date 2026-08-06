@@ -1,9 +1,9 @@
 // The tags any article carries. The one endpoint in the API that asks nobody who is reading.
 package app.realworld.web;
 
-import example.articles.ReadTags;
-import example.articles.Tag;
-import example.articles.TagList;
+import blog.articles.ReadTags;
+import blog.articles.Tag;
+import blog.articles.TagList;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;

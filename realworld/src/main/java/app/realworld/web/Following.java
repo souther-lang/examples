@@ -6,9 +6,9 @@
 // the followee set is one query for the whole request, and membership is then free.
 package app.realworld.web;
 
-import example.identity.Followees;
-import example.identity.ReadFollowees;
-import example.identity.Username;
+import blog.identity.Followees;
+import blog.identity.ReadFollowees;
+import blog.identity.Username;
 
 import java.util.Set;
 

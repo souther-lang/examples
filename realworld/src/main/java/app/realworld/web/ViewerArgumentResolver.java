@@ -1,7 +1,7 @@
 // Resolves the Viewer parameter from the Authorization header.
 package app.realworld.web;
 
-import example.identity.Username;
+import blog.identity.Username;
 
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Path;

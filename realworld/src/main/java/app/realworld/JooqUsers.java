@@ -12,24 +12,24 @@
 // the exception passes through Souther untouched and the boundary maps it to 503 (ADR-0029).
 package app.realworld;
 
-import example.identity.Credentialed;
-import example.identity.Email;
-import example.identity.FindLogin;
-import example.identity.FindLoginResult;
-import example.identity.FindUserByEmail;
-import example.identity.FindUserByEmailResult;
-import example.identity.FindUserByName;
-import example.identity.FindUserByNameResult;
-import example.identity.Followees;
-import example.identity.PasswordHash;
-import example.identity.ReadFollowees;
-import example.identity.StoreFollow;
-import example.identity.StorePassword;
-import example.identity.StoreUnfollow;
-import example.identity.StoreUser;
-import example.identity.StoreUserUpdate;
-import example.identity.User;
-import example.identity.Username;
+import blog.identity.Credentialed;
+import blog.identity.Email;
+import blog.identity.FindLogin;
+import blog.identity.FindLoginResult;
+import blog.identity.FindUserByEmail;
+import blog.identity.FindUserByEmailResult;
+import blog.identity.FindUserByName;
+import blog.identity.FindUserByNameResult;
+import blog.identity.Followees;
+import blog.identity.PasswordHash;
+import blog.identity.ReadFollowees;
+import blog.identity.StoreFollow;
+import blog.identity.StorePassword;
+import blog.identity.StoreUnfollow;
+import blog.identity.StoreUser;
+import blog.identity.StoreUserUpdate;
+import blog.identity.User;
+import blog.identity.Username;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;

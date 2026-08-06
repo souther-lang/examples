@@ -9,7 +9,7 @@
 // This is the third module in the chain: comments imports articles for the Slug a comment hangs on,
 // and identity for the Profile that wrote it. articles imports identity too, so the two paths to
 // Profile meet — and agree, because a module is resolved once per compile.
-module example.comments exposing (
+module blog.comments exposing (
     CommentId,
     CommentBody,
     Comment,
@@ -23,8 +23,8 @@ module example.comments exposing (
     removeComment,
     deleteComment
 )
-import example.identity ( Profile, Username )
-import example.articles ( Slug )
+import blog.identity ( Profile, Username )
+import blog.articles ( Slug )
 
 // The id is the store's to hand out, so the invariant says only that one exists.
 data CommentId = Int

@@ -1,18 +1,18 @@
 // The jOOQ implementations of comments.sou's injected behaviors.
 package app.realworld;
 
-import example.articles.Slug;
-import example.comments.Comment;
-import example.comments.CommentBody;
-import example.comments.CommentId;
-import example.comments.CommentThread;
-import example.comments.FindComment;
-import example.comments.FindCommentResult;
-import example.comments.ReadComments;
-import example.comments.RemoveComment;
-import example.comments.Removed;
-import example.comments.StoreComment;
-import example.identity.Profile;
+import blog.articles.Slug;
+import blog.comments.Comment;
+import blog.comments.CommentBody;
+import blog.comments.CommentId;
+import blog.comments.CommentThread;
+import blog.comments.FindComment;
+import blog.comments.FindCommentResult;
+import blog.comments.ReadComments;
+import blog.comments.RemoveComment;
+import blog.comments.Removed;
+import blog.comments.StoreComment;
+import blog.identity.Profile;
 
 import net.unit8.raoh.Path;
 

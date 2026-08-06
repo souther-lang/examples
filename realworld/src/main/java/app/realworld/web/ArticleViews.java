@@ -6,14 +6,14 @@
 // read once for the whole response — one query each, however many articles came back.
 package app.realworld.web;
 
-import example.articles.Article;
-import example.articles.ArticleSummary;
-import example.articles.FavoriteCounts;
-import example.articles.FavoritedSlugs;
-import example.articles.ReadFavoriteCounts;
-import example.articles.ReadFavorited;
-import example.articles.Slug;
-import example.identity.Username;
+import blog.articles.Article;
+import blog.articles.ArticleSummary;
+import blog.articles.FavoriteCounts;
+import blog.articles.FavoritedSlugs;
+import blog.articles.ReadFavoriteCounts;
+import blog.articles.ReadFavorited;
+import blog.articles.Slug;
+import blog.identity.Username;
 
 import java.util.List;
 import java.util.Map;
