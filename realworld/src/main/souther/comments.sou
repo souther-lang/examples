@@ -1,0 +1,81 @@
+// Comments on an article.
+//
+// Only one rule lives here, and it is the same one articles state about editing: a comment is its
+// author's to delete. Writing one has no rule — anybody who is logged in may comment — so there is no
+// composed behavior wrapping the write, and the boundary calls storeComment directly. A behavior that
+// only forwarded its argument would state nothing, and the shape of this module is what says which of
+// the two operations carries a decision.
+//
+// This is the third module in the chain: comments imports articles for the Slug a comment hangs on,
+// and identity for the Profile that wrote it. articles imports identity too, so the two paths to
+// Profile meet — and agree, because a module is resolved once per compile.
+module example.comments exposing (
+    CommentId,
+    CommentBody,
+    Comment,
+    CommentThread,
+    CommentNotFound,
+    Removed,
+    NotTheAuthor,
+    storeComment,
+    readComments,
+    findComment,
+    removeComment,
+    deleteComment
+)
+import example.identity ( Profile, Username )
+import example.articles ( Slug )
+
+// The id is the store's to hand out, so the invariant says only that one exists.
+data CommentId = Int
+    invariant value >= 1
+
+data CommentBody = String
+    invariant String.length(value) >= 1
+
+data Comment =
+    { id: CommentId
+    , body: CommentBody
+    , author: Profile
+    , createdAt: DateTime
+    , updatedAt: DateTime
+    }
+
+data CommentThread = { comments: List<Comment> }
+
+// === the injected writes and reads ===
+behavior storeComment  : (slug: Slug, body: CommentBody, author: Profile, at: DateTime) -> Comment
+behavior readComments  : (slug: Slug) -> CommentThread
+behavior removeComment : (comment: Comment) -> Removed
+    constructs Removed
+
+behavior findComment : (id: CommentId) -> Comment | CommentNotFound
+    constructs CommentNotFound
+
+// === the one rule ===
+behavior deleteComment : (comment: Comment, deleter: Username) -> Removed | NotTheAuthor
+    depends on removeComment
+
+let deleteComment (comment, deleter, removeComment) = {
+    guard deleter == comment.author.username else NotTheAuthor
+    removeComment(comment)
+}
+
+let jake = Profile { username = Username("jake"), bio = None, image = None }
+
+let hisNameWasMyNameToo = Comment
+    { id = CommentId(1)
+    , body = CommentBody("His name was my name too.")
+    , author = jake
+    , createdAt = DateTime("2026-08-06T03:22:56")
+    , updatedAt = DateTime("2026-08-06T03:22:56")
+    }
+
+fake removeComment
+    | _ -> Removed
+
+example deleteComment
+    | "the author may delete their own comment" :
+        (hisNameWasMyNameToo, Username("jake")) -> Removed
+    | "somebody who did not write it may not" :
+        (hisNameWasMyNameToo, Username("gerome")) -> NotTheAuthor

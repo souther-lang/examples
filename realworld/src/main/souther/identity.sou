@@ -1,0 +1,264 @@
+// Identity: who somebody is, how they prove it, and who they follow.
+//
+// exposing has two readers here, which is why it is long. The other .sou modules need very little —
+// articles and comments only have to say who wrote something, so Profile and the types it carries.
+// The Java boundary needs the rest: an injected behavior's implementation lives outside this module
+// and writes its input and output types when it overrides apply, so every type on the edge of one is
+// on this list. A module with no exposing at all exports nothing, which is why the list exists rather
+// than being omitted as issuetracker's is.
+module example.identity exposing (
+    Username,
+    Email,
+    Password,
+    PasswordHash,
+    Bio,
+    ImageUrl,
+    Profile,
+    User,
+    Registration,
+    Credentials,
+    Credentialed,
+    Followees,
+    UserNotFound,
+    EmailTaken,
+    UsernameTaken,
+    InvalidCredentials,
+    CannotFollowSelf,
+    hashPassword,
+    verifyPassword,
+    findUserByEmail,
+    findUserByName,
+    findLogin,
+    storeUser,
+    storeUserUpdate,
+    storePassword,
+    readFollowees,
+    storeFollow,
+    storeUnfollow,
+    registerUser,
+    loginUser,
+    updateUser,
+    follow
+)
+
+data Username = String
+    invariant String.length(value) >= 1 && String.length(value) <= 40
+
+// The email format check follows crm.sou's EmailAddress: String.matches takes the pattern first
+// and the value second, and the match is already anchored to the whole string, so no ^ / $.
+data Email = String
+    invariant String.matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+", value)
+
+data Password = String
+    invariant String.length(value) >= 8
+
+data PasswordHash = String
+    invariant String.length(value) >= 1
+
+data Bio = String
+
+data ImageUrl = String
+
+data Profile = { username: Username, bio: Bio?, image: ImageUrl? }
+
+// A User is a Profile with the email nobody else sees. It does not carry the password hash: a User
+// is what a response is built from, and a derived encoder writes every field it is given, so a hash
+// on this type is a hash one careless boundary writes into JSON. The hash travels beside the user
+// instead, which is why storeUser takes both and findCredentials answers the hash on its own.
+data User = { ...Profile, email: Email }
+
+data Registration = { username: Username, email: Email, password: Password }
+
+// === the injected outside-world behaviors ===
+// No `let`, so the implementation comes from the boundary. Hashing is one of them: the domain states
+// what a password must be (Password's invariant) and never learns how one is stored, so bcrypt is a
+// bean in the Java boundary rather than a rule here. UserNotFound, EmailTaken and UsernameTaken carry
+// no fields and have no `data` line — naming them in an output is what declares them (8.4 unit-data).
+behavior hashPassword : (password: Password) -> PasswordHash
+
+behavior findUserByEmail : (email: Email) -> User | UserNotFound
+    constructs UserNotFound
+
+behavior findUserByName : (username: Username) -> User | UserNotFound
+    constructs UserNotFound
+
+// Writes a new user and the hash of its password, and answers the user as stored.
+behavior storeUser : (user: User, hash: PasswordHash) -> User
+
+// === registerUser: the two names that must be free, then the write ===
+// Both uniqueness rules are checked before anything is written, and each has its own case, so the
+// boundary can say which name was taken rather than reporting one failure for two causes.
+behavior registerUser : (registration: Registration) -> User | EmailTaken | UsernameTaken
+    depends on findUserByEmail, findUserByName, hashPassword, storeUser
+
+let registerUser (registration, findUserByEmail, findUserByName, hashPassword, storeUser) =
+    match findUserByEmail(registration.email) with
+        | User -> EmailTaken
+        | UserNotFound ->
+            match findUserByName(registration.username) with
+                | User -> UsernameTaken
+                | UserNotFound ->
+                    storeUser(
+                        User { username = registration.username
+                             , bio = None
+                             , image = None
+                             , email = registration.email },
+                        hashPassword(registration.password))
+
+// === fake + example: the order of the two checks, with no database ===
+let jake = User { username = Username("jake"), bio = None, image = None
+                , email = Email("jake@jake.jake") }
+
+fake findUserByEmail
+    | (Email("taken@example.com")) -> jake
+    | _ -> UserNotFound
+
+fake findUserByName
+    | (Username("taken")) -> jake
+    | _ -> UserNotFound
+
+fake hashPassword
+    | _ -> PasswordHash("$2a$10$fake")
+
+fake storeUser
+    | _ -> jake
+
+example registerUser
+    | "a free email and a free username are registered" :
+        (Registration { username = Username("jake"), email = Email("jake@jake.jake")
+                      , password = Password("jakejake") })
+        -> jake
+    | "an email already in use is refused, and nothing is written" :
+        (Registration { username = Username("newcomer"), email = Email("taken@example.com")
+                      , password = Password("jakejake") })
+        -> EmailTaken
+    | "a username already in use is refused, and nothing is written" :
+        (Registration { username = Username("taken"), email = Email("free@example.com")
+                      , password = Password("jakejake") })
+        -> UsernameTaken
+
+// === updating the current user ===
+// The boundary works out which fields the request actually changed and hands over the user it wants
+// stored; what the domain decides is whether the two names it may have moved are free. The check is
+// skipped when a name did not move, so re-saving a profile unchanged is no lookup at all — and an
+// address only this user holds is not reported as taken against itself.
+behavior storeUserUpdate : (previous: Username, user: User) -> User
+
+behavior updateUser : (current: User, wanted: User) -> User | EmailTaken | UsernameTaken
+    depends on findUserByEmail, findUserByName, storeUserUpdate
+
+let updateUser (current, wanted, findUserByEmail, findUserByName, storeUserUpdate) = {
+    let emailFree =
+        if wanted.email == current.email
+        then true
+        else match findUserByEmail(wanted.email) with
+                 | User         -> false
+                 | UserNotFound -> true
+    guard emailFree else EmailTaken
+
+    let usernameFree =
+        if wanted.username == current.username
+        then true
+        else match findUserByName(wanted.username) with
+                 | User         -> false
+                 | UserNotFound -> true
+    guard usernameFree else UsernameTaken
+
+    storeUserUpdate(current.username, wanted)
+}
+
+// A password is a credential rather than part of a User, so changing one writes nowhere near this
+// behavior. It has one rule — Password's invariant — and the decoder is what enforces it, so there
+// is nothing left for a composed behavior to decide and the boundary calls this write directly.
+behavior storePassword : (username: Username, hash: PasswordHash) -> PasswordHash
+
+fake storeUserUpdate
+    | _ -> jake
+
+example updateUser
+    | "a user who moved neither name is written back with no lookup at all" :
+        (jake, jake) -> jake
+    | "moving to an address somebody else holds is refused" :
+        (jake, User { username = Username("jake"), bio = None, image = None
+                    , email = Email("taken@example.com") })
+        -> EmailTaken
+    | "moving to a username somebody else holds is refused" :
+        (jake, User { username = Username("taken"), bio = None, image = None
+                    , email = Email("jake@jake.jake") })
+        -> UsernameTaken
+
+// === logging in ===
+// What a login reads is one row: the user and the hash to check the password against. They are read
+// together because they are read for one purpose, and Credentialed is where the hash is allowed to
+// live — it never leaves this behavior.
+data Credentials  = { email: Email, password: Password }
+data Credentialed = { user: User, hash: PasswordHash }
+
+behavior findLogin : (email: Email) -> Credentialed | UserNotFound
+    constructs UserNotFound
+
+behavior verifyPassword : (password: Password, hash: PasswordHash) -> Bool
+
+// A failed login answers InvalidCredentials whichever half was wrong. An unknown email and a wrong
+// password are deliberately the same case: an answer that distinguished them would tell a stranger
+// which addresses have accounts.
+behavior loginUser : (credentials: Credentials) -> User | InvalidCredentials
+    depends on findLogin, verifyPassword
+
+let loginUser (credentials, findLogin, verifyPassword) =
+    match findLogin(credentials.email) with
+        | UserNotFound -> InvalidCredentials
+        | Credentialed as found ->
+            if verifyPassword(credentials.password, found.hash)
+            then found.user
+            else InvalidCredentials
+
+fake findLogin
+    | (Email("jake@jake.jake")) -> Credentialed { user = jake, hash = PasswordHash("$2a$10$fake") }
+    | _ -> UserNotFound
+
+fake verifyPassword
+    | (Password("jakejake"), PasswordHash("$2a$10$fake")) -> true
+    | _ -> false
+
+example loginUser
+    | "the right password logs the user in" :
+        (Credentials { email = Email("jake@jake.jake"), password = Password("jakejake") })
+        -> jake
+    | "a wrong password is invalid credentials" :
+        (Credentials { email = Email("jake@jake.jake"), password = Password("wrongpass") })
+        -> InvalidCredentials
+    | "an unknown email answers that same case, and says nothing more" :
+        (Credentials { email = Email("nobody@example.com"), password = Password("jakejake") })
+        -> InvalidCredentials
+
+// === following ===
+// Only one of the two directions has a rule, and the shapes say so. Following yourself is refused, so
+// follow is composed and CannotFollowSelf is one of its cases; unfollowing has no rule to state, so
+// there is no behavior wrapping storeUnfollow and the boundary calls it directly. A composed behavior
+// that only forwarded its argument would state nothing.
+data Followees = { usernames: Set<Username> }
+
+behavior readFollowees : (viewer: Username) -> Followees
+behavior storeFollow   : (follower: Username, followee: Username) -> Followees
+behavior storeUnfollow : (follower: Username, followee: Username) -> Followees
+
+behavior follow : (follower: Username, followee: Username) -> Followees | CannotFollowSelf
+    depends on storeFollow
+
+let follow (follower, followee, storeFollow) =
+    if follower == followee
+    then CannotFollowSelf
+    else storeFollow(follower, followee)
+
+fake storeFollow
+    | (Username("jake"), Username("gerome")) -> Followees { usernames = [ Username("gerome") ] }
+    | _ -> Followees { usernames = [] }
+
+example follow
+    | "following somebody else adds them to the set" :
+        (Username("jake"), Username("gerome"))
+        -> Followees { usernames = [ Username("gerome") ] }
+    | "following yourself is refused, and nothing is written" :
+        (Username("jake"), Username("jake"))
+        -> CannotFollowSelf
