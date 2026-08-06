@@ -5,7 +5,6 @@
 // encoded as a JSON object).
 package app.issuetracker
 
-import app.issuetracker.souther.decodeOrFail
 
 import example.issuetracker.Assigned
 import example.issuetracker.AssigneeOf
@@ -89,10 +88,10 @@ class PureBehaviorTest {
     }
 
     private fun issue(id: String, title: String, labels: List<String>, assignee: String? = null): Issue =
-        Issue.decoder().decodeOrFail(issueMap(id, title, labels, assignee))
+        Issue.decoder().decode(issueMap(id, title, labels, assignee)).getOrThrow()
 
     private fun board(vararg issues: Map<String, Any>): Board =
-        Board.decoder().decodeOrFail(mapOf("issues" to issues.toList()))
+        Board.decoder().decode(mapOf("issues" to issues.toList())).getOrThrow()
 
     // An absent assignee key decodes to None — the same shape the jOOQ read produces for a NULL column.
     private fun issueMap(

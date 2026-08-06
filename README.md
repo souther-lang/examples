@@ -376,21 +376,23 @@ would duplicate the domain shape and would reject a malformed body in Jackson, b
 holds the actual rules ever ran. So the module has no `jackson-module-kotlin` dependency: no request
 or response shape is a Kotlin type.
 
-The whole Kotlin-side glue is one file, `souther/Souther.kt`: an exception type, `decodeOrFail`,
-`orNull`, and an `operator invoke` so a bound behavior is called as `attachLabel(request)` rather than
-`attachLabel.apply(request)`. It names no domain type and is written to be lifted out unchanged, the
-same way `souther-clj` was.
+There is no Kotlin-side support file, and that is the point: nothing has to be installed between Kotlin
+and what Souther generates. A decoder is called as `IssueId.decoder().decode(id)` and answers Raoh's
+`Result`, which is sealed, so `when (…) { is Ok -> …; is Err -> … }` is checked the way the case unions
+are. What is left over is two conveniences that are private to the single file that uses each — an
+`operator invoke` in the controller so a bound behavior reads as `attachLabel(request)`, and an
+`Option.orNull()` in `IssueRows.kt` for the one nullable column — rather than a package suggesting that
+using Souther needs one.
 
 | Kotlin file | Role |
 | --- | --- |
 | `build.gradle.kts` | The build. The `souther` source set that runs the annotation processor, and `implementation(souther.output)` ordering it before kotlinc (above) |
-| `souther/Souther.kt` | The boundary glue, naming no domain type: `DecodeFailed`, `decodeOrFail` (decode or fail the request), `Option.orNull()`, and `operator invoke` for `Behavior` |
-| `IssueRows.kt` | The one place that knows the issue tables. An issue spans `issues` and its `issue_labels` rows, so reading one produces the Map `Issue.decoder()` takes (labels as a list → a `Set` on decode; an absent assignee left out of the Map → `None`). Reading values out of a domain value is plain property access (`issue.id.value`), since a generated data is a record — construction is the guarded direction, not reading |
-| `JooqIssueStore.kt` | The three injected implementations, each **extending** the generated abstract base. A Kotlin subclass reaches the base's `protected` factories, so the unit case is built with the inherited `IssueNotFound()`; values read out of storage go through the public `decoder()`, which re-checks their invariants. SQL exceptions are not caught |
+| `IssueRows.kt` | The one place that knows the issue tables. An issue spans `issues` and its `issue_labels` rows, so reading one produces the Map `Issue.decoder()` takes (labels as a list → a `Set` on decode; an absent assignee left out of the Map → `None`). Reading values out of a domain value is plain property access (`issue.id.value`), since a generated data is a record — construction is the guarded direction, not reading. A private `Option.orNull()` at the bottom is the one place a Souther optional meets a nullable column |
+| `JooqIssueStore.kt` | The three injected implementations, each **extending** the generated abstract base. A Kotlin subclass reaches the base's `protected` factories, so the unit case is built with the inherited `IssueNotFound()`; values read out of storage go through the public `decoder()`, which re-checks their invariants — on this service's own writing rather than a caller's input, so a refusal there is `getOrThrow` and a 500, not a 400. SQL exceptions are not caught |
 | `web/IssueTrackerConfig.kt` | The generated-side beans: the injected implementations, `AttachLabel.bind(...)` and friends, the pure behaviors' `of()`, and a jOOQ `Settings` that turns identifier quoting off. DataSource / DSLContext / TransactionManager come from autoconfig |
-| `web/IssueController.kt` | `@RestController`. Every route is decode → one behavior → fold the output union into a status and a body. `@Transactional` on the read-modify-write routes, so a concurrent call cannot drop a label by writing back a set it read too early |
-| `web/BoardQuery.kt` | The read side. `countByLabel` / `topLabels` / `busyLabels` are pure behaviors over a whole `Board`, and a summary makes no decision the domain needs to be in on, so this is not an injected behavior: the boundary reads the rows and builds the `Board` through the derived decoder |
-| `web/BoundaryErrors.kt` | The two failures that are not domain outcomes: a rejected input is 400 with Raoh's issues, and a `DataAccessException` that passed through Souther is 503 |
+| `web/IssueController.kt` | `@RestController`. Every route is decode → one behavior → fold the output union into a status and a body, and the decode is a `when` over `Ok`/`Err` beside the `when` over the union. `shared-labels` reads two ids and combines them with `Result.map2`, so a call that got both wrong is told about both. `@Transactional` on the read-modify-write routes, so a concurrent call cannot drop a label by writing back a set it read too early |
+| `web/BoardQuery.kt` | The read side. `countByLabel` / `topLabels` / `busyLabels` are pure behaviors over a whole `Board`, and a summary makes no decision the domain needs to be in on, so this is not an injected behavior: the boundary reads the rows and builds the `Board` through the derived decoder, with `getOrThrow` because those rows are this service's own writing |
+| `web/BoundaryErrors.kt` | The one failure that is not a value. A rejected input is a `Result` the controller answers with, so what is left is a `DataAccessException` that passed through Souther — 503 |
 
 | Route | Behavior | Outcomes |
 | --- | --- | --- |

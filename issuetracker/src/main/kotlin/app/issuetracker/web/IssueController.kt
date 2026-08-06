@@ -12,10 +12,13 @@
 // A behavior's output is a generated `sealed` union, so `when` over it is exhaustive and the Kotlin
 // compiler rejects a missing case by name. This is what account's `case-of` macro had to hand-build for
 // Clojure: Souther's `match` totality carried across the boundary, here for free.
+//
+// A decoder's refusal is a `when` beside it. Raoh's `Result` is sealed too, so `Ok`/`Err` is checked the
+// same way the case unions are, and nothing sits between the two: `IssueId.decoder().decode(id)` is the
+// whole of the boundary's decoding. Turning that Result into an exception on the way in would have spent
+// Raoh's accumulation before it was used — `shared` reads two ids, and a call that got both wrong is told
+// about both because the two Results are combined rather than answered one at a time.
 package app.issuetracker.web
-
-import app.issuetracker.souther.decodeOrFail
-import app.issuetracker.souther.invoke
 
 import example.issuetracker.Assigned
 import example.issuetracker.AssigneeOf
@@ -44,6 +47,13 @@ import example.issuetracker.OpenIssueResult
 import example.issuetracker.SharedLabels
 import example.issuetracker.TopLabels
 import example.issuetracker.Unassigned
+
+import net.unit8.raoh.Err
+import net.unit8.raoh.Issues
+import net.unit8.raoh.Ok
+import net.unit8.raoh.Result
+
+import souther.runtime.Behavior
 
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -79,18 +89,27 @@ class IssueController(
     @PostMapping("/issues")
     @Transactional
     fun open(@RequestBody body: Map<String, Any>): ResponseEntity<Any> =
-        openIssue(NewIssue.decoder().decodeOrFail(body)).toResponse()
+        when (val decoded = NewIssue.decoder().decode(body)) {
+            is Ok -> openIssue(decoded.value).toResponse()
+            is Err -> badRequest(decoded.issues)
+        }
 
     @GetMapping("/issues/{id}")
     fun find(@PathVariable id: String): ResponseEntity<Any> =
-        findIssue(issueId(id)).toResponse()
+        when (val found = issue(id)) {
+            is Ok -> found.value.toResponse()
+            is Err -> badRequest(found.issues)
+        }
 
     /** The optional assignee, opened by the domain: Some(Assignee(name)) is 200, None is 204. */
     @GetMapping("/issues/{id}/assignee")
     fun assignee(@PathVariable id: String): ResponseEntity<Any> =
-        when (val found = findIssue(issueId(id))) {
-            is Issue -> assigneeOf(found).toResponse()
-            is IssueNotFound -> notFound()
+        when (val found = issue(id)) {
+            is Ok -> when (val result = found.value) {
+                is Issue -> assigneeOf(result).toResponse()
+                is IssueNotFound -> notFound()
+            }
+            is Err -> badRequest(found.issues)
         }
 
     /**
@@ -101,22 +120,35 @@ class IssueController(
     @PostMapping("/issues/{id}/labels")
     @Transactional
     fun attach(@PathVariable id: String, @RequestBody body: Map<String, Any>): ResponseEntity<Any> =
-        attachLabel(labelRequest(body + ("id" to id))).toResponse()
+        // The id from the path goes into the body and the whole of it through one decoder, so the id
+        // and the label are checked together and reported together.
+        when (val request = LabelRequest.decoder().decode(body + ("id" to id))) {
+            is Ok -> attachLabel(request.value).toResponse()
+            is Err -> badRequest(request.issues)
+        }
 
     @DeleteMapping("/issues/{id}/labels/{label}")
     @Transactional
     fun detach(@PathVariable id: String, @PathVariable label: String): ResponseEntity<Any> =
-        detachLabel(labelRequest(mapOf("id" to id, "label" to label))).toResponse()
+        when (val request = LabelRequest.decoder().decode(mapOf("id" to id, "label" to label))) {
+            is Ok -> detachLabel(request.value).toResponse()
+            is Err -> badRequest(request.issues)
+        }
 
     /**
-     * Set intersection over two issues. Either one missing is a 404. The union is narrowed to a Kotlin
-     * nullable by an exhaustive fold (issueOrNull) rather than by a type test, so the two lookups read as
-     * `?: return` and the totality is still the compiler's to check.
+     * Set intersection over two issues. Either one missing is a 404. Both ids are read before either is
+     * answered — `Result.map2` accumulates, so a call that got both wrong is told about both rather than
+     * about whichever was decoded first. Each union is then narrowed to a Kotlin nullable by an
+     * exhaustive fold (issueOrNull) rather than by a type test, so the totality stays the compiler's.
      */
     @GetMapping("/issues/{a}/shared-labels/{b}")
     fun shared(@PathVariable a: String, @PathVariable b: String): ResponseEntity<Any> {
-        val left = findIssue(issueId(a)).issueOrNull() ?: return notFound()
-        val right = findIssue(issueId(b)).issueOrNull() ?: return notFound()
+        val found = Result.map2(issue(a), issue(b)) { first, second -> first to second }
+        if (found is Err) return badRequest(found.issues)
+
+        val (first, second) = (found as Ok).value
+        val left = first.issueOrNull() ?: return notFound()
+        val right = second.issueOrNull() ?: return notFound()
         return ResponseEntity.ok(LabelSet.encoder().encode(sharedLabels(left, right)))
     }
 
@@ -134,10 +166,13 @@ class IssueController(
     fun busy(@RequestParam(defaultValue = "2") atLeast: Long): Map<String, Any> =
         LabelUsage.encoder().encode(busyLabels(boardQuery.board(), atLeast))
 
-    private fun issueId(id: String): IssueId = IssueId.decoder().decodeOrFail(id)
-
-    private fun labelRequest(raw: Map<String, Any>): LabelRequest =
-        LabelRequest.decoder().decodeOrFail(raw)
+    /**
+     * What the path names: the decoded id handed to the behavior that reads it. The two answers stay
+     * apart — an Err is text that is not an id, and an IssueNotFound is an id with no issue behind it —
+     * because the .sou declared the second one and nobody declared the first.
+     */
+    private fun issue(id: String): Result<FindIssueResult> =
+        IssueId.decoder().decode(id).map { findIssue(it) }
 }
 
 // --- folding the output unions ---
@@ -178,8 +213,17 @@ private fun ok(issue: Issue): ResponseEntity<Any> = ResponseEntity.ok(Issue.enco
 
 private fun notFound(): ResponseEntity<Any> = ResponseEntity.notFound().build()
 
-// A behavior of two arguments is not Behavior<I, O> — that contract is unary — so these two get their own
-// operator, and every behavior call at this boundary reads as a function call.
+/**
+ * What a decoder refused. Raoh accumulates rather than stopping at the first issue, and each one carries
+ * the path that broke and the code of the rule it broke, so the body names the field. This is the only
+ * file that answers a decode failure, which is why it is here rather than in BoundaryErrors.
+ */
+private fun badRequest(issues: Issues): ResponseEntity<Any> =
+    ResponseEntity.badRequest().body(mapOf("issues" to issues.toJsonList()))
+
+// Every behavior call at this boundary reads as a function call. `Behavior` is the unary contract, so a
+// behavior of two arguments is not one and the three below get their own.
+private operator fun <I : Any, O : Any> Behavior<I, O>.invoke(input: I): O = apply(input)
 private operator fun SharedLabels.invoke(a: Issue, b: Issue): LabelSet = apply(a, b)
 
 private operator fun TopLabels.invoke(board: Board, n: Long): LabelRanking = apply(board, n)

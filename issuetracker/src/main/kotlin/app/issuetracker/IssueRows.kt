@@ -7,9 +7,9 @@
 // the key is absent).
 package app.issuetracker
 
-import app.issuetracker.souther.orNull
-
 import example.issuetracker.Issue
+
+import souther.runtime.Option
 
 import org.jooq.DSLContext
 import org.jooq.impl.DSL.field
@@ -70,3 +70,13 @@ private fun issueMap(id: String, title: String, assignee: String?, labels: List<
         put("labels", labels)
         assignee?.let { put("assignee", it) }
     }
+
+/**
+ * Souther's optional read as Kotlin's, for the one column that has one. The `: Any` bound is what
+ * souther-runtime's `@NullMarked` package says — an Option holds a value or nothing, and nothing is
+ * `None` rather than a null element — so Kotlin's own default `T : Any?` is wider than the type allows.
+ */
+private fun <T : Any> Option<T>.orNull(): T? = when (this) {
+    is Option.Some<T> -> value
+    is Option.None<T> -> null
+}

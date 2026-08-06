@@ -5,7 +5,6 @@
 package app.issuetracker.web
 
 import app.issuetracker.issueRows
-import app.issuetracker.souther.decodeOrFail
 
 import example.issuetracker.Board
 
@@ -15,6 +14,11 @@ import org.springframework.stereotype.Component
 @Component
 class BoardQuery(private val dsl: DSLContext) {
 
-    /** Every stored issue as one Board. */
-    fun board(): Board = Board.decoder().decodeOrFail(mapOf("issues" to dsl.issueRows()))
+    /**
+     * Every stored issue as one Board. What this decoder reads is rows this service wrote, not anything
+     * a caller sent, so a refusal is storage holding something the domain cannot read — a fault rather
+     * than an answer to a request, and `getOrThrow` is what says so.
+     */
+    fun board(): Board =
+        Board.decoder().decode(mapOf("issues" to dsl.issueRows())).getOrThrow()
 }

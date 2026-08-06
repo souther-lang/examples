@@ -137,6 +137,16 @@ class IssueTrackerApiTest {
     }
 
     @Test
+    fun `a stored row the domain cannot read is this service's fault, not the caller's`() {
+        // Label's invariant is length >= 1, so an empty label sitting in storage is a row that cannot
+        // become a domain value. Nothing about the request is wrong, so it is not a 400: the decode
+        // that reads this service's own writing throws instead of answering the caller.
+        dsl.insertInto(ISSUE_LABELS).set(ISSUE_ID, "i-1").set(LABEL, "").execute()
+
+        client.get().uri("/issues/i-1").exchange().expectStatus().isEqualTo(500)
+    }
+
+    @Test
     fun `the labels two issues share are their intersection`() {
         client.get().uri("/issues/i-1/shared-labels/i-2").exchange()
             .expectStatus().isOk()

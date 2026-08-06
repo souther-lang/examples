@@ -5,13 +5,13 @@
 // A Kotlin subclass reaches the base's `protected` factories directly, so the unit case IssueNotFound is
 // built with the inherited factory. Values that come from the database go through the public derived
 // decoder instead, which is what checks the invariants (IssueId / Label / Assignee are all non-empty) on
-// data that has been sitting in storage.
+// data that has been sitting in storage. That decode reads this service's own writing rather than a
+// caller's input, so a refusal is a fault and not a 400 — `getOrThrow` rather than an answer.
 //
 // SQL exceptions are not caught. A database outage is not a domain outcome, so it is not a case: the
 // exception passes through Souther untouched and the boundary maps it to 503 (ADR-0029).
 package app.issuetracker
 
-import app.issuetracker.souther.decodeOrFail
 
 import example.issuetracker.CreateIssue
 import example.issuetracker.FindIssue
@@ -25,7 +25,7 @@ import org.jooq.DSLContext
 /** findIssue: the issue and its labels, or the IssueNotFound case when there is no such row. */
 class JooqFindIssue(private val dsl: DSLContext) : FindIssue() {
     override fun apply(id: IssueId): FindIssueResult =
-        dsl.issueRow(id.value)?.let { Issue.decoder().decodeOrFail(it) } ?: IssueNotFound()
+        dsl.issueRow(id.value)?.let { Issue.decoder().decode(it).getOrThrow() } ?: IssueNotFound()
 }
 
 /** createIssue: inserts the issue and its labels, and reports it as stored. */

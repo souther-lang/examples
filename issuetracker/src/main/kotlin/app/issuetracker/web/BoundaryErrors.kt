@@ -1,14 +1,11 @@
-// The two failures that are not domain outcomes, mapped once for the whole boundary.
+// The one failure that is not a value.
 //
-// A rejected input never reaches a behavior, so it cannot be a case: DecodeFailed carries Raoh's issues
-// (path, code, message) and becomes a 400, the same treatment Spring gives its own binding failures.
-//
-// A platform failure is not a case either (ADR-0029). The jOOQ implementation does not catch it, Souther
-// passes it through untouched, and it arrives here as a DataAccessException — 503. Spring Boot's jOOQ
+// A decoder's refusal is not handled here. It is a Raoh Result the controller answers with a `when`,
+// beside the case union the behavior answers, so both arrive where they were asked for. What is left is
+// a platform failure, which is no case either (ADR-0029): the jOOQ implementation does not catch it,
+// Souther passes it through untouched, and it arrives as a DataAccessException — 503. Spring Boot's jOOQ
 // autoconfig enables exception translation, which is what turns jOOQ's own exception into that type.
 package app.issuetracker.web
-
-import app.issuetracker.souther.DecodeFailed
 
 import org.springframework.dao.DataAccessException
 import org.springframework.http.HttpStatus
@@ -18,10 +15,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice
 
 @RestControllerAdvice
 class BoundaryErrors {
-
-    @ExceptionHandler(DecodeFailed::class)
-    fun onDecodeFailed(e: DecodeFailed): ResponseEntity<Any> =
-        ResponseEntity.badRequest().body(mapOf("issues" to e.issues.toJsonList()))
 
     @ExceptionHandler(DataAccessException::class)
     fun onPlatformFailure(e: DataAccessException): ResponseEntity<Any> =
