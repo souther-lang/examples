@@ -17,6 +17,11 @@ import example.articles.RemoveArticle;
 import example.articles.SlugExists;
 import example.articles.StoreArticle;
 import example.articles.UpdateArticle;
+import example.comments.DeleteComment;
+import example.comments.FindComment;
+import example.comments.ReadComments;
+import example.comments.RemoveComment;
+import example.comments.StoreComment;
 import example.identity.FindLogin;
 import example.identity.FindUserByEmail;
 import example.identity.FindUserByName;
@@ -207,6 +212,33 @@ public class RealWorldConfig {
     @Bean
     public DeleteArticle deleteArticle(RemoveArticle removeArticle) {
         return DeleteArticle.bind(removeArticle);
+    }
+
+    // --- comments ---
+
+    @Bean
+    public StoreComment storeComment(DSLContext dsl) {
+        return new JooqComments.Store(dsl);
+    }
+
+    @Bean
+    public ReadComments readComments(DSLContext dsl) {
+        return new JooqComments.ReadThread(dsl);
+    }
+
+    @Bean
+    public FindComment findComment(DSLContext dsl) {
+        return new JooqComments.Find(dsl);
+    }
+
+    @Bean
+    public RemoveComment removeComment(DSLContext dsl) {
+        return new JooqComments.Remove(dsl);
+    }
+
+    @Bean
+    public DeleteComment deleteComment(RemoveComment removeComment) {
+        return DeleteComment.bind(removeComment);
     }
 
     /** The three request-shaped facts every article response carries, read once per response. */

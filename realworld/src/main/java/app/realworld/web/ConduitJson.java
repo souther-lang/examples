@@ -77,6 +77,19 @@ public final class ConduitJson {
     }
 
     /**
+     * A comment as the spec states it: the same author block an article carries, following and all,
+     * and the same rewritten timestamps.
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> comment(Map<String, Object> encodedComment, boolean authorFollowed) {
+        Map<String, Object> out = new LinkedHashMap<>(encodedComment);
+        out.put("createdAt", timestamp(out.get("createdAt")));
+        out.put("updatedAt", timestamp(out.get("updatedAt")));
+        out.put("author", profile((Map<String, Object>) out.get("author"), authorFollowed));
+        return out;
+    }
+
+    /**
      * Rewrites Souther's rendering of a DateTime into the spec's. Souther's DateTime is a
      * LocalDateTime, so what arrives has no zone and may have no fractional part at all.
      */

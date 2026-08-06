@@ -43,3 +43,13 @@ CREATE TABLE favorites (
     slug     VARCHAR(255) NOT NULL,
     PRIMARY KEY (username, slug)
 );
+
+-- The id is the store's to hand out, which is why CommentId's invariant says only that one exists.
+CREATE TABLE comments (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    slug       VARCHAR(255) NOT NULL,
+    body       CLOB         NOT NULL,
+    author     VARCHAR(40)  NOT NULL,
+    created_at TIMESTAMP    NOT NULL,
+    updated_at TIMESTAMP    NOT NULL
+);
