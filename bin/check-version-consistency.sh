@@ -1,15 +1,10 @@
 #!/usr/bin/env bash
 # Fail if a version declared in more than one place is not identical everywhere. Two are: the Souther
 # compiler and Raoh. The root pom's properties are the authority for both, because that is what the
-# Maven build resolves; the builds outside Maven — the Clojure account example's deps.edn, the
-# vendored souther-clj library's own deps.edn, the Kotlin issuetracker example's build.gradle.kts —
-# and the annotation-processor snippet in the README have to agree with it. This is the guardrail
-# against a bump landing in some files and being forgotten in others. CI runs this; run it locally
-# after bin/set-version.sh.
-#
-# souther-clj/deps.edn is checked even though nothing builds through it: account puts
-# souther-clj/src on its own classpath directly, so that file is only read by whoever lifts the
-# directory out into its own repository — which is exactly the reader nobody notices going stale.
+# Maven build resolves; the builds outside Maven — the Clojure account example's deps.edn and the
+# Kotlin issuetracker example's build.gradle.kts — and the annotation-processor snippet in the README
+# have to agree with it. This is the guardrail against a bump landing in some files and being
+# forgotten in others. CI runs this; run it locally after bin/set-version.sh.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
@@ -55,9 +50,6 @@ check "README souther-compiler snippet" \
 check "account deps.edn raoh" \
   "$(sed -n 's#.*net.unit8.raoh/raoh {:mvn/version "\([^"]*\)".*#\1#p' account/deps.edn | head -1)" \
   "$raoh" raoh.version
-check "account/souther-clj deps.edn raoh" \
-  "$(sed -n 's#.*net.unit8.raoh/raoh {:mvn/version "\([^"]*\)".*#\1#p' account/souther-clj/deps.edn | head -1)" \
-  "$raoh" raoh.version
 check "issuetracker build.gradle.kts raohVersion" \
   "$(sed -n 's#.*val raohVersion = "\([^"]*\)".*#\1#p' issuetracker/build.gradle.kts | head -1)" \
   "$raoh" raoh.version
@@ -67,9 +59,9 @@ if [ "$fail_souther" -ne 0 ]; then
 fi
 if [ "$fail_raoh" -ne 0 ]; then
   echo "Raoh version is inconsistent. <raoh.version> in pom.xml is the authority; the files that" >&2
-  echo "have to match it are account/deps.edn, account/souther-clj/deps.edn and" >&2
-  echo "issuetracker/build.gradle.kts. There is no set-version.sh for Raoh: a Raoh bump is not a" >&2
-  echo "Souther bump, and three files edited by hand is less to keep right than a fourth script." >&2
+  echo "have to match it are account/deps.edn and issuetracker/build.gradle.kts. There is no" >&2
+  echo "set-version.sh for Raoh: a Raoh bump is not a Souther bump, and two files edited by hand is" >&2
+  echo "less to keep right than a second script." >&2
 fi
 [ "$fail_souther" -eq 0 ] && [ "$fail_raoh" -eq 0 ] || exit 1
 

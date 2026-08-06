@@ -4,11 +4,15 @@
 ;; account.sou (現在残高 / 残高を更新する / 出金する ...). Generate them first with
 ;;   clojure -X:gen
 ;; then run the app with `clojure -M:run` or the tests with `clojure -X:test`.
-;; `souther-clj/src` is the vendored reusable interop library (souther.decode / behavior / match),
-;; written to be lifted out into its own repo unchanged (see souther-clj/README.md).
-{:paths ["src/main/clojure" "souther-clj/src" "target/classes"]
+;; souther-clj is the Clojure interop layer (souther.decode / encode / behavior / match / build). It
+;; used to be vendored here as `souther-clj/src`; it now lives in its own repository and arrives as a
+;; dependency like anything else, which is what this example is meant to show — using Souther from
+;; Clojure needs a library you depend on, not a directory you copy.
+{:paths ["src/main/clojure" "target/classes"]
 
  :deps {org.clojure/clojure {:mvn/version "1.12.1"}
+
+        org.souther-lang/souther-clj {:mvn/version "0.1.0"}
 
         ;; the Souther runtime + Raoh codecs the generated classes call into
         org.souther-lang/souther-runtime {:mvn/version "0.1.0-SNAPSHOT"}
@@ -29,11 +33,12 @@
   ;; `clojure -X:gen` reads src/main/souther and writes target/classes. souther-compiler is only
   ;; on this alias's classpath (discovered by ServiceLoader), never in the app runtime.
   ;;
-  ;; :replace-paths drops target/classes for this alias. It holds the classes the last run wrote, and
-  ;; a module the compiler is compiling may not also be on its path — one name cannot mean two
-  ;; modules — so leaving it there makes every run after the first fail. What the alias needs is
-  ;; souther-clj/src, where souther.build lives.
-  :gen {:replace-paths ["souther-clj/src"]
+  ;; :replace-paths empties the path list for this alias. What it is dropping is target/classes: it
+  ;; holds the classes the last run wrote, and a module the compiler is compiling may not also be on
+  ;; its path — one name cannot mean two modules — so leaving it there makes every run after the
+  ;; first fail. souther.build comes from the souther-clj dependency, which :replace-paths does not
+  ;; touch.
+  :gen {:replace-paths []
         :extra-deps {org.souther-lang/souther-compiler {:mvn/version "0.1.0-SNAPSHOT"}}
         :exec-fn souther.build/generate!
         :exec-args {:source-dir "src/main/souther"

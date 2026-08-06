@@ -463,8 +463,8 @@ that generated output (`target/classes`) straight on its classpath** (`target/cl
 The `:gen` alias is the one place that must not see it, which is what its `:replace-paths` says. A
 module the compiler is compiling may not also be on its path — one name cannot mean two modules — and
 `target/classes` holds `example.account` from the run before, so generating a second time without
-this fails on the module the first run wrote. The alias keeps `souther-clj/src`, where
-`souther.build` lives, and nothing else.
+this fails on the module the first run wrote. `souther.build` is unaffected: it comes from the
+`souther-clj` dependency, which `:replace-paths` does not touch.
 
 ### Implementing an injected behavior from Clojure — `proxy` + `decoder()`
 
@@ -475,9 +475,11 @@ so it builds the returned domain values (`Balance` / `Withdrawn` / `NoAccount`) 
 **public generated `decoder()`** — the sanctioned boundary path for turning outside values into
 domain data, with data constructors staying non-public (spec 8.5 / 2.1). No gen-class, no AOT.
 
-These interop patterns are packaged as a small reusable library under `souther-clj/` (see its
-README), written to be lifted out into its own repo unchanged — its source refers to no domain
-type and works by reflection over whatever generated classes the caller passes in:
+These interop patterns are packaged as a library of their own,
+[`org.souther-lang/souther-clj`](https://github.com/souther-lang/souther-clj), which this example
+depends on like any other. It refers to no domain type and works by reflection over whatever
+generated classes the caller passes in, so it depends on Clojure and Raoh and on nothing of
+Souther's:
 
 - `souther.decode` — `decode` runs a `decoder()` over Clojure data (keyword keys accepted) and
   returns `[:ok value]` / `[:err issues]` with issues as plain maps; `construct` builds a case value
@@ -514,7 +516,7 @@ JDK compiler API (`souther.build/generate!`), with `souther-compiler` on the ali
 ```sh
 cd account
 clojure -X:gen                                   # .sou → target/classes (the .sou examples are checked here too)
-clojure -X:test                                  # the souther-clj library, behavior+DB, and Pedestal boundary tests (20 of them)
+clojure -X:test                                  # behavior+DB and Pedestal boundary tests (8 of them)
 clojure -M:run                                   # starts on localhost:8890
 ```
 
