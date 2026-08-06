@@ -19,6 +19,8 @@ import example.articles.ReadArticles;
 import example.articles.Removed;
 import example.articles.Slug;
 import example.articles.SlugTaken;
+import example.articles.StoreFavorite;
+import example.articles.StoreUnfavorite;
 import example.articles.TitleHasNoSlug;
 import example.articles.UpdateArticle;
 import example.identity.FindUserByName;
@@ -57,6 +59,8 @@ public class ArticleController {
     private final FindUserByName findUserByName;
     private final ArticleViews views;
     private final Following following;
+    private final StoreFavorite storeFavorite;
+    private final StoreUnfavorite storeUnfavorite;
 
     public ArticleController(CreateArticle createArticle,
                              UpdateArticle updateArticle,
@@ -65,7 +69,9 @@ public class ArticleController {
                              ReadArticles readArticles,
                              FindUserByName findUserByName,
                              ArticleViews views,
-                             Following following) {
+                             Following following,
+                             StoreFavorite storeFavorite,
+                             StoreUnfavorite storeUnfavorite) {
         this.createArticle = createArticle;
         this.updateArticle = updateArticle;
         this.deleteArticle = deleteArticle;
@@ -74,6 +80,8 @@ public class ArticleController {
         this.findUserByName = findUserByName;
         this.views = views;
         this.following = following;
+        this.storeFavorite = storeFavorite;
+        this.storeUnfavorite = storeUnfavorite;
     }
 
     /**
@@ -157,6 +165,27 @@ public class ArticleController {
             case Article updated -> ResponseEntity.ok(views.one(updated, viewer));
             case NotTheAuthor _ -> ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         };
+    }
+
+    /**
+     * {@code POST /api/articles/{slug}/favorite} and its DELETE. Favoriting states no rule — anybody
+     * logged in may, and favoriting twice is favoriting once — so there is no composed behavior to
+     * fold and the boundary calls the write directly, as it does for unfollowing.
+     */
+    @PostMapping("/api/articles/{slug}/favorite")
+    @Transactional
+    public ResponseEntity<Object> favorite(Viewer viewer, @PathVariable("slug") String slug) {
+        Article article = find(slug);
+        storeFavorite.apply(viewer.required(), article.slug());
+        return ResponseEntity.ok(views.one(article, viewer));
+    }
+
+    @DeleteMapping("/api/articles/{slug}/favorite")
+    @Transactional
+    public ResponseEntity<Object> unfavorite(Viewer viewer, @PathVariable("slug") String slug) {
+        Article article = find(slug);
+        storeUnfavorite.apply(viewer.required(), article.slug());
+        return ResponseEntity.ok(views.one(article, viewer));
     }
 
     /** {@code DELETE /api/articles/{slug}}. The same rule as editing, answered the same way. */

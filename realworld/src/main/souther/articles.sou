@@ -40,7 +40,11 @@ module example.articles exposing (
     readArticles,
     readArticle,
     readFavorited,
-    readFavoriteCounts
+    readFavoriteCounts,
+    storeFavorite,
+    storeUnfavorite,
+    TagList,
+    readTags
 )
 import example.identity ( Profile, Username )
 import String ( lowercase, characters, concat, words, join )
@@ -216,6 +220,17 @@ data FavoriteCounts = { counts: Map<Slug, Int> }
 
 behavior readFavorited      : (viewer: Username) -> FavoritedSlugs
 behavior readFavoriteCounts : (slugs: List<Slug>) -> FavoriteCounts
+
+// Favoriting has no rule to state — anybody logged in may favorite anything, twice included — so
+// these are writes the boundary calls, with no composed behavior wrapping them. Favoriting twice is
+// favoriting once, which the store's key enforces rather than a guard here.
+behavior storeFavorite   : (viewer: Username, slug: Slug) -> FavoritedSlugs
+behavior storeUnfavorite : (viewer: Username, slug: Slug) -> FavoritedSlugs
+
+// Every tag any article carries. Nothing narrows it, so it takes no argument.
+data TagList = { tags: List<Tag> }
+
+behavior readTags : () -> TagList
 
 // === fake + example ===
 let jake = Profile { username = Username("jake"), bio = None, image = None }

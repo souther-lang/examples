@@ -21,7 +21,11 @@ import example.articles.Removed;
 import example.articles.RemoveArticle;
 import example.articles.Slug;
 import example.articles.SlugExists;
+import example.articles.ReadTags;
 import example.articles.StoreArticle;
+import example.articles.StoreFavorite;
+import example.articles.StoreUnfavorite;
+import example.articles.TagList;
 import example.articles.Tag;
 import example.identity.Username;
 
@@ -170,13 +174,7 @@ public final class JooqArticles {
 
         @Override
         public FavoritedSlugs apply(Username viewer) {
-            List<String> slugs = dsl.select(field(name("slug"), String.class))
-                    .from(table(name("favorites")))
-                    .where(field(name("username"), String.class)
-                            .eq(Username.encoder().encode(viewer)))
-                    .fetch(field(name("slug"), String.class));
-            return decodeOrThrow(FavoritedSlugs.decoder()
-                    .decode(Map.of("slugs", List.copyOf(slugs)), Path.ROOT));
+            return favoritedBy(dsl, Username.encoder().encode(viewer));
         }
     }
 
@@ -287,6 +285,81 @@ public final class JooqArticles {
                     ? org.jooq.impl.DSL.falseCondition()
                     : field(name("a", "author"), String.class).in(authors);
         }
+    }
+
+    /** storeFavorite: favoriting twice is favoriting once, so the row is removed before it is written. */
+    public static final class Favorite extends StoreFavorite {
+
+        private final DSLContext dsl;
+
+        public Favorite(DSLContext dsl) {
+            this.dsl = dsl;
+        }
+
+        @Override
+        public FavoritedSlugs apply(Username viewer, Slug slug) {
+            String who = Username.encoder().encode(viewer);
+            String what = Slug.encoder().encode(slug);
+            deleteFavorite(dsl, who, what);
+            dsl.insertInto(table(name("favorites")))
+                    .columns(field(name("username"), String.class), field(name("slug"), String.class))
+                    .values(who, what)
+                    .execute();
+            return favoritedBy(dsl, who);
+        }
+    }
+
+    /** storeUnfavorite: unfavoriting what you never favorited removes no row and is not an error. */
+    public static final class Unfavorite extends StoreUnfavorite {
+
+        private final DSLContext dsl;
+
+        public Unfavorite(DSLContext dsl) {
+            this.dsl = dsl;
+        }
+
+        @Override
+        public FavoritedSlugs apply(Username viewer, Slug slug) {
+            String who = Username.encoder().encode(viewer);
+            deleteFavorite(dsl, who, Slug.encoder().encode(slug));
+            return favoritedBy(dsl, who);
+        }
+    }
+
+    /** readTags: every tag any article carries, once each. */
+    public static final class ReadAllTags extends ReadTags {
+
+        private final DSLContext dsl;
+
+        public ReadAllTags(DSLContext dsl) {
+            this.dsl = dsl;
+        }
+
+        @Override
+        public TagList apply() {
+            List<String> tags = dsl.selectDistinct(field(name("tag"), String.class))
+                    .from(table(name("article_tags")))
+                    .orderBy(field(name("tag"), String.class))
+                    .fetch(field(name("tag"), String.class));
+            return decodeOrThrow(TagList.decoder()
+                    .decode(Map.of("tags", List.copyOf(tags)), Path.ROOT));
+        }
+    }
+
+    private static void deleteFavorite(DSLContext dsl, String username, String slug) {
+        dsl.deleteFrom(table(name("favorites")))
+                .where(field(name("username"), String.class).eq(username))
+                .and(field(name("slug"), String.class).eq(slug))
+                .execute();
+    }
+
+    private static FavoritedSlugs favoritedBy(DSLContext dsl, String username) {
+        List<String> slugs = dsl.select(field(name("slug"), String.class))
+                .from(table(name("favorites")))
+                .where(field(name("username"), String.class).eq(username))
+                .fetch(field(name("slug"), String.class));
+        return decodeOrThrow(FavoritedSlugs.decoder()
+                .decode(Map.of("slugs", List.copyOf(slugs)), Path.ROOT));
     }
 
     private static <T> String orNull(Option<T> option, java.util.function.Function<T, String> encode) {

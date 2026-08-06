@@ -17,6 +17,9 @@ import example.articles.RemoveArticle;
 import example.articles.SlugExists;
 import example.articles.StoreArticle;
 import example.articles.UpdateArticle;
+import example.articles.ReadTags;
+import example.articles.StoreFavorite;
+import example.articles.StoreUnfavorite;
 import example.comments.DeleteComment;
 import example.comments.FindComment;
 import example.comments.ReadComments;
@@ -212,6 +215,21 @@ public class RealWorldConfig {
     @Bean
     public DeleteArticle deleteArticle(RemoveArticle removeArticle) {
         return DeleteArticle.bind(removeArticle);
+    }
+
+    @Bean
+    public StoreFavorite storeFavorite(DSLContext dsl) {
+        return new JooqArticles.Favorite(dsl);
+    }
+
+    @Bean
+    public StoreUnfavorite storeUnfavorite(DSLContext dsl) {
+        return new JooqArticles.Unfavorite(dsl);
+    }
+
+    @Bean
+    public ReadTags readTags(DSLContext dsl) {
+        return new JooqArticles.ReadAllTags(dsl);
     }
 
     // --- comments ---
