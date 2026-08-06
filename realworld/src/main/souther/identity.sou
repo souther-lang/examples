@@ -19,3 +19,79 @@ data Bio = String
 data ImageUrl = String
 
 data Profile = { username: Username, bio: Bio?, image: ImageUrl? }
+
+// A User is a Profile with the email nobody else sees. It does not carry the password hash: a User
+// is what a response is built from, and a derived encoder writes every field it is given, so a hash
+// on this type is a hash one careless boundary writes into JSON. The hash travels beside the user
+// instead, which is why storeUser takes both and findCredentials answers the hash on its own.
+data User = { ...Profile, email: Email }
+
+data Registration = { username: Username, email: Email, password: Password }
+
+// === the injected outside-world behaviors ===
+// No `let`, so the implementation comes from the boundary. Hashing is one of them: the domain states
+// what a password must be (Password's invariant) and never learns how one is stored, so bcrypt is a
+// bean in the Java boundary rather than a rule here. UserNotFound, EmailTaken and UsernameTaken carry
+// no fields and have no `data` line — naming them in an output is what declares them (8.4 unit-data).
+behavior hashPassword : (password: Password) -> PasswordHash
+
+behavior findUserByEmail : (email: Email) -> User | UserNotFound
+    constructs UserNotFound
+
+behavior findUserByName : (username: Username) -> User | UserNotFound
+    constructs UserNotFound
+
+// Writes a new user and the hash of its password, and answers the user as stored.
+behavior storeUser : (user: User, hash: PasswordHash) -> User
+
+// === registerUser: the two names that must be free, then the write ===
+// Both uniqueness rules are checked before anything is written, and each has its own case, so the
+// boundary can say which name was taken rather than reporting one failure for two causes.
+behavior registerUser : (registration: Registration) -> User | EmailTaken | UsernameTaken
+    depends on findUserByEmail, findUserByName, hashPassword, storeUser
+
+let registerUser (registration, findUserByEmail, findUserByName, hashPassword, storeUser) =
+    match findUserByEmail(registration.email) with
+        | User -> EmailTaken
+        | UserNotFound ->
+            match findUserByName(registration.username) with
+                | User -> UsernameTaken
+                | UserNotFound ->
+                    storeUser(
+                        User { username = registration.username
+                             , bio = None
+                             , image = None
+                             , email = registration.email },
+                        hashPassword(registration.password))
+
+// === fake + example: the order of the two checks, with no database ===
+let jake = User { username = Username("jake"), bio = None, image = None
+                , email = Email("jake@jake.jake") }
+
+fake findUserByEmail
+    | (Email("taken@example.com")) -> jake
+    | _ -> UserNotFound
+
+fake findUserByName
+    | (Username("taken")) -> jake
+    | _ -> UserNotFound
+
+fake hashPassword
+    | _ -> PasswordHash("$2a$10$fake")
+
+fake storeUser
+    | _ -> jake
+
+example registerUser
+    | "a free email and a free username are registered" :
+        (Registration { username = Username("jake"), email = Email("jake@jake.jake")
+                      , password = Password("jakejake") })
+        -> jake
+    | "an email already in use is refused, and nothing is written" :
+        (Registration { username = Username("newcomer"), email = Email("taken@example.com")
+                      , password = Password("jakejake") })
+        -> EmailTaken
+    | "a username already in use is refused, and nothing is written" :
+        (Registration { username = Username("taken"), email = Email("free@example.com")
+                      , password = Password("jakejake") })
+        -> UsernameTaken
