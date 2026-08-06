@@ -30,13 +30,13 @@
     </dependencyManagement>
 
     <dependencies>
-        <!-- Souther 生成物のランタイム(decoder/encoder。jOOQ Record 源は raoh-jooq) -->
+        <!-- The runtime for Souther's generated output (decoder/encoder; the jOOQ Record source is raoh-jooq). -->
         <dependency><groupId>org.souther-lang</groupId><artifactId>souther-runtime</artifactId></dependency>
         <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh</artifactId></dependency>
         <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh-jooq</artifactId></dependency>
 
-        <!-- 実行する境界:Spring Boot の標準スターター。DataSource / DSLContext / TransactionManager /
-             schema.sql 実行はすべて autoconfig に任せる。 -->
+        <!-- The boundary that actually runs: Spring Boot's standard starters. DataSource / DSLContext /
+             TransactionManager / schema.sql execution are all left to autoconfig. -->
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-jooq</artifactId></dependency>
         <dependency><groupId>com.h2database</groupId><artifactId>h2</artifactId><scope>runtime</scope></dependency>
@@ -47,7 +47,7 @@
         <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-impl</artifactId><version>0.13.0</version><scope>runtime</scope></dependency>
         <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-jackson</artifactId><version>0.13.0</version><scope>runtime</scope></dependency>
 
-        <!-- テスト:@SpringBootTest で実際に Boot を起動し、MockMvc で本物の HTTP を通す -->
+        <!-- Test: @SpringBootTest actually starts Boot, and MockMvc drives real HTTP against it. -->
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
     </dependencies>
 </project>
