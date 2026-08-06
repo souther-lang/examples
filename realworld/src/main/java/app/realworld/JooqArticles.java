@@ -10,6 +10,8 @@ import example.articles.ArticlePage;
 import example.articles.ArticleQuery;
 import example.articles.FavoriteCounts;
 import example.articles.FavoritedSlugs;
+import example.articles.FeedQuery;
+import example.articles.GlobalQuery;
 import example.articles.ReadArticle;
 import example.articles.ReadArticleResult;
 import example.articles.ReadArticles;
@@ -20,6 +22,7 @@ import example.articles.RemoveArticle;
 import example.articles.Slug;
 import example.articles.SlugExists;
 import example.articles.StoreArticle;
+import example.articles.Tag;
 import example.identity.Username;
 
 import net.unit8.raoh.Err;
@@ -27,8 +30,11 @@ import net.unit8.raoh.Ok;
 import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 
+import org.jooq.Condition;
 import org.jooq.DSLContext;
 import org.jooq.Record;
+
+import souther.runtime.Option;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -36,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.jooq.impl.DSL.field;
+import static org.jooq.impl.DSL.select;
 import static org.jooq.impl.DSL.name;
 import static org.jooq.impl.DSL.table;
 
@@ -204,7 +211,14 @@ public final class JooqArticles {
         }
     }
 
-    /** readArticles: filled in by the listing task; the single-article routes do not use it. */
+    /**
+     * readArticles: a page of summaries and how many the query matched. The body column is not
+     * selected — that is the whole reason ArticleSummary sits beside Article — and the total is a
+     * second query rather than the size of the page, because a client paging through needs the first.
+     *
+     * <p>The query is a sum, so the two shapes are folded rather than tested for. Nothing here has to
+     * ask whether a feed also carried a tag: a FeedQuery cannot.
+     */
     public static final class ReadPage extends ReadArticles {
 
         private final DSLContext dsl;
@@ -215,8 +229,68 @@ public final class JooqArticles {
 
         @Override
         public ArticlePage apply(ArticleQuery query) {
-            throw new UnsupportedOperationException("the listing endpoints arrive with the next task");
+            Condition where = switch (query) {
+                case GlobalQuery global -> globalCondition(global);
+                case FeedQuery feed -> feedCondition(feed);
+            };
+            // A data constructor is not public, so the paging is read out of whichever case carries
+            // it rather than rebuilt into a Paging here.
+            long limit = switch (query) {
+                case GlobalQuery global -> global.limit().value();
+                case FeedQuery feed -> feed.limit().value();
+            };
+            long offset = switch (query) {
+                case GlobalQuery global -> global.offset().value();
+                case FeedQuery feed -> feed.offset().value();
+            };
+
+            List<Map<String, Object>> articles = selectArticles(dsl)
+                    .where(where)
+                    .orderBy(field(name("a", "created_at")).desc(), field(name("a", "slug")).asc())
+                    .limit((int) limit)
+                    .offset((int) offset)
+                    .fetch()
+                    .map(row -> articleMap(dsl, row, false));
+
+            int total = dsl.fetchCount(
+                    dsl.selectFrom(table(name("articles")).as("a")).where(where));
+
+            return decodeOrThrow(ArticlePage.decoder()
+                    .decode(Map.of("articles", articles, "total", total), Path.ROOT));
         }
+
+        private static Condition globalCondition(GlobalQuery q) {
+            Condition where = org.jooq.impl.DSL.noCondition();
+            String tag = orNull(q.tag(), Tag.encoder()::encode);
+            if (tag != null) {
+                where = where.and(field(name("a", "slug"), String.class).in(
+                        select(field(name("slug"), String.class)).from(table(name("article_tags")))
+                                .where(field(name("tag"), String.class).eq(tag))));
+            }
+            String author = orNull(q.author(), Username.encoder()::encode);
+            if (author != null) {
+                where = where.and(field(name("a", "author"), String.class).eq(author));
+            }
+            String favoritedBy = orNull(q.favoritedBy(), Username.encoder()::encode);
+            if (favoritedBy != null) {
+                where = where.and(field(name("a", "slug"), String.class).in(
+                        select(field(name("slug"), String.class)).from(table(name("favorites")))
+                                .where(field(name("username"), String.class).eq(favoritedBy))));
+            }
+            return where;
+        }
+
+        /** A feed of nobody is empty rather than everything: following nothing shows you nothing. */
+        private static Condition feedCondition(FeedQuery q) {
+            List<String> authors = q.followees().stream().map(Username.encoder()::encode).toList();
+            return authors.isEmpty()
+                    ? org.jooq.impl.DSL.falseCondition()
+                    : field(name("a", "author"), String.class).in(authors);
+        }
+    }
+
+    private static <T> String orNull(Option<T> option, java.util.function.Function<T, String> encode) {
+        return option instanceof Option.Some<T> some ? encode.apply(some.value()) : null;
     }
 
     // --- the shared reads ---

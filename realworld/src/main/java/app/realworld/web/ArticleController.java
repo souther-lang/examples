@@ -9,10 +9,13 @@ import example.articles.Article;
 import example.articles.ArticleChange;
 import example.articles.ArticleDraft;
 import example.articles.ArticleNotFound;
+import example.articles.ArticlePage;
+import example.articles.ArticleQuery;
 import example.articles.CreateArticle;
 import example.articles.DeleteArticle;
 import example.articles.NotTheAuthor;
 import example.articles.ReadArticle;
+import example.articles.ReadArticles;
 import example.articles.Removed;
 import example.articles.Slug;
 import example.articles.SlugTaken;
@@ -32,6 +35,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
@@ -49,21 +53,27 @@ public class ArticleController {
     private final UpdateArticle updateArticle;
     private final DeleteArticle deleteArticle;
     private final ReadArticle readArticle;
+    private final ReadArticles readArticles;
     private final FindUserByName findUserByName;
     private final ArticleViews views;
+    private final Following following;
 
     public ArticleController(CreateArticle createArticle,
                              UpdateArticle updateArticle,
                              DeleteArticle deleteArticle,
                              ReadArticle readArticle,
+                             ReadArticles readArticles,
                              FindUserByName findUserByName,
-                             ArticleViews views) {
+                             ArticleViews views,
+                             Following following) {
         this.createArticle = createArticle;
         this.updateArticle = updateArticle;
         this.deleteArticle = deleteArticle;
         this.readArticle = readArticle;
+        this.readArticles = readArticles;
         this.findUserByName = findUserByName;
         this.views = views;
+        this.following = following;
     }
 
     /**
@@ -89,6 +99,40 @@ public class ArticleController {
             case TitleHasNoSlug _ ->
                     BoundaryErrors.unprocessable(List.of("title cannot be turned into a slug"));
         };
+    }
+
+    /**
+     * {@code GET /api/articles}. The controller does not check the query parameters: it puts them in a
+     * map and hands them to the decoder, and Limit's and Offset's invariants are what refuse a page of
+     * a thousand. `favorited` is the spec's name for the parameter and `favoritedBy` is the domain's
+     * name for what it means, which is the sort of renaming a boundary is for.
+     */
+    @GetMapping("/api/articles")
+    public ResponseEntity<Object> list(Viewer viewer, @RequestParam Map<String, String> params) {
+        Map<String, Object> raw = new LinkedHashMap<>(paging(params));
+        raw.put("type", "GlobalQuery");
+        putIfSent(raw, "tag", params.get("tag"));
+        putIfSent(raw, "author", params.get("author"));
+        putIfSent(raw, "favoritedBy", params.get("favorited"));
+        return page(decodeOrFail(ArticleQuery.decoder(), raw), viewer);
+    }
+
+    /**
+     * {@code GET /api/articles/feed}. A feed is the articles of the people you follow, so the followee
+     * set is read once and travels inside the query — a FeedQuery has no tag or author to filter by,
+     * because a feed is not asked those questions.
+     *
+     * <p>Declared before {@code /api/articles/{slug}} so the literal path is not read as a slug.
+     */
+    @GetMapping("/api/articles/feed")
+    public ResponseEntity<Object> feed(Viewer viewer, @RequestParam Map<String, String> params) {
+        Map<String, Object> raw = new LinkedHashMap<>(paging(params));
+        raw.put("type", "FeedQuery");
+        viewer.required();                       // a feed with nobody asking is a 401, not an empty page
+        raw.put("followees", following.of(viewer).stream()
+                .map(Username.encoder()::encode)
+                .toList());
+        return page(decodeOrFail(ArticleQuery.decoder(), raw), viewer);
     }
 
     /** {@code GET /api/articles/{slug}}. Auth is optional; the two flags follow whoever is asking. */
@@ -132,6 +176,24 @@ public class ArticleController {
             case Article article -> article;
             case ArticleNotFound _ -> throw new NotFound();
         };
+    }
+
+    private ResponseEntity<Object> page(ArticleQuery query, Viewer viewer) {
+        ArticlePage found = readArticles.apply(query);
+        return ResponseEntity.ok(views.page(found.articles(), (int) found.total(), viewer));
+    }
+
+    /** The spec's defaults: twenty articles from the start. */
+    private static Map<String, Object> paging(Map<String, String> params) {
+        return Map.of(
+                "limit", Integer.parseInt(params.getOrDefault("limit", "20")),
+                "offset", Integer.parseInt(params.getOrDefault("offset", "0")));
+    }
+
+    private static void putIfSent(Map<String, Object> raw, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            raw.put(key, value);
+        }
     }
 
     private User author(Username username) {
