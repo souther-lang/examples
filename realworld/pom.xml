@@ -47,7 +47,19 @@
         <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-impl</artifactId><version>0.13.0</version><scope>runtime</scope></dependency>
         <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-jackson</artifactId><version>0.13.0</version><scope>runtime</scope></dependency>
 
-        <!-- Test: @SpringBootTest actually starts Boot, and MockMvc drives real HTTP against it. -->
+        <!-- Test: @SpringBootTest actually starts Boot, and the tests drive real HTTP against it. -->
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- This module is meant to be started and pointed at somebody else's frontend, so it
+                 declares the plugin that starts it: `mvn -pl realworld spring-boot:run`. The version
+                 comes from the BOM imported above, so it cannot drift from the starters. -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
 </project>
