@@ -1,40 +1,77 @@
 #!/usr/bin/env bash
-# Fail if the Souther version is not identical everywhere it is declared. The souther.version
-# property of the root pom is the authority; the Clojure account example's deps.edn, the Kotlin
-# issuetracker example's build.gradle.kts, and the annotation-processor snippet in the README must
-# match it. This is the guardrail against a bump
-# landing in some files and being forgotten in others. CI runs this; run it locally after
-# bin/set-version.sh.
+# Fail if a version declared in more than one place is not identical everywhere. Two are: the Souther
+# compiler and Raoh. The root pom's properties are the authority for both, because that is what the
+# Maven build resolves; the builds outside Maven — the Clojure account example's deps.edn, the
+# vendored souther-clj library's own deps.edn, the Kotlin issuetracker example's build.gradle.kts —
+# and the annotation-processor snippet in the README have to agree with it. This is the guardrail
+# against a bump landing in some files and being forgotten in others. CI runs this; run it locally
+# after bin/set-version.sh.
+#
+# souther-clj/deps.edn is checked even though nothing builds through it: account puts
+# souther-clj/src on its own classpath directly, so that file is only read by whoever lifts the
+# directory out into its own repository — which is exactly the reader nobody notices going stale.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 
-# Authority: the souther.version property of the root pom, which is what the build resolves.
-core="$(sed -n 's#.*<souther.version>\(.*\)</souther.version>.*#\1#p' pom.xml | head -1)"
-if [ -z "$core" ]; then
-  echo "could not read <souther.version> from pom.xml" >&2
-  exit 2
-fi
+property() { # <name>
+  sed -n "s#.*<$1>\(.*\)</$1>.*#\1#p" pom.xml | head -1
+}
 
-fail=0
-check() { # <label> <found>
-  if [ "$2" != "$core" ]; then
-    echo "version drift: $1 = '$2' (souther.version is '$core')" >&2
-    fail=1
+core="$(property souther.version)"
+raoh="$(property raoh.version)"
+for pair in "souther.version:$core" "raoh.version:$raoh"; do
+  if [ -z "${pair#*:}" ]; then
+    echo "could not read <${pair%%:*}> from pom.xml" >&2
+    exit 2
+  fi
+done
+
+fail_souther=0
+fail_raoh=0
+check() { # <label> <found> <expected> <which>
+  if [ "$2" != "$3" ]; then
+    echo "version drift: $1 = '$2' ($4 is '$3')" >&2
+    case "$4" in
+      souther.version) fail_souther=1 ;;
+      *)               fail_raoh=1 ;;
+    esac
   fi
 }
 
 check "account deps.edn souther-runtime" \
-  "$(sed -n 's#.*souther-runtime {:mvn/version "\([^"]*\)".*#\1#p' account/deps.edn | head -1)"
+  "$(sed -n 's#.*souther-runtime {:mvn/version "\([^"]*\)".*#\1#p' account/deps.edn | head -1)" \
+  "$core" souther.version
 check "account deps.edn souther-compiler" \
-  "$(sed -n 's#.*souther-compiler {:mvn/version "\([^"]*\)".*#\1#p' account/deps.edn | head -1)"
+  "$(sed -n 's#.*souther-compiler {:mvn/version "\([^"]*\)".*#\1#p' account/deps.edn | head -1)" \
+  "$core" souther.version
 check "issuetracker build.gradle.kts southerVersion" \
-  "$(sed -n 's#.*val southerVersion = "\([^"]*\)".*#\1#p' issuetracker/build.gradle.kts | head -1)"
+  "$(sed -n 's#.*val southerVersion = "\([^"]*\)".*#\1#p' issuetracker/build.gradle.kts | head -1)" \
+  "$core" souther.version
 check "README souther-compiler snippet" \
-  "$(sed -n 's#.*souther-compiler:\([^<]*\)</path>.*#\1#p' README.md | head -1)"
+  "$(sed -n 's#.*souther-compiler:\([^<]*\)</path>.*#\1#p' README.md | head -1)" \
+  "$core" souther.version
 
-if [ "$fail" -ne 0 ]; then
+check "account deps.edn raoh" \
+  "$(sed -n 's#.*net.unit8.raoh/raoh {:mvn/version "\([^"]*\)".*#\1#p' account/deps.edn | head -1)" \
+  "$raoh" raoh.version
+check "account/souther-clj deps.edn raoh" \
+  "$(sed -n 's#.*net.unit8.raoh/raoh {:mvn/version "\([^"]*\)".*#\1#p' account/souther-clj/deps.edn | head -1)" \
+  "$raoh" raoh.version
+check "issuetracker build.gradle.kts raohVersion" \
+  "$(sed -n 's#.*val raohVersion = "\([^"]*\)".*#\1#p' issuetracker/build.gradle.kts | head -1)" \
+  "$raoh" raoh.version
+
+if [ "$fail_souther" -ne 0 ]; then
   echo "Souther version is inconsistent. Reconcile with: bin/set-version.sh $core" >&2
-  exit 1
 fi
+if [ "$fail_raoh" -ne 0 ]; then
+  echo "Raoh version is inconsistent. <raoh.version> in pom.xml is the authority; the files that" >&2
+  echo "have to match it are account/deps.edn, account/souther-clj/deps.edn and" >&2
+  echo "issuetracker/build.gradle.kts. There is no set-version.sh for Raoh: a Raoh bump is not a" >&2
+  echo "Souther bump, and three files edited by hand is less to keep right than a fourth script." >&2
+fi
+[ "$fail_souther" -eq 0 ] && [ "$fail_raoh" -eq 0 ] || exit 1
+
 echo "Souther version consistent everywhere: $core"
+echo "Raoh version consistent everywhere: $raoh"

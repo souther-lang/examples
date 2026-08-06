@@ -5,4 +5,4 @@
 ;; reflection over the Souther-generated classes the caller passes in).
 {:paths ["src"]
  :deps {org.clojure/clojure {:mvn/version "1.12.1"}
-        net.unit8.raoh/raoh {:mvn/version "0.6.0"}}}
+        net.unit8.raoh/raoh {:mvn/version "0.7.0"}}}
