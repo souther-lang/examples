@@ -24,13 +24,15 @@ import blog.identity.Username;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+
+import tools.jackson.databind.JsonNode;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -51,6 +53,7 @@ public class CommentController {
     private final FindUserByName findUserByName;
     private final ArticleController articles;
     private final Following following;
+    private final TransactionTemplate tx;
 
     public CommentController(StoreComment storeComment,
                              ReadComments readComments,
@@ -58,7 +61,8 @@ public class CommentController {
                              DeleteComment deleteComment,
                              FindUserByName findUserByName,
                              ArticleController articles,
-                             Following following) {
+                             Following following,
+                             TransactionTemplate tx) {
         this.storeComment = storeComment;
         this.readComments = readComments;
         this.findComment = findComment;
@@ -66,20 +70,23 @@ public class CommentController {
         this.findUserByName = findUserByName;
         this.articles = articles;
         this.following = following;
+        this.tx = tx;
     }
 
     /** {@code POST /api/articles/{slug}/comments}. Anybody logged in may comment, so no rule is asked. */
     @PostMapping("/api/articles/{slug}/comments")
-    @Transactional
     public ResponseEntity<Object> add(Viewer viewer,
                                       @PathVariable("slug") String slug,
-                                      @RequestBody Map<String, Object> body) {
-        Article article = articles.find(slug);
-        User author = author(viewer.required());
-        CommentBody text = decodeOrFail(CommentBody.decoder(), inner(body, "comment").get("body"));
+                                      @RequestBody JsonNode body) {
+        return tx.execute(_ -> {
+            Article article = articles.find(slug);
+            User author = author(viewer.required());
+            CommentBody text = decodeOrFail(CommentBody.jsonDecoder(),
+                    ConduitJson.inside(body, "comment").path("body"));
 
-        Comment stored = storeComment.apply(article.slug(), text, profileOf(author), now());
-        return ResponseEntity.ok(one(stored, viewer));
+            Comment stored = storeComment.apply(article.slug(), text, profileOf(author), now());
+            return ResponseEntity.ok(one(stored, viewer));
+        });
     }
 
     /** {@code GET /api/articles/{slug}/comments}. Optional auth; each author's flag is the viewer's. */
@@ -98,16 +105,17 @@ public class CommentController {
 
     /** {@code DELETE /api/articles/{slug}/comments/{id}}. A comment is its author's to delete. */
     @DeleteMapping("/api/articles/{slug}/comments/{id}")
-    @Transactional
     public ResponseEntity<Object> delete(Viewer viewer,
                                          @PathVariable("slug") String slug,
                                          @PathVariable("id") String id) {
-        articles.find(slug);
-        Comment comment = find(id);
-        return switch (deleteComment.apply(comment, viewer.required())) {
-            case Removed _ -> ResponseEntity.noContent().build();
-            case NotTheAuthor _ -> ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        };
+        return tx.execute(_ -> {
+            articles.find(slug);
+            Comment comment = find(id);
+            return switch (deleteComment.apply(comment, viewer.required())) {
+                case Removed _ -> ResponseEntity.noContent().build();
+                case NotTheAuthor _ -> ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            };
+        });
     }
 
     // --- the pieces the routes share ---
@@ -141,11 +149,5 @@ public class CommentController {
 
     private static LocalDateTime now() {
         return LocalDateTime.now().truncatedTo(ChronoUnit.MILLIS);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> inner(Map<String, Object> body, String key) {
-        Object nested = body == null ? null : body.get(key);
-        return nested instanceof Map ? (Map<String, Object>) nested : Map.of();
     }
 }

@@ -50,6 +50,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration(proxyBeanMethods = false)
 public class RealWorldConfig {
@@ -61,6 +63,17 @@ public class RealWorldConfig {
     @Bean
     public Settings jooqSettings() {
         return new Settings().withRenderQuotedNames(RenderQuotedNames.NEVER);
+    }
+
+    /**
+     * The transaction tool the boundary calls, as ordering's does. A controller that writes says where
+     * the transaction begins and ends by calling {@code tx.execute}, rather than carrying an annotation
+     * a proxy reads — and a {@code status} in hand is what lets a domain failure that arrives as a case
+     * value ask for a rollback, which an annotation cannot do.
+     */
+    @Bean
+    public TransactionTemplate transactionTemplate(PlatformTransactionManager tm) {
+        return new TransactionTemplate(tm);
     }
 
     // --- the two tools the domain does not see ---

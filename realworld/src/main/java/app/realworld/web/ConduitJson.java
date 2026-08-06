@@ -16,6 +16,10 @@
 //      fractional digits.
 package app.realworld.web;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.JsonNodeFactory;
+import tools.jackson.databind.node.ObjectNode;
+
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
@@ -33,6 +37,20 @@ public final class ConduitJson {
     /** Every RealWorld response is wrapped in a single key naming what it holds. */
     public static Map<String, Object> envelope(String key, Object body) {
         return Map.of(key, body);
+    }
+
+    /**
+     * The other side of {@link #envelope}: a request body is wrapped in the same single key, and this
+     * is what is inside it. A body that is absent, is not an object, or does not carry the key at all
+     * yields an empty object rather than a null — what the request failed to send is the decoder's to
+     * refuse, field by field, not this method's to refuse wholesale.
+     *
+     * <p>The node returned is the request's own, so a caller that adds fields to it (the boundary
+     * supplying an author or a timestamp) copies it first.
+     */
+    public static ObjectNode inside(JsonNode body, String key) {
+        JsonNode nested = body == null ? null : body.get(key);
+        return nested instanceof ObjectNode object ? object : JsonNodeFactory.instance.objectNode();
     }
 
     /**

@@ -3,6 +3,9 @@
 // The two authorization rules here are the domain's, not this file's: updateArticle and deleteArticle
 // each answer NotTheAuthor, and all the controller does is choose 403 for it. A boundary that tested
 // the author itself would be stating a rule the .sou already states, and the two would drift.
+//
+// A request body is a JsonNode read by jsonDecoder(); query parameters are a Map read by decoder().
+// Souther derives one decoder per input source, so each source is read by the one made for it.
 package app.realworld.web;
 
 import blog.articles.Article;
@@ -30,7 +33,7 @@ import blog.identity.Username;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,6 +42,10 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -61,6 +68,8 @@ public class ArticleController {
     private final Following following;
     private final StoreFavorite storeFavorite;
     private final StoreUnfavorite storeUnfavorite;
+    private final JsonMapper json;
+    private final TransactionTemplate tx;
 
     public ArticleController(CreateArticle createArticle,
                              UpdateArticle updateArticle,
@@ -71,7 +80,9 @@ public class ArticleController {
                              ArticleViews views,
                              Following following,
                              StoreFavorite storeFavorite,
-                             StoreUnfavorite storeUnfavorite) {
+                             StoreUnfavorite storeUnfavorite,
+                             JsonMapper json,
+                             TransactionTemplate tx) {
         this.createArticle = createArticle;
         this.updateArticle = updateArticle;
         this.deleteArticle = deleteArticle;
@@ -82,6 +93,8 @@ public class ArticleController {
         this.following = following;
         this.storeFavorite = storeFavorite;
         this.storeUnfavorite = storeUnfavorite;
+        this.json = json;
+        this.tx = tx;
     }
 
     /**
@@ -90,23 +103,24 @@ public class ArticleController {
      * The slug is made from the title by the domain and never sent.
      */
     @PostMapping("/api/articles")
-    @Transactional
-    public ResponseEntity<Object> create(Viewer viewer, @RequestBody Map<String, Object> body) {
-        User author = author(viewer.required());
+    public ResponseEntity<Object> create(Viewer viewer, @RequestBody JsonNode body) {
+        return tx.execute(_ -> {
+            User author = author(viewer.required());
 
-        Map<String, Object> raw = new LinkedHashMap<>(inner(body, "article"));
-        raw.put("author", authorProfile(author));
-        raw.put("at", now().toString());
-        ArticleDraft draft = decodeOrFail(ArticleDraft.decoder(), raw);
+            ObjectNode raw = ConduitJson.inside(body, "article").deepCopy();
+            raw.set("author", json.valueToTree(authorProfile(author)));
+            raw.put("at", now().toString());
+            ArticleDraft draft = decodeOrFail(ArticleDraft.jsonDecoder(), raw);
 
-        return switch (createArticle.apply(draft)) {
-            case Article article ->
-                    ResponseEntity.status(HttpStatus.CREATED).body(views.one(article, viewer));
-            case SlugTaken _ ->
-                    BoundaryErrors.unprocessable(List.of("title has already been taken"));
-            case TitleHasNoSlug _ ->
-                    BoundaryErrors.unprocessable(List.of("title cannot be turned into a slug"));
-        };
+            return switch (createArticle.apply(draft)) {
+                case Article article ->
+                        ResponseEntity.status(HttpStatus.CREATED).body(views.one(article, viewer));
+                case SlugTaken _ ->
+                        BoundaryErrors.unprocessable(List.of("title has already been taken"));
+                case TitleHasNoSlug _ ->
+                        BoundaryErrors.unprocessable(List.of("title cannot be turned into a slug"));
+            };
+        });
     }
 
     /**
@@ -151,20 +165,21 @@ public class ArticleController {
 
     /** {@code PUT /api/articles/{slug}}. Any subset of the editable fields; the slug does not move. */
     @PutMapping("/api/articles/{slug}")
-    @Transactional
     public ResponseEntity<Object> update(Viewer viewer,
                                          @PathVariable("slug") String slug,
-                                         @RequestBody Map<String, Object> body) {
-        Article article = find(slug);
+                                         @RequestBody JsonNode body) {
+        return tx.execute(_ -> {
+            Article article = find(slug);
 
-        Map<String, Object> raw = new LinkedHashMap<>(inner(body, "article"));
-        raw.put("at", now().toString());
-        ArticleChange change = decodeOrFail(ArticleChange.decoder(), raw);
+            ObjectNode raw = ConduitJson.inside(body, "article").deepCopy();
+            raw.put("at", now().toString());
+            ArticleChange change = decodeOrFail(ArticleChange.jsonDecoder(), raw);
 
-        return switch (updateArticle.apply(article, viewer.required(), change)) {
-            case Article updated -> ResponseEntity.ok(views.one(updated, viewer));
-            case NotTheAuthor _ -> ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        };
+            return switch (updateArticle.apply(article, viewer.required(), change)) {
+                case Article updated -> ResponseEntity.ok(views.one(updated, viewer));
+                case NotTheAuthor _ -> ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            };
+        });
     }
 
     /**
@@ -173,29 +188,30 @@ public class ArticleController {
      * fold and the boundary calls the write directly, as it does for unfollowing.
      */
     @PostMapping("/api/articles/{slug}/favorite")
-    @Transactional
     public ResponseEntity<Object> favorite(Viewer viewer, @PathVariable("slug") String slug) {
-        Article article = find(slug);
-        storeFavorite.apply(viewer.required(), article.slug());
-        return ResponseEntity.ok(views.one(article, viewer));
+        return tx.execute(_ -> {
+            Article article = find(slug);
+            storeFavorite.apply(viewer.required(), article.slug());
+            return ResponseEntity.ok(views.one(article, viewer));
+        });
     }
 
     @DeleteMapping("/api/articles/{slug}/favorite")
-    @Transactional
     public ResponseEntity<Object> unfavorite(Viewer viewer, @PathVariable("slug") String slug) {
-        Article article = find(slug);
-        storeUnfavorite.apply(viewer.required(), article.slug());
-        return ResponseEntity.ok(views.one(article, viewer));
+        return tx.execute(_ -> {
+            Article article = find(slug);
+            storeUnfavorite.apply(viewer.required(), article.slug());
+            return ResponseEntity.ok(views.one(article, viewer));
+        });
     }
 
     /** {@code DELETE /api/articles/{slug}}. The same rule as editing, answered the same way. */
     @DeleteMapping("/api/articles/{slug}")
-    @Transactional
     public ResponseEntity<Object> delete(Viewer viewer, @PathVariable("slug") String slug) {
-        return switch (deleteArticle.apply(find(slug), viewer.required())) {
+        return tx.execute(_ -> switch (deleteArticle.apply(find(slug), viewer.required())) {
             case Removed _ -> ResponseEntity.noContent().build();
             case NotTheAuthor _ -> ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        };
+        });
     }
 
     // --- the pieces the routes share ---
@@ -245,11 +261,5 @@ public class ArticleController {
      */
     private static LocalDateTime now() {
         return LocalDateTime.now().truncatedTo(ChronoUnit.MILLIS);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> inner(Map<String, Object> body, String key) {
-        Object nested = body == null ? null : body.get(key);
-        return nested instanceof Map ? (Map<String, Object>) nested : Map.of();
     }
 }

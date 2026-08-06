@@ -26,14 +26,17 @@ import blog.identity.UsernameTaken;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.LinkedHashMap;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
+
 import java.util.List;
 import java.util.Map;
 
@@ -49,6 +52,8 @@ public class UserController {
     private final HashPassword hashPassword;
     private final StorePassword storePassword;
     private final JwtTokens tokens;
+    private final JsonMapper json;
+    private final TransactionTemplate tx;
 
     public UserController(RegisterUser registerUser,
                           LoginUser loginUser,
@@ -56,7 +61,9 @@ public class UserController {
                           FindUserByName findUserByName,
                           HashPassword hashPassword,
                           StorePassword storePassword,
-                          JwtTokens tokens) {
+                          JwtTokens tokens,
+                          JsonMapper json,
+                          TransactionTemplate tx) {
         this.registerUser = registerUser;
         this.loginUser = loginUser;
         this.updateUser = updateUser;
@@ -64,6 +71,8 @@ public class UserController {
         this.hashPassword = hashPassword;
         this.storePassword = storePassword;
         this.tokens = tokens;
+        this.json = json;
+        this.tx = tx;
     }
 
     /**
@@ -71,14 +80,14 @@ public class UserController {
      * case, so the 422 says which name was taken rather than that registration failed.
      */
     @PostMapping("/api/users")
-    @Transactional
-    public ResponseEntity<Object> register(@RequestBody Map<String, Object> body) {
-        Registration registration = decodeOrFail(Registration.decoder(), inner(body, "user"));
-        return switch (registerUser.apply(registration)) {
+    public ResponseEntity<Object> register(@RequestBody JsonNode body) {
+        Registration registration =
+                decodeOrFail(Registration.jsonDecoder(), ConduitJson.inside(body, "user"));
+        return tx.execute(_ -> switch (registerUser.apply(registration)) {
             case User user -> ResponseEntity.status(HttpStatus.CREATED).body(respond(user));
             case EmailTaken _ -> taken("email");
             case UsernameTaken _ -> taken("username");
-        };
+        });
     }
 
     /**
@@ -87,8 +96,9 @@ public class UserController {
      * exist.
      */
     @PostMapping("/api/users/login")
-    public ResponseEntity<Object> login(@RequestBody Map<String, Object> body) {
-        Credentials credentials = decodeOrFail(Credentials.decoder(), inner(body, "user"));
+    public ResponseEntity<Object> login(@RequestBody JsonNode body) {
+        Credentials credentials =
+                decodeOrFail(Credentials.jsonDecoder(), ConduitJson.inside(body, "user"));
         return switch (loginUser.apply(credentials)) {
             case User user -> ResponseEntity.ok(respond(user));
             case InvalidCredentials _ -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
@@ -110,26 +120,29 @@ public class UserController {
      * beside the row, inside the same transaction as the change it arrived with.
      */
     @PutMapping("/api/user")
-    @Transactional
-    public ResponseEntity<Object> update(Viewer viewer, @RequestBody Map<String, Object> body) {
-        User current = currentUser(viewer.required());
-        Map<String, Object> change = inner(body, "user");
+    public ResponseEntity<Object> update(Viewer viewer, @RequestBody JsonNode body) {
+        return tx.execute(_ -> {
+            User current = currentUser(viewer.required());
+            JsonNode change = ConduitJson.inside(body, "user");
 
-        Map<String, Object> merged = new LinkedHashMap<>(User.encoder().encode(current));
-        overlay(merged, change, "username");
-        overlay(merged, change, "email");
-        overlay(merged, change, "bio");
-        overlay(merged, change, "image");
-        User wanted = decodeOrFail(User.decoder(), merged);
+            // An encoder writes a Map and what is overlaid onto it arrived as JSON, so the stored user
+            // is turned into a node first. That is the only reason valueToTree is here.
+            ObjectNode merged = json.valueToTree(User.encoder().encode(current));
+            overlay(merged, change, "username");
+            overlay(merged, change, "email");
+            overlay(merged, change, "bio");
+            overlay(merged, change, "image");
+            User wanted = decodeOrFail(User.jsonDecoder(), merged);
 
-        return switch (updateUser.apply(current, wanted)) {
-            case User stored -> {
-                changePassword(stored.username(), change);
-                yield ResponseEntity.ok(respond(stored));
-            }
-            case EmailTaken _ -> taken("email");
-            case UsernameTaken _ -> taken("username");
-        };
+            return switch (updateUser.apply(current, wanted)) {
+                case User stored -> {
+                    changePassword(stored.username(), change);
+                    yield ResponseEntity.ok(respond(stored));
+                }
+                case EmailTaken _ -> taken("email");
+                case UsernameTaken _ -> taken("username");
+            };
+        });
     }
 
     // --- the pieces every route above shares ---
@@ -152,10 +165,10 @@ public class UserController {
         };
     }
 
-    private void changePassword(Username username, Map<String, Object> change) {
-        Object raw = change.get("password");
-        if (raw != null) {
-            Password password = decodeOrFail(Password.decoder(), raw);
+    private void changePassword(Username username, JsonNode change) {
+        JsonNode sent = change.get("password");
+        if (sent != null && !sent.isNull()) {
+            Password password = decodeOrFail(Password.jsonDecoder(), sent);
             storePassword.apply(username, hashPassword.apply(password));
         }
     }
@@ -164,21 +177,16 @@ public class UserController {
      * A field the request actually sent. A key that is absent leaves what is stored alone; a key
      * explicitly null clears an optional, which is how the spec's clients empty a bio.
      */
-    private static void overlay(Map<String, Object> merged, Map<String, Object> change, String key) {
-        if (change.containsKey(key)) {
-            if (change.get(key) == null) {
-                merged.remove(key);
-            } else {
-                merged.put(key, change.get(key));
-            }
+    private static void overlay(ObjectNode merged, JsonNode change, String key) {
+        JsonNode sent = change.get(key);
+        if (sent == null) {
+            return;
         }
-    }
-
-    /** Every RealWorld request body is wrapped in one key naming what it holds. */
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> inner(Map<String, Object> body, String key) {
-        Object nested = body == null ? null : body.get(key);
-        return nested instanceof Map ? (Map<String, Object>) nested : Map.of();
+        if (sent.isNull()) {
+            merged.remove(key);
+        } else {
+            merged.set(key, sent);
+        }
     }
 
     private static ResponseEntity<Object> taken(String field) {

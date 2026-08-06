@@ -30,9 +30,13 @@
     </dependencyManagement>
 
     <dependencies>
-        <!-- The runtime for Souther's generated output (decoder/encoder; the jOOQ Record source is raoh-jooq). -->
+        <!-- The runtime for Souther's generated output. Each input source has its own decoder and its
+             own artifact behind it: a request body is read by jsonDecoder() (raoh-json), a jOOQ row by
+             recordDecoder() (raoh-jooq), and everything else — query parameters, a path variable, an
+             encoder's output read back — by decoder() (raoh). -->
         <dependency><groupId>org.souther-lang</groupId><artifactId>souther-runtime</artifactId></dependency>
         <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh</artifactId></dependency>
+        <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh-json</artifactId></dependency>
         <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh-jooq</artifactId></dependency>
 
         <!-- The boundary that actually runs: Spring Boot's standard starters. DataSource / DSLContext /

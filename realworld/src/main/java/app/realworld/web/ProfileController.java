@@ -11,7 +11,7 @@ import blog.identity.UserNotFound;
 import blog.identity.Username;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,15 +30,18 @@ public class ProfileController {
     private final Follow follow;
     private final StoreUnfollow storeUnfollow;
     private final Following following;
+    private final TransactionTemplate tx;
 
     public ProfileController(FindUserByName findUserByName,
                              Follow follow,
                              StoreUnfollow storeUnfollow,
-                             Following following) {
+                             Following following,
+                             TransactionTemplate tx) {
         this.findUserByName = findUserByName;
         this.follow = follow;
         this.storeUnfollow = storeUnfollow;
         this.following = following;
+        this.tx = tx;
     }
 
     /**
@@ -56,15 +59,16 @@ public class ProfileController {
      * check written here — follow answers CannotFollowSelf and this only chooses the status for it.
      */
     @PostMapping("/api/profiles/{username}/follow")
-    @Transactional
     public ResponseEntity<Object> followProfile(Viewer viewer, @PathVariable("username") String username) {
-        User target = find(username);
-        return switch (follow.apply(viewer.required(), target.username())) {
-            case Followees followees ->
-                    ResponseEntity.ok(respond(target, followees.usernames().contains(target.username())));
-            case CannotFollowSelf _ ->
-                    BoundaryErrors.unprocessable(List.of("you cannot follow yourself"));
-        };
+        return tx.execute(_ -> {
+            User target = find(username);
+            return switch (follow.apply(viewer.required(), target.username())) {
+                case Followees followees ->
+                        ResponseEntity.ok(respond(target, followees.usernames().contains(target.username())));
+                case CannotFollowSelf _ ->
+                        BoundaryErrors.unprocessable(List.of("you cannot follow yourself"));
+            };
+        });
     }
 
     /**
@@ -73,11 +77,12 @@ public class ProfileController {
      * the boundary calls the write directly.
      */
     @DeleteMapping("/api/profiles/{username}/follow")
-    @Transactional
     public ResponseEntity<Object> unfollowProfile(Viewer viewer, @PathVariable("username") String username) {
-        User target = find(username);
-        Followees left = storeUnfollow.apply(viewer.required(), target.username());
-        return ResponseEntity.ok(respond(target, left.usernames().contains(target.username())));
+        return tx.execute(_ -> {
+            User target = find(username);
+            Followees left = storeUnfollow.apply(viewer.required(), target.username());
+            return ResponseEntity.ok(respond(target, left.usernames().contains(target.username())));
+        });
     }
 
     private Map<String, Object> respond(User user, boolean isFollowed) {
