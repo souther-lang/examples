@@ -10,6 +10,9 @@ import app.realworld.souther.Decoding.DecodeFailed;
 
 import net.unit8.raoh.Issue;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +24,8 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class BoundaryErrors {
+
+    private static final Logger LOG = LoggerFactory.getLogger(BoundaryErrors.class);
 
     /**
      * The spec's error body: {@code {"errors": {"body": ["...", ...]}}} at 422. raoh's issues carry
@@ -35,6 +40,12 @@ public class BoundaryErrors {
         return unprocessable(messages);
     }
 
+    /** A name in the path with nobody behind it. Nothing was asked of the domain, so it is not a case. */
+    @ExceptionHandler(ProfileController.NoSuchProfile.class)
+    public ResponseEntity<Object> onNoSuchProfile(ProfileController.NoSuchProfile e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+    }
+
     /** A required-auth endpoint reached without a viewer. */
     @ExceptionHandler(Viewer.Unauthenticated.class)
     public ResponseEntity<Object> onUnauthenticated(Viewer.Unauthenticated e) {
@@ -47,6 +58,9 @@ public class BoundaryErrors {
      */
     @ExceptionHandler(DataAccessException.class)
     public ResponseEntity<Object> onPlatformFailure(DataAccessException e) {
+        // The response says nothing about the database, so the log has to: a 503 with no trace behind
+        // it is the failure nobody can diagnose.
+        LOG.error("the database refused a statement", e);
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of("errors", Map.of("body", List.of("database unavailable"))));
     }

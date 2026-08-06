@@ -202,7 +202,12 @@ public final class JooqUsers {
         }
     }
 
-    /** storeFollow: following twice is the same row, so the insert is ignored when it is there. */
+    /**
+     * storeFollow: following twice is following once, so the row is removed before it is written.
+     * An upsert would say the same thing in one statement, but jOOQ cannot emulate one against a
+     * table named dynamically — it has no key to conflict on — and these two run inside the
+     * controller's transaction anyway.
+     */
     public static final class Follow extends StoreFollow {
 
         private final DSLContext dsl;
@@ -214,10 +219,11 @@ public final class JooqUsers {
         @Override
         public Followees apply(Username follower, Username followee) {
             String who = Username.encoder().encode(follower);
+            String whom = Username.encoder().encode(followee);
+            deleteFollow(dsl, who, whom);
             dsl.insertInto(table(name("follows")))
                     .columns(field(name("follower"), String.class), field(name("followee"), String.class))
-                    .values(who, Username.encoder().encode(followee))
-                    .onConflictDoNothing()
+                    .values(who, whom)
                     .execute();
             return followeesOf(dsl, who);
         }
@@ -235,10 +241,7 @@ public final class JooqUsers {
         @Override
         public Followees apply(Username follower, Username followee) {
             String who = Username.encoder().encode(follower);
-            dsl.deleteFrom(table(name("follows")))
-                    .where(field(name("follower"), String.class).eq(who))
-                    .and(field(name("followee"), String.class).eq(Username.encoder().encode(followee)))
-                    .execute();
+            deleteFollow(dsl, who, Username.encoder().encode(followee));
             return followeesOf(dsl, who);
         }
     }
@@ -278,6 +281,13 @@ public final class JooqUsers {
 
     private static User decodeUser(Record row) {
         return decodeOrThrow(User.decoder().decode(userMap(row), Path.ROOT));
+    }
+
+    private static void deleteFollow(DSLContext dsl, String follower, String followee) {
+        dsl.deleteFrom(table(name("follows")))
+                .where(field(name("follower"), String.class).eq(follower))
+                .and(field(name("followee"), String.class).eq(followee))
+                .execute();
     }
 
     private static Followees followeesOf(DSLContext dsl, String follower) {

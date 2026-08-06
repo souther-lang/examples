@@ -3,6 +3,7 @@
 // bound to them, and the two boundary tools the domain knows nothing about — bcrypt and JWT.
 package app.realworld;
 
+import app.realworld.web.Following;
 import app.realworld.web.JwtTokens;
 
 import example.identity.FindLogin;
@@ -53,6 +54,12 @@ public class RealWorldConfig {
     @Bean
     public JwtTokens jwtTokens(@Value("${realworld.jwt.secret}") String secret) {
         return new JwtTokens(secret);
+    }
+
+    /** The viewer's followee set, read once per request wherever a `following` flag is answered. */
+    @Bean
+    public Following following(ReadFollowees readFollowees) {
+        return new Following(readFollowees);
     }
 
     // --- the injected outside-world implementations ---
