@@ -6,6 +6,7 @@
 package app.realworld.web;
 
 import blog.articles.Article;
+import blog.articles.ArticleNotFound;
 import blog.comments.Comment;
 import blog.comments.CommentBody;
 import blog.comments.CommentId;
@@ -13,6 +14,7 @@ import blog.comments.CommentNotFound;
 import blog.comments.CommentThread;
 import blog.comments.DeleteComment;
 import blog.comments.FindComment;
+import blog.comments.FindCommentResult;
 import blog.comments.NotTheAuthor;
 import blog.comments.ReadComments;
 import blog.comments.Removed;
@@ -21,6 +23,12 @@ import blog.identity.FindUserByName;
 import blog.identity.User;
 import blog.identity.UserNotFound;
 import blog.identity.Username;
+
+import net.unit8.raoh.Err;
+import net.unit8.raoh.Ok;
+import net.unit8.raoh.Path;
+import net.unit8.raoh.Result;
+import net.unit8.raoh.decode.combinator.Tuple2;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -40,8 +48,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import static app.realworld.souther.Decoding.decodeOrFail;
 
 @RestController
 public class CommentController {
@@ -79,28 +85,40 @@ public class CommentController {
                                       @PathVariable("slug") String slug,
                                       @RequestBody JsonNode body) {
         return tx.execute(_ -> {
-            Article article = articles.find(slug);
             User author = author(viewer.required());
-            CommentBody text = decodeOrFail(CommentBody.jsonDecoder(),
-                    ConduitJson.inside(body, "comment").path("body"));
+            JsonNode text = ConduitJson.inside(body, "comment").path("body");
 
-            Comment stored = storeComment.apply(article.slug(), text, profileOf(author), now());
-            return ResponseEntity.ok(one(stored, viewer));
+            // The path the decoder is given is `/body`, because what it is handed is the field's own
+            // value: it cannot know where that came from, so the 422 only says so if this line does.
+            return switch (Result.map2(articles.find(slug),
+                    CommentBody.jsonDecoder().decode(text, Path.of("body")), Tuple2::new)) {
+                case Ok(Tuple2(Article article, CommentBody written)) -> {
+                    Comment stored = storeComment.apply(article.slug(), written, profileOf(author), now());
+                    yield ResponseEntity.ok(one(stored, viewer));
+                }
+                case Ok(Tuple2(ArticleNotFound _, CommentBody _)) -> ResponseEntity.notFound().build();
+                case Err(var issues) -> BoundaryErrors.unprocessable(issues);
+            };
         });
     }
 
     /** {@code GET /api/articles/{slug}/comments}. Optional auth; each author's flag is the viewer's. */
     @GetMapping("/api/articles/{slug}/comments")
     public ResponseEntity<Object> list(Viewer viewer, @PathVariable("slug") String slug) {
-        Article article = articles.find(slug);
-        CommentThread thread = readComments.apply(article.slug());
-        Set<Username> followees = following.of(viewer);
+        return switch (articles.find(slug)) {
+            case Ok(Article article) -> {
+                CommentThread thread = readComments.apply(article.slug());
+                Set<Username> followees = following.of(viewer);
 
-        List<Map<String, Object>> body = thread.comments().stream()
-                .map(comment -> ConduitJson.comment(Comment.encoder().encode(comment),
-                        followees.contains(comment.author().username())))
-                .toList();
-        return ResponseEntity.ok(Map.of("comments", body));
+                List<Map<String, Object>> body = thread.comments().stream()
+                        .map(comment -> ConduitJson.comment(Comment.encoder().encode(comment),
+                                followees.contains(comment.author().username())))
+                        .toList();
+                yield ResponseEntity.ok(Map.of("comments", body));
+            }
+            case Ok(ArticleNotFound _) -> ResponseEntity.notFound().build();
+            case Err(var issues) -> BoundaryErrors.unprocessable(issues);
+        };
     }
 
     /** {@code DELETE /api/articles/{slug}/comments/{id}}. A comment is its author's to delete. */
@@ -108,13 +126,16 @@ public class CommentController {
     public ResponseEntity<Object> delete(Viewer viewer,
                                          @PathVariable("slug") String slug,
                                          @PathVariable("id") String id) {
-        return tx.execute(_ -> {
-            articles.find(slug);
-            Comment comment = find(id);
-            return switch (deleteComment.apply(comment, viewer.required())) {
-                case Removed _ -> ResponseEntity.noContent().build();
-                case NotTheAuthor _ -> ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-            };
+        // Two names in the path, so both are read before either is answered.
+        return tx.execute(_ -> switch (Result.map2(articles.find(slug), find(id), Tuple2::new)) {
+            case Ok(Tuple2(Article _, Comment comment)) ->
+                    switch (deleteComment.apply(comment, viewer.required())) {
+                        case Removed _ -> ResponseEntity.noContent().build();
+                        case NotTheAuthor _ -> ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+                    };
+            case Ok(Tuple2(ArticleNotFound _, _)) -> ResponseEntity.notFound().build();
+            case Ok(Tuple2(_, CommentNotFound _)) -> ResponseEntity.notFound().build();
+            case Err(var issues) -> BoundaryErrors.unprocessable(issues);
         });
     }
 
@@ -126,12 +147,15 @@ public class CommentController {
                 ConduitJson.comment(Comment.encoder().encode(comment), followed));
     }
 
-    private Comment find(String id) {
-        CommentId commentId = decodeOrFail(CommentId.decoder(), Long.parseLong(id));
-        return switch (findComment.apply(commentId)) {
-            case Comment comment -> comment;
-            case CommentNotFound _ -> throw new NotFound();
-        };
+    /**
+     * What the path names. An id arrives as text, so one that reads as a number is handed over as one
+     * and anything else is handed over as it came — the decoder is then what refuses it, and the
+     * answer is a 422 with a path like every other refusal. {@code Long.parseLong} here would answer
+     * by throwing, and what it threw carried neither.
+     */
+    private Result<FindCommentResult> find(String id) {
+        Object sent = id.matches("[0-9]{1,18}") ? Long.valueOf(id) : id;
+        return CommentId.decoder().decode(sent).map(findComment::apply);
     }
 
     private User author(Username username) {
@@ -141,10 +165,16 @@ public class CommentController {
         };
     }
 
+    /**
+     * A stored user read back as the profile that wrote a comment. This decode is not reading outside
+     * input — what it is handed was encoded from a User two lines above — so a refusal here is this
+     * process failing to read its own writing, which is a fault rather than an answer to the caller.
+     */
     private static blog.identity.Profile profileOf(User author) {
         Map<String, Object> raw = new LinkedHashMap<>(User.encoder().encode(author));
         raw.remove("email");
-        return decodeOrFail(blog.identity.Profile.decoder(), raw);
+        return blog.identity.Profile.decoder().decode(raw).orElseThrow(issues ->
+                new IllegalStateException("a stored user did not read back as a profile: " + issues));
     }
 
     private static LocalDateTime now() {

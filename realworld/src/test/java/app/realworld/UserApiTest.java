@@ -171,6 +171,47 @@ class UserApiTest {
         assertEquals(200, login("jake@jake.jake", "newpassword").status());
     }
 
+    /**
+     * The user and the password arrive in one body but go through two decoders, so the response is
+     * only useful if it carries both. It does because the two Results are combined before either is
+     * answered — reporting whichever the controller happened to read first would make a caller fix
+     * one field, send again, and only then learn about the other.
+     */
+    @Test
+    void aRequestThatBrokeTheEmailAndThePasswordIsToldAboutBoth() {
+        String token = register("jake", "jake@jake.jake", "jakejake").text("user", "token");
+
+        ConduitClient.Response refused = api.put("/api/user", token,
+                """
+                {"user": {"email": "nope", "password": "x"}}
+                """);
+
+        assertEquals(422, refused.status());
+        String reported = refused.at("errors", "body").toString();
+        assertTrue(reported.contains("/email"), () -> "the email is missing from " + reported);
+        assertTrue(reported.contains("/password"), () -> "the password is missing from " + reported);
+    }
+
+    /**
+     * The password is decoded before the change is written rather than inside the branch where the
+     * write succeeded, so a refused password leaves the rest of the request unwritten.
+     */
+    @Test
+    void aRefusedPasswordLeavesTheRestOfTheChangeUnwritten() {
+        String token = register("jake", "jake@jake.jake", "jakejake").text("user", "token");
+
+        ConduitClient.Response refused = api.put("/api/user", token,
+                """
+                {"user": {"bio": "I work at statefarm", "password": "x"}}
+                """);
+
+        assertEquals(422, refused.status());
+        assertTrue(api.get("/api/user", token).isExplicitNull("user", "bio"),
+                "the bio should not have moved");
+        assertEquals(200, login("jake@jake.jake", "jakejake").status(),
+                "the old password should still be the one that logs in");
+    }
+
     private ConduitClient.Response register(String username, String email, String password) {
         return api.post("/api/users", null, """
                 {"user": {"username": "%s", "email": "%s", "password": "%s"}}

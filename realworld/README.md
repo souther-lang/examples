@@ -86,6 +86,13 @@ Some things are worth pointing at:
 - **Authorization is a returned case.** `updateArticle`, `deleteArticle` and `deleteComment` each
   answer `NotTheAuthor`, and the boundary only chooses 403 for it. Nothing in the controllers tests an
   author.
+- **So is a decoder's refusal.** A generated decoder answers raoh's `Result`, and a route switches on
+  it beside the case union the behavior answers — `case Err(var issues)` next to `case SlugTaken _`.
+  There is no boundary class between the two: `Slug.decoder().decode(slug)` is the whole of it, and
+  what a route can reply is readable from the route. Turning the `Result` into an exception on the way
+  in would have spent raoh's accumulation before it was used, and `PUT /api/user` is where that shows:
+  the user and the password go through different decoders, so the two Results are combined and a
+  request that broke both is told about both.
 - **A search is a value.** `Limit` and `Offset` carry their bounds as invariants, so `?limit=1000` is
   refused by the decoder and the SQL is never shown it. The listing and the feed are two cases of a
   sum rather than one query with nullable fields, because a feed has no tag to filter by and a global

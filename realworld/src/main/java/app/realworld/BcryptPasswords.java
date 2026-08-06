@@ -10,14 +10,17 @@ import blog.identity.VerifyPassword;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import static app.realworld.souther.Decoding.decodeOrFail;
 
 public final class BcryptPasswords {
 
     private BcryptPasswords() {
     }
 
-    /** hashPassword: the plaintext in, the stored form out. The hash is built through the decoder. */
+    /**
+     * hashPassword: the plaintext in, the stored form out. The hash is built through the decoder, but
+     * what that decoder is reading is the line above's own output rather than anything a caller sent,
+     * so a refusal is this process failing rather than an answer to a request. It is not a 422.
+     */
     public static final class Hash extends HashPassword {
 
         private final PasswordEncoder encoder;
@@ -29,7 +32,8 @@ public final class BcryptPasswords {
         @Override
         public PasswordHash apply(Password password) {
             String hashed = encoder.encode(Password.encoder().encode(password));
-            return decodeOrFail(PasswordHash.decoder(), hashed);
+            return PasswordHash.decoder().decode(hashed).orElseThrow(issues ->
+                    new IllegalStateException("the encoder produced no readable hash: " + issues));
         }
     }
 

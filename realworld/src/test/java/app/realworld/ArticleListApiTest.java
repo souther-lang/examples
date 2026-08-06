@@ -101,6 +101,22 @@ class ArticleListApiTest {
         assertEquals(422, api.get("/api/articles?limit=1000", null).status());
     }
 
+    /**
+     * A limit that is not a number at all reaches the same decoder as a limit out of range, so it is
+     * answered the same way. The controller does no parsing of its own: an {@code Integer.parseInt}
+     * above the decoder would answer this by throwing, and what it threw carried no path and no code
+     * and left as a 500.
+     */
+    @Test
+    void aLimitThatIsNotANumberIsRefusedTheWayALimitOutOfRangeIs() {
+        ConduitClient.Response refused = api.get("/api/articles?limit=abc", null);
+
+        assertEquals(422, refused.status());
+        assertTrue(refused.at("errors", "body", "0").asString().contains("limit"),
+                "the 422 should name the parameter that broke");
+        assertEquals(422, api.get("/api/articles?offset=nope", null).status());
+    }
+
     @Test
     void aFeedIsTheArticlesOfThePeopleYouFollow() {
         api.post("/api/profiles/jake/follow", geromesToken, "");

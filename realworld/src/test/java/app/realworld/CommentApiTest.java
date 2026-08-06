@@ -108,6 +108,21 @@ class CommentApiTest {
                 """).status());
     }
 
+    /**
+     * An id that is not a number is refused by the decoder rather than by a {@code Long.parseLong}
+     * above it. Only the decoder can answer with an issue, so this is a 422 like every other refusal
+     * instead of the 500 a NumberFormatException left.
+     */
+    @Test
+    void aCommentIdThatIsNotANumberIsRefusedByTheDecoder() {
+        assertEquals(422, api.delete("/api/articles/" + SLUG + "/comments/abc", jakesToken).status());
+    }
+
+    @Test
+    void aCommentIdNobodyHoldsIs404() {
+        assertEquals(404, api.delete("/api/articles/" + SLUG + "/comments/9999", jakesToken).status());
+    }
+
     @Test
     void commentingOnAnArticleThatIsNotThereIs404() {
         assertEquals(404, api.post("/api/articles/no-such-thing/comments", geromesToken,

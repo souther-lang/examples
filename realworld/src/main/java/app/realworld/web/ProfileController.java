@@ -1,14 +1,23 @@
 // The HTTP boundary for profiles and the follow graph.
+//
+// Every route reads a username out of the path, and the two things that can go wrong with one are
+// answered separately: text that is not a username at all is a decoder's refusal, and a username
+// nobody holds is what findUserByName answers. Both arrive as values, so both are folded here.
 package app.realworld.web;
 
 import blog.identity.CannotFollowSelf;
 import blog.identity.FindUserByName;
+import blog.identity.FindUserByNameResult;
 import blog.identity.Follow;
 import blog.identity.Followees;
 import blog.identity.StoreUnfollow;
 import blog.identity.User;
 import blog.identity.UserNotFound;
 import blog.identity.Username;
+
+import net.unit8.raoh.Err;
+import net.unit8.raoh.Ok;
+import net.unit8.raoh.Result;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -20,8 +29,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
-
-import static app.realworld.souther.Decoding.decodeOrFail;
 
 @RestController
 public class ProfileController {
@@ -50,8 +57,12 @@ public class ProfileController {
      */
     @GetMapping("/api/profiles/{username}")
     public ResponseEntity<Object> profile(Viewer viewer, @PathVariable("username") String username) {
-        User user = find(username);
-        return ResponseEntity.ok(respond(user, following.of(viewer).contains(user.username())));
+        return switch (find(username)) {
+            case Ok(User user) ->
+                    ResponseEntity.ok(respond(user, following.of(viewer).contains(user.username())));
+            case Ok(UserNotFound _) -> ResponseEntity.notFound().build();
+            case Err(var issues) -> BoundaryErrors.unprocessable(issues);
+        };
     }
 
     /**
@@ -60,14 +71,15 @@ public class ProfileController {
      */
     @PostMapping("/api/profiles/{username}/follow")
     public ResponseEntity<Object> followProfile(Viewer viewer, @PathVariable("username") String username) {
-        return tx.execute(_ -> {
-            User target = find(username);
-            return switch (follow.apply(viewer.required(), target.username())) {
+        return tx.execute(_ -> switch (find(username)) {
+            case Ok(User target) -> switch (follow.apply(viewer.required(), target.username())) {
                 case Followees followees ->
                         ResponseEntity.ok(respond(target, followees.usernames().contains(target.username())));
                 case CannotFollowSelf _ ->
                         BoundaryErrors.unprocessable(List.of("you cannot follow yourself"));
             };
+            case Ok(UserNotFound _) -> ResponseEntity.notFound().build();
+            case Err(var issues) -> BoundaryErrors.unprocessable(issues);
         });
     }
 
@@ -78,10 +90,13 @@ public class ProfileController {
      */
     @DeleteMapping("/api/profiles/{username}/follow")
     public ResponseEntity<Object> unfollowProfile(Viewer viewer, @PathVariable("username") String username) {
-        return tx.execute(_ -> {
-            User target = find(username);
-            Followees left = storeUnfollow.apply(viewer.required(), target.username());
-            return ResponseEntity.ok(respond(target, left.usernames().contains(target.username())));
+        return tx.execute(_ -> switch (find(username)) {
+            case Ok(User target) -> {
+                Followees left = storeUnfollow.apply(viewer.required(), target.username());
+                yield ResponseEntity.ok(respond(target, left.usernames().contains(target.username())));
+            }
+            case Ok(UserNotFound _) -> ResponseEntity.notFound().build();
+            case Err(var issues) -> BoundaryErrors.unprocessable(issues);
         });
     }
 
@@ -90,12 +105,12 @@ public class ProfileController {
                 ConduitJson.profile(User.encoder().encode(user), isFollowed));
     }
 
-    /** An unknown username is a 404 rather than a domain case: nothing was asked of the domain yet. */
-    private User find(String username) {
-        Username name = decodeOrFail(Username.decoder(), username);
-        return switch (findUserByName.apply(name)) {
-            case User user -> user;
-            case UserNotFound _ -> throw new NotFound();
-        };
+    /**
+     * What the path names: the decoded username handed to the behavior that looks it up. The two
+     * answers stay apart — an Err is text that is not a username, and a UserNotFound is a username
+     * with nobody behind it — because they are not the same reply.
+     */
+    private Result<FindUserByNameResult> find(String username) {
+        return Username.decoder().decode(username).map(findUserByName::apply);
     }
 }

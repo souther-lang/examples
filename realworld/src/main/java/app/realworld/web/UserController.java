@@ -10,7 +10,6 @@ package app.realworld.web;
 import blog.identity.EmailTaken;
 import blog.identity.Credentials;
 import blog.identity.FindUserByName;
-import blog.identity.FindUserByNameResult;
 import blog.identity.HashPassword;
 import blog.identity.InvalidCredentials;
 import blog.identity.LoginUser;
@@ -23,6 +22,12 @@ import blog.identity.User;
 import blog.identity.UserNotFound;
 import blog.identity.Username;
 import blog.identity.UsernameTaken;
+
+import net.unit8.raoh.Err;
+import net.unit8.raoh.Ok;
+import net.unit8.raoh.Path;
+import net.unit8.raoh.Result;
+import net.unit8.raoh.decode.combinator.Tuple2;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -39,8 +44,7 @@ import tools.jackson.databind.node.ObjectNode;
 
 import java.util.List;
 import java.util.Map;
-
-import static app.realworld.souther.Decoding.decodeOrFail;
+import java.util.Optional;
 
 @RestController
 public class UserController {
@@ -81,13 +85,15 @@ public class UserController {
      */
     @PostMapping("/api/users")
     public ResponseEntity<Object> register(@RequestBody JsonNode body) {
-        Registration registration =
-                decodeOrFail(Registration.jsonDecoder(), ConduitJson.inside(body, "user"));
-        return tx.execute(_ -> switch (registerUser.apply(registration)) {
-            case User user -> ResponseEntity.status(HttpStatus.CREATED).body(respond(user));
-            case EmailTaken _ -> taken("email");
-            case UsernameTaken _ -> taken("username");
-        });
+        return switch (Registration.jsonDecoder().decode(ConduitJson.inside(body, "user"))) {
+            case Ok(Registration registration) ->
+                    tx.execute(_ -> switch (registerUser.apply(registration)) {
+                        case User user -> ResponseEntity.status(HttpStatus.CREATED).body(respond(user));
+                        case EmailTaken _ -> taken("email");
+                        case UsernameTaken _ -> taken("username");
+                    });
+            case Err(var issues) -> BoundaryErrors.unprocessable(issues);
+        };
     }
 
     /**
@@ -97,11 +103,12 @@ public class UserController {
      */
     @PostMapping("/api/users/login")
     public ResponseEntity<Object> login(@RequestBody JsonNode body) {
-        Credentials credentials =
-                decodeOrFail(Credentials.jsonDecoder(), ConduitJson.inside(body, "user"));
-        return switch (loginUser.apply(credentials)) {
-            case User user -> ResponseEntity.ok(respond(user));
-            case InvalidCredentials _ -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        return switch (Credentials.jsonDecoder().decode(ConduitJson.inside(body, "user"))) {
+            case Ok(Credentials credentials) -> switch (loginUser.apply(credentials)) {
+                case User user -> ResponseEntity.ok(respond(user));
+                case InvalidCredentials _ -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            };
+            case Err(var issues) -> BoundaryErrors.unprocessable(issues);
         };
     }
 
@@ -117,7 +124,11 @@ public class UserController {
      * whether the two names it may have moved are free is the domain's decision, not this one.
      *
      * <p>The password is not part of a User and travels on its own: it is hashed here and written
-     * beside the row, inside the same transaction as the change it arrived with.
+     * beside the row, inside the same transaction as the change it arrived with. It cannot share the
+     * user's decoder — the user is read from what the overlay produced and the password from what was
+     * sent — so the two Results are combined instead, and a request that broke both is told about
+     * both. Combining them is also what puts the password's decode before the write rather than
+     * inside the branch where it succeeded.
      */
     @PutMapping("/api/user")
     public ResponseEntity<Object> update(Viewer viewer, @RequestBody JsonNode body) {
@@ -132,15 +143,19 @@ public class UserController {
             overlay(merged, change, "email");
             overlay(merged, change, "bio");
             overlay(merged, change, "image");
-            User wanted = decodeOrFail(User.jsonDecoder(), merged);
 
-            return switch (updateUser.apply(current, wanted)) {
-                case User stored -> {
-                    changePassword(stored.username(), change);
-                    yield ResponseEntity.ok(respond(stored));
-                }
-                case EmailTaken _ -> taken("email");
-                case UsernameTaken _ -> taken("username");
+            return switch (Result.map2(User.jsonDecoder().decode(merged), password(change), Tuple2::new)) {
+                case Ok(Tuple2(User wanted, Optional<Password> sent)) ->
+                        switch (updateUser.apply(current, wanted)) {
+                            case User stored -> {
+                                sent.ifPresent(password ->
+                                        storePassword.apply(stored.username(), hashPassword.apply(password)));
+                                yield ResponseEntity.ok(respond(stored));
+                            }
+                            case EmailTaken _ -> taken("email");
+                            case UsernameTaken _ -> taken("username");
+                        };
+                case Err(var issues) -> BoundaryErrors.unprocessable(issues);
             };
         });
     }
@@ -165,12 +180,18 @@ public class UserController {
         };
     }
 
-    private void changePassword(Username username, JsonNode change) {
+    /**
+     * The new password, if the request sent one. Sending none is not a failure — the spec's clients
+     * send the fields they are changing — so the absent case is an empty Optional rather than an
+     * issue. What the decoder is handed is the field's own value and it has no way to know where that
+     * came from, so the path is passed: without it the 422 says what was wrong without saying where.
+     */
+    private static Result<Optional<Password>> password(JsonNode change) {
         JsonNode sent = change.get("password");
-        if (sent != null && !sent.isNull()) {
-            Password password = decodeOrFail(Password.jsonDecoder(), sent);
-            storePassword.apply(username, hashPassword.apply(password));
+        if (sent == null || sent.isNull()) {
+            return Result.ok(Optional.empty());
         }
+        return Password.jsonDecoder().decode(sent, Path.of("password")).map(Optional::of);
     }
 
     /**

@@ -6,6 +6,11 @@
 //
 // A request body is a JsonNode read by jsonDecoder(); query parameters are a Map read by decoder().
 // Souther derives one decoder per input source, so each source is read by the one made for it.
+//
+// Both of the things a route can be handed — a slug in the path and a body or a query string — are
+// decoded into Results and folded here. Where a route reads two of them, they are combined with
+// Result.map2 first, so a request that broke both is told about both rather than about whichever the
+// controller happened to read first.
 package app.realworld.web;
 
 import blog.articles.Article;
@@ -18,6 +23,7 @@ import blog.articles.CreateArticle;
 import blog.articles.DeleteArticle;
 import blog.articles.NotTheAuthor;
 import blog.articles.ReadArticle;
+import blog.articles.ReadArticleResult;
 import blog.articles.ReadArticles;
 import blog.articles.Removed;
 import blog.articles.Slug;
@@ -30,6 +36,11 @@ import blog.identity.FindUserByName;
 import blog.identity.User;
 import blog.identity.UserNotFound;
 import blog.identity.Username;
+
+import net.unit8.raoh.Err;
+import net.unit8.raoh.Ok;
+import net.unit8.raoh.Result;
+import net.unit8.raoh.decode.combinator.Tuple2;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -52,8 +63,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
-import static app.realworld.souther.Decoding.decodeOrFail;
 
 @RestController
 public class ArticleController {
@@ -110,15 +119,17 @@ public class ArticleController {
             ObjectNode raw = ConduitJson.inside(body, "article").deepCopy();
             raw.set("author", json.valueToTree(authorProfile(author)));
             raw.put("at", now().toString());
-            ArticleDraft draft = decodeOrFail(ArticleDraft.jsonDecoder(), raw);
 
-            return switch (createArticle.apply(draft)) {
-                case Article article ->
-                        ResponseEntity.status(HttpStatus.CREATED).body(views.one(article, viewer));
-                case SlugTaken _ ->
-                        BoundaryErrors.unprocessable(List.of("title has already been taken"));
-                case TitleHasNoSlug _ ->
-                        BoundaryErrors.unprocessable(List.of("title cannot be turned into a slug"));
+            return switch (ArticleDraft.jsonDecoder().decode(raw)) {
+                case Ok(ArticleDraft draft) -> switch (createArticle.apply(draft)) {
+                    case Article article ->
+                            ResponseEntity.status(HttpStatus.CREATED).body(views.one(article, viewer));
+                    case SlugTaken _ ->
+                            BoundaryErrors.unprocessable(List.of("title has already been taken"));
+                    case TitleHasNoSlug _ ->
+                            BoundaryErrors.unprocessable(List.of("title cannot be turned into a slug"));
+                };
+                case Err(var issues) -> BoundaryErrors.unprocessable(issues);
             };
         });
     }
@@ -136,7 +147,7 @@ public class ArticleController {
         putIfSent(raw, "tag", params.get("tag"));
         putIfSent(raw, "author", params.get("author"));
         putIfSent(raw, "favoritedBy", params.get("favorited"));
-        return page(decodeOrFail(ArticleQuery.decoder(), raw), viewer);
+        return page(raw, viewer);
     }
 
     /**
@@ -154,13 +165,17 @@ public class ArticleController {
         raw.put("followees", following.of(viewer).stream()
                 .map(Username.encoder()::encode)
                 .toList());
-        return page(decodeOrFail(ArticleQuery.decoder(), raw), viewer);
+        return page(raw, viewer);
     }
 
     /** {@code GET /api/articles/{slug}}. Auth is optional; the two flags follow whoever is asking. */
     @GetMapping("/api/articles/{slug}")
     public ResponseEntity<Object> read(Viewer viewer, @PathVariable("slug") String slug) {
-        return ResponseEntity.ok(views.one(find(slug), viewer));
+        return switch (find(slug)) {
+            case Ok(Article article) -> ResponseEntity.ok(views.one(article, viewer));
+            case Ok(ArticleNotFound _) -> ResponseEntity.notFound().build();
+            case Err(var issues) -> BoundaryErrors.unprocessable(issues);
+        };
     }
 
     /** {@code PUT /api/articles/{slug}}. Any subset of the editable fields; the slug does not move. */
@@ -169,15 +184,19 @@ public class ArticleController {
                                          @PathVariable("slug") String slug,
                                          @RequestBody JsonNode body) {
         return tx.execute(_ -> {
-            Article article = find(slug);
-
             ObjectNode raw = ConduitJson.inside(body, "article").deepCopy();
             raw.put("at", now().toString());
-            ArticleChange change = decodeOrFail(ArticleChange.jsonDecoder(), raw);
 
-            return switch (updateArticle.apply(article, viewer.required(), change)) {
-                case Article updated -> ResponseEntity.ok(views.one(updated, viewer));
-                case NotTheAuthor _ -> ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            // The slug and the body are both this request's, so both are read before either is
+            // answered: a request that named no article and sent no valid change says so once.
+            return switch (Result.map2(find(slug), ArticleChange.jsonDecoder().decode(raw), Tuple2::new)) {
+                case Ok(Tuple2(Article article, ArticleChange change)) ->
+                        switch (updateArticle.apply(article, viewer.required(), change)) {
+                            case Article updated -> ResponseEntity.ok(views.one(updated, viewer));
+                            case NotTheAuthor _ -> ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+                        };
+                case Ok(Tuple2(ArticleNotFound _, ArticleChange _)) -> ResponseEntity.notFound().build();
+                case Err(var issues) -> BoundaryErrors.unprocessable(issues);
             };
         });
     }
@@ -189,50 +208,80 @@ public class ArticleController {
      */
     @PostMapping("/api/articles/{slug}/favorite")
     public ResponseEntity<Object> favorite(Viewer viewer, @PathVariable("slug") String slug) {
-        return tx.execute(_ -> {
-            Article article = find(slug);
-            storeFavorite.apply(viewer.required(), article.slug());
-            return ResponseEntity.ok(views.one(article, viewer));
+        return tx.execute(_ -> switch (find(slug)) {
+            case Ok(Article article) -> {
+                storeFavorite.apply(viewer.required(), article.slug());
+                yield ResponseEntity.ok(views.one(article, viewer));
+            }
+            case Ok(ArticleNotFound _) -> ResponseEntity.notFound().build();
+            case Err(var issues) -> BoundaryErrors.unprocessable(issues);
         });
     }
 
     @DeleteMapping("/api/articles/{slug}/favorite")
     public ResponseEntity<Object> unfavorite(Viewer viewer, @PathVariable("slug") String slug) {
-        return tx.execute(_ -> {
-            Article article = find(slug);
-            storeUnfavorite.apply(viewer.required(), article.slug());
-            return ResponseEntity.ok(views.one(article, viewer));
+        return tx.execute(_ -> switch (find(slug)) {
+            case Ok(Article article) -> {
+                storeUnfavorite.apply(viewer.required(), article.slug());
+                yield ResponseEntity.ok(views.one(article, viewer));
+            }
+            case Ok(ArticleNotFound _) -> ResponseEntity.notFound().build();
+            case Err(var issues) -> BoundaryErrors.unprocessable(issues);
         });
     }
 
     /** {@code DELETE /api/articles/{slug}}. The same rule as editing, answered the same way. */
     @DeleteMapping("/api/articles/{slug}")
     public ResponseEntity<Object> delete(Viewer viewer, @PathVariable("slug") String slug) {
-        return tx.execute(_ -> switch (deleteArticle.apply(find(slug), viewer.required())) {
-            case Removed _ -> ResponseEntity.noContent().build();
-            case NotTheAuthor _ -> ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        return tx.execute(_ -> switch (find(slug)) {
+            case Ok(Article article) -> switch (deleteArticle.apply(article, viewer.required())) {
+                case Removed _ -> ResponseEntity.noContent().build();
+                case NotTheAuthor _ -> ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            };
+            case Ok(ArticleNotFound _) -> ResponseEntity.notFound().build();
+            case Err(var issues) -> BoundaryErrors.unprocessable(issues);
         });
     }
 
     // --- the pieces the routes share ---
 
-    Article find(String slug) {
-        return switch (readArticle.apply(decodeOrFail(Slug.decoder(), slug))) {
-            case Article article -> article;
-            case ArticleNotFound _ -> throw new NotFound();
+    /**
+     * What the path names: the decoded slug handed to the behavior that reads it. The two answers
+     * stay apart — an Err is text that is not a slug, and an ArticleNotFound is a slug with no
+     * article behind it — because the domain declared the second one and nobody declared the first.
+     */
+    Result<ReadArticleResult> find(String slug) {
+        return Slug.decoder().decode(slug).map(readArticle::apply);
+    }
+
+    private ResponseEntity<Object> page(Map<String, Object> raw, Viewer viewer) {
+        return switch (ArticleQuery.decoder().decode(raw)) {
+            case Ok(ArticleQuery query) -> {
+                ArticlePage found = readArticles.apply(query);
+                yield ResponseEntity.ok(views.page(found.articles(), (int) found.total(), viewer));
+            }
+            case Err(var issues) -> BoundaryErrors.unprocessable(issues);
         };
     }
 
-    private ResponseEntity<Object> page(ArticleQuery query, Viewer viewer) {
-        ArticlePage found = readArticles.apply(query);
-        return ResponseEntity.ok(views.page(found.articles(), (int) found.total(), viewer));
-    }
-
-    /** The spec's defaults: twenty articles from the start. */
+    /**
+     * The spec's defaults: twenty articles from the start. Nothing is validated here — Limit's and
+     * Offset's invariants are the domain's, and the decoder is what checks them.
+     */
     private static Map<String, Object> paging(Map<String, String> params) {
         return Map.of(
-                "limit", Integer.parseInt(params.getOrDefault("limit", "20")),
-                "offset", Integer.parseInt(params.getOrDefault("offset", "0")));
+                "limit", number(params.getOrDefault("limit", "20")),
+                "offset", number(params.getOrDefault("offset", "0")));
+    }
+
+    /**
+     * A query parameter arrives as text whatever it means. One that reads as a number is handed to
+     * the decoder as one, and anything else is handed over as it came so the decoder is what refuses
+     * it. {@code Integer.parseInt} here would answer by throwing, and what it threw carried no path
+     * and no code, so {@code ?limit=abc} left as a 500 while {@code ?limit=0} was a 422.
+     */
+    private static Object number(String raw) {
+        return raw.matches("-?[0-9]{1,18}") ? Long.valueOf(raw) : raw;
     }
 
     private static void putIfSent(Map<String, Object> raw, String key, String value) {

@@ -1,14 +1,14 @@
-// The failures that are not domain outcomes, mapped in one place.
+// The spec's error body, and the two failures that are not values.
 //
-// A domain outcome is a case value a behavior declared, and each controller folds its own with a
-// switch the compiler checks for exhaustiveness. What is left over is here: input the decoder
-// refused, a request with no viewer where one is required, and a database that is not answering.
-// None of those is a case any .sou declared, and none of them should be.
+// Almost nothing is handled here. A decoder's refusal is a Result the controller switches on, and a
+// behavior's outcome is a case union it switches on too, so both are answered where they arrive
+// rather than thrown past the route that asked for them. What is left is the two failures nobody
+// declared: a request that named no viewer where one is required, and a database that is not
+// answering. Neither is a case any .sou declared, and neither should be.
 package app.realworld.web;
 
-import app.realworld.souther.Decoding.DecodeFailed;
-
 import net.unit8.raoh.Issue;
+import net.unit8.raoh.Issues;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,25 +26,6 @@ import java.util.Map;
 public class BoundaryErrors {
 
     private static final Logger LOG = LoggerFactory.getLogger(BoundaryErrors.class);
-
-    /**
-     * The spec's error body: {@code {"errors": {"body": ["...", ...]}}} at 422. raoh's issues carry
-     * the path that broke and the rule it broke, so the message says which field rather than that
-     * something was wrong.
-     */
-    @ExceptionHandler(DecodeFailed.class)
-    public ResponseEntity<Object> onDecodeFailure(DecodeFailed e) {
-        List<String> messages = e.issues().asList().stream()
-                .map(BoundaryErrors::describe)
-                .toList();
-        return unprocessable(messages);
-    }
-
-    /** A name in the path with nothing behind it. Nothing was asked of the domain, so it is not a case. */
-    @ExceptionHandler(NotFound.class)
-    public ResponseEntity<Object> onNotFound(NotFound e) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
-    }
 
     /** A required-auth endpoint reached without a viewer. */
     @ExceptionHandler(Viewer.Unauthenticated.class)
@@ -69,6 +50,15 @@ public class BoundaryErrors {
     public static ResponseEntity<Object> unprocessable(List<String> messages) {
         return ResponseEntity.unprocessableEntity()
                 .body(Map.of("errors", Map.of("body", messages)));
+    }
+
+    /**
+     * The same body, built from everything a decoder refused at once. raoh accumulates rather than
+     * stopping at the first issue, and each one carries the path that broke and the rule it broke, so
+     * the message says which field rather than that something was wrong.
+     */
+    public static ResponseEntity<Object> unprocessable(Issues issues) {
+        return unprocessable(issues.asList().stream().map(BoundaryErrors::describe).toList());
     }
 
     private static String describe(Issue issue) {
