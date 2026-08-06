@@ -7,7 +7,38 @@
 // The author is a Profile rather than a Username. An article's author is a person, and the alternative
 // — holding the id and asking the boundary to look the person up per row — is the same choice made
 // worse. What the boundary still adds is `following`, which is about whoever is reading.
-module example.articles
+module example.articles exposing (
+    Slug,
+    Title,
+    Description,
+    Body,
+    Tag,
+    ArticleSummary,
+    Article,
+    ArticleDraft,
+    ArticleChange,
+    SlugTaken,
+    TitleHasNoSlug,
+    NotTheAuthor,
+    ArticleNotFound,
+    Limit,
+    Offset,
+    Paging,
+    GlobalQuery,
+    FeedQuery,
+    ArticleQuery,
+    ArticlePage,
+    FavoritedSlugs,
+    FavoriteCounts,
+    slugExists,
+    storeArticle,
+    createArticle,
+    updateArticle,
+    readArticles,
+    readArticle,
+    readFavorited,
+    readFavoriteCounts
+)
 import example.identity ( Profile, Username )
 import String ( lowercase, characters, concat, words, join )
 
@@ -128,6 +159,46 @@ let changedBody (change: ArticleChange, current: Body): Body =
     match change.body with
         | None    -> current
         | Some b   -> b
+
+// === asking for a page of articles ===
+// A search is a value. Limit and Offset carry their bounds as invariants, so a request for a page of
+// a thousand rows is refused by the decoder and the SQL is never shown one — the bound is stated once,
+// in the domain, rather than defended in each query the boundary writes.
+//
+// The global list and the personal feed are two cases rather than one query with a nullable field,
+// because they ask different questions. A feed is the articles of the people you follow, and there is
+// no tag or author to filter it by; a global list has no followees. A single flat query would make
+// both of those representable at once, and nothing would mean anything.
+data Limit = Int
+    invariant value >= 1 && value <= 100
+
+data Offset = Int
+    invariant value >= 0
+
+data Paging = { limit: Limit, offset: Offset }
+
+data GlobalQuery = { ...Paging, tag: Tag?, author: Username?, favoritedBy: Username? }
+data FeedQuery   = { ...Paging, followees: Set<Username> }
+
+data ArticleQuery = GlobalQuery | FeedQuery
+
+// The page and the total are read together because they answer one question. `total` is how many the
+// query matches, not how many this page holds — a client paging through needs the first.
+data ArticlePage = { articles: List<ArticleSummary>, total: Int }
+
+behavior readArticles : (query: ArticleQuery) -> ArticlePage
+
+behavior readArticle : (slug: Slug) -> Article | ArticleNotFound
+    constructs ArticleNotFound
+
+// Which of a page's articles the viewer has favorited, and how many favorites each has. Both are read
+// once for the whole page: the first is about the viewer, the second is about the articles, and asking
+// either per row is the query-per-article this shape exists to avoid.
+data FavoritedSlugs = { slugs: Set<Slug> }
+data FavoriteCounts = { counts: Map<Slug, Int> }
+
+behavior readFavorited      : (viewer: Username) -> FavoritedSlugs
+behavior readFavoriteCounts : (slugs: List<Slug>) -> FavoriteCounts
 
 // === fake + example ===
 let jake = Profile { username = Username("jake"), bio = None, image = None }
