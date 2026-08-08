@@ -27,7 +27,7 @@ souther examples src/main/souther/*.sou
 (`souther` is `souther-cli/target/souther` from the compiler build the root README describes.)
 
 ```
-example.shippingfee                                      status: complete
+example.shippingfee                                      measurement: complete
   送料を求める                   implemented   rows 3    pending 0
     signature   out specified 2/2  observed 2/2  verified 2/2
     partition   axes 3   single-axis 5/7   pairs 7 reached / 7 known reachable, 9 untried
@@ -42,6 +42,9 @@ example.shippingfee                                      status: complete
       · no row goes through `case 離島` (59:5)
       · no row goes through `case 離島` (53:5)
       · no row goes through `case 北海道沖縄` (53:5)
+
+1 behavior: 1 implemented, 0 injected; 0 rows waiting for a `let`.
+adequacy: not satisfied
 ```
 
 None of that came from a coverage tool watching a test run. The classes are the ones the model's own
@@ -52,6 +55,10 @@ by naming it.
 `not derivable: 注文.番号` is the report declining to guess. An order number has a format, not a set
 of classes, so there is nothing to divide it into and the report says so rather than counting it as
 covered.
+
+The two words at the ends are different answers. `measurement: complete` says every measure could be
+made; `adequacy: not satisfied` says what was measured leaves a gap. Here both are true at once —
+everything was looked at, and this is what nothing covers.
 
 ## The rows it hands back
 
@@ -107,7 +114,8 @@ is.
 
 The report names those two; it does not generate them. Deriving that a path exists is arithmetic on
 the model, and deciding what should come out of it is reading the regulation. With them written by
-hand the behavior is at `branch 10/10`, and that is the state this directory is committed in.
+hand the behavior is at `branch 10/10` and the report ends `adequacy: satisfied`, and that is the
+state this directory is committed in.
 
 ## And when the regulation changes
 
@@ -151,13 +159,20 @@ slots were correct. Those are still yours.
 ## Running it
 
 ```sh
-mvn -o -pl shippingfee -am clean install   # generate types, check the rows, run the JUnit test
-souther examples src/main/souther/*.sou    # the report above
+mvn -o -pl shippingfee -am clean install            # generate types, check the rows, run the JUnit test
+souther examples src/main/souther/*.sou             # the report above
+souther examples --strict src/main/souther/*.sou    # and exit non-zero on any gap it names
 ```
 
 The `example` rows are checked when the sources are compiled, so a row that stops holding fails the
-build rather than a test run — `E1905`, naming the row. Note the `clean`: an incremental build that
-does not recompile the sources does not recheck the rows either.
+build rather than a test run — `E1905`, naming the row (`souther doc E1905` says what the rule is).
+Note the `clean`: an incremental build that does not recompile the sources does not recheck the rows
+either.
+
+A row that stops holding is not the same as a rule nothing reaches, and only the first fails a
+compile. `--strict` is what makes the second fail too: this directory is at `adequacy: satisfied`, so
+it exits zero today, and adding a region to the model without adding rows for it is what would turn
+it non-zero.
 
 `src/test/java` holds the part the rows do not reach — an order arriving as a map from outside,
 decoded through the same format rule.

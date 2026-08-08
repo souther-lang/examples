@@ -56,8 +56,9 @@ processor runs as part of compiling Java, and javac does nothing at all when a p
 source. A project written only in Souther has to write one file in another language to be built.
 
 A compile error is reported the way the CLI reports it — the title, the position, the offending line
-with a caret, and the hint. `-Asouther.lang=en` picks the language of the message; without it the
-processor follows `SOUTHER_LANG` and then the JVM's default locale, as `souther --lang` does.
+with a caret, and the hint. `-Asouther.lang=ja` picks the language of the message; without it the
+processor follows `SOUTHER_LANG`, and English when that is unset too. The machine's own locale is
+never read, which is what `souther --lang` does as well.
 
 ## Modules
 
