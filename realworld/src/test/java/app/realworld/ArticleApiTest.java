@@ -61,8 +61,8 @@ class ArticleApiTest {
     void theTimestampsAreUtcWithThreeFractionalDigits() {
         ConduitClient.Response created = api.post("/api/articles", jakesToken, DRAGONS);
 
-        // Souther's DateTime is a LocalDateTime and encodes as its toString: no Z, and no fractional
-        // part at all when the nanoseconds are zero. This is what ConduitJson.timestamp is for.
+        // Souther's DateTime is a LocalDateTime held to the second and encodes as its toString: no
+        // Z, and no fractional part. This is what ConduitJson.timestamp is for.
         String createdAt = created.text("article", "createdAt");
         assertTrue(createdAt.matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"),
                 "createdAt was " + createdAt);

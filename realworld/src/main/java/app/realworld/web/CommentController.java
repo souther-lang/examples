@@ -177,7 +177,8 @@ public class CommentController {
                 new IllegalStateException("a stored user did not read back as a profile: " + issues));
     }
 
+    /** A DateTime holds no fraction of a second, so the clock reading is truncated to one. */
     private static LocalDateTime now() {
-        return LocalDateTime.now().truncatedTo(ChronoUnit.MILLIS);
+        return LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
     }
 }

@@ -305,10 +305,12 @@ public class ArticleController {
     }
 
     /**
-     * The spec's timestamps carry milliseconds, so the value written is truncated to them: a stored
-     * time with more precision than the response can state would answer differently on the way back.
+     * A DateTime holds no fraction of a second, so the clock reading is truncated to one before the
+     * domain is handed it. The milliseconds the spec's timestamps carry are written back as zeros by
+     * {@link ConduitJson#timestamp}; a value with more precision than the type holds is refused at
+     * the decoder rather than stored.
      */
     private static LocalDateTime now() {
-        return LocalDateTime.now().truncatedTo(ChronoUnit.MILLIS);
+        return LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
     }
 }

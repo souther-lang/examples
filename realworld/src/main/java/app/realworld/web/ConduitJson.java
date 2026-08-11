@@ -11,8 +11,8 @@
 //   2. A derived encoder omits an optional field rather than writing null. The spec writes
 //      "bio": null, and a frontend reading obj.bio.length on an absent key is a frontend that
 //      breaks against an otherwise correct backend, so the absent keys are filled with null.
-//   3. Souther's DateTime is a LocalDateTime and encodes as its toString, which has no zone and
-//      drops the fractional part when it is zero. The spec's timestamps are UTC with exactly three
+//   3. Souther's DateTime is a LocalDateTime held to the second, and encodes as its toString, which
+//      has no zone and no fractional part. The spec's timestamps are UTC with exactly three
 //      fractional digits.
 package app.realworld.web;
 
@@ -109,7 +109,8 @@ public final class ConduitJson {
 
     /**
      * Rewrites Souther's rendering of a DateTime into the spec's. Souther's DateTime is a
-     * LocalDateTime, so what arrives has no zone and may have no fractional part at all.
+     * LocalDateTime held to the second, so what arrives has no zone and no fractional part, and the
+     * three digits the spec asks for are written as zeros.
      */
     public static String timestamp(Object encodedDateTime) {
         return LocalDateTime.parse((String) encodedDateTime).format(SPEC_TIMESTAMP);

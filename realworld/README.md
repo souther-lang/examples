@@ -54,9 +54,10 @@ read once for the whole response rather than once per row.
 `"bio": null`, and a frontend that reads `user.bio` was written against that, so the absent keys are
 filled back in.
 
-**Souther's `DateTime` is a `LocalDateTime`** and encodes as its `toString`, which carries no zone
-and drops the fractional part when it is zero. The specification's timestamps are
-`2016-02-18T03:22:56.637Z`.
+**Souther's `DateTime` is a `LocalDateTime` held to the second** and encodes as its `toString`, which
+carries no zone and no fractional part. The specification's timestamps are `2016-02-18T03:22:56.637Z`,
+so the boundary writes the zone and the milliseconds back in, and truncates its clock reading to a
+second before the domain is handed it — a finer value is refused at the decoder rather than stored.
 
 None of the three is a defect in the derived codecs. They are what it looks like when the JSON is
 somebody else's decision, and the useful thing about this module is that all three are in one file
