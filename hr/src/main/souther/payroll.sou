@@ -56,13 +56,13 @@ module example.payroll exposing (
 )
 
 import example.employee (
-    Yen, toYen, MonthlyRemuneration, scheduledWage, totalRemuneration
+    Yen, MonthlyRemuneration, scheduledWage, totalRemuneration
 )
 import example.attendance (
     Hours, MonthlyTally, UpliftRates, upliftRates
 )
 import example.socialinsurance (
-    ContributionMonth, monthOf, Premium, PremiumShare
+    ContributionMonth, monthOf
 )
 
 // === The two months ===

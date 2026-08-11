@@ -36,9 +36,9 @@ module example.ledger exposing (
     postCreditNote,
     balanceOff
 )
-import example.billing ( Amount, InvoiceNo, Invoice, CreditNote, CreditReason, PriceError )
+import example.billing ( Amount, InvoiceNo, Invoice, CreditNote, PriceError )
 import example.ordering ( OrderId )
-import List ( fold, filter, map, length, flatMap, sortBy )
+import List ( fold, filter, map, length, flatMap )
 
 // A four-digit account number, the shape a Japanese chart of accounts uses. It arrives from the
 // accounting system, so its format is all this module says about it.

@@ -62,8 +62,8 @@ module example.billing exposing (
 )
 import example.cart ( Sku, LineItem )
 import example.ordering ( OrderId, RecordedOrder )
-import example.tax ( TaxRate, TaxBreakdown, TaxCategory )
-import List ( map, filter, fold, foldRight, length, find, rangeInclusive, flatMap )
+import example.tax ( TaxRate, TaxBreakdown )
+import List ( map, filter, fold, foldRight, find, rangeInclusive, flatMap )
 
 // An invoice number: series, year, and a sequence within the year. It is assembled by this module
 // (see `issueInvoice`) and also arrives from outside on a payment, so the format is an invariant

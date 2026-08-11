@@ -82,8 +82,8 @@ import example.employee (
     ContractTerm, Indefinite, TermUntil, StudentStatus, DaytimeStudent, NotDaytimeStudent,
     MonthlyRemuneration, WeeklyScheduledHours,
     SeparationReason, VoluntaryResignation, ContractExpiry, MandatoryRetirement,
-    EmployerCause, Dismissal, BusinessClosure, EncouragedResignation, DismissalForMisconduct, Death,
-    RenewalIntent, RenewalSought, RenewalNotSought,
+    EmployerCause, Dismissal, DismissalForMisconduct, Death,
+    RenewalSought, RenewalNotSought,
     attainedAgeOn, totalRemuneration
 )
 

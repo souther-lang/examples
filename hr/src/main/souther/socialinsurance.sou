@@ -98,8 +98,8 @@ import example.employee (
     EmploymentType, FullTime, ContractEmployee, PartTime, Executive,
     StudentStatus, DaytimeStudent, NotDaytimeStudent,
     ActiveEmployee, Employed, OnLeave,
-    LeaveKind, SickLeave, MaternityLeave, ChildcareLeave, CaregiverLeave,
-    OfficeId, ContractTerm, Indefinite, TermUntil,
+    SickLeave, MaternityLeave, ChildcareLeave, CaregiverLeave,
+    OfficeId, ContractTerm, Indefinite,
     attainedAgeOn, scheduledWage, fixedRemuneration, totalRemuneration, toYen
 )
 

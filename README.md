@@ -145,9 +145,11 @@ order the set happens to hold, so a response body is not byte-stable and a test 
 array. `CatalogTest` compares membership instead, which is the right assertion here and the wrong one
 to be forced into everywhere.
 
-**F30 — an unused import is accepted in silence.** A module can name a type on its `import` list and
-never mention it again, and nothing says so — through the CLI or through the build. `shipping` carried
-one for a while and no reader of the file could have told.
+**F30 — an import a fixture needs is reported as unused.** A row's input is decoded, and a sum
+written there as a bare case name (`contract = Indefinite`) is read against the sum's own name, so
+`ContractTerm` has to stay on the import list. `E1922` does not count that as a use: `socialinsurance`
+and `yearendadjustment` are both told the name is never used, and taking it off turns the row into
+`E1903 — contract.type: is required`. Two answers about one name, and only one of them compiles.
 
 **F31 (souther#298) — a collection is written one way in a body and another in a fixture.** In a body
 `[ … ]` is a `List` and only a `List`, so a `Set` field is filled with `Set.fromList` — `billing`'s

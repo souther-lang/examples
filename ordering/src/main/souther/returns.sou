@@ -38,8 +38,8 @@ module example.returns exposing (
 )
 import example.cart ( Sku )
 import example.billing ( Amount, InvoiceNo )
-import example.shipping ( PickLine, ShipmentId )
-import List ( map, fold, filter, length, contains, reverse, take )
+import example.shipping ( ShipmentId )
+import List ( map, contains, reverse, take )
 
 // A return authorisation number. It arrives from the customer service system, so its format is all
 // this module says about it.

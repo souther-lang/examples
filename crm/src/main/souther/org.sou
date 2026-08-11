@@ -29,7 +29,7 @@ module example.org exposing (
     widestSpan
 )
 import example.crm ( UserId )
-import List ( fold, map, length, isEmpty, reverse, drop )
+import List ( fold, length, isEmpty )
 
 // What the role is called. It is administered outside the model, so its length is all this says.
 data RoleName = String

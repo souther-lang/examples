@@ -69,11 +69,11 @@ module example.yearendadjustment exposing (
 
 import example.employee (
     Yen, Employee, Prospective, Employed, OnLeave, Separated,
-    PersonalIdentity, EmployeeId, Sex, Female, MyNumber,
+    PersonalIdentity, EmployeeId, Female, MyNumber,
     PersonalName, PersonName, KanaName,
     Residence, Address, PostalCode, PrefectureCode,
-    EmploymentTerms, OfficeId, EmploymentType, FullTime,
-    WeeklyScheduledHours, ContractTerm, Indefinite, StudentStatus, NotDaytimeStudent,
+    EmploymentTerms, OfficeId, FullTime,
+    WeeklyScheduledHours, ContractTerm, Indefinite, NotDaytimeStudent,
     MonthlyRemuneration, SeparationReason, VoluntaryResignation
 )
 import example.dependents (

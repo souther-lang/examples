@@ -74,7 +74,7 @@ import example.employee (
     EmployeeId,
     SeparationReason, VoluntaryResignation, ContractExpiry, MandatoryRetirement,
     EmployerCause, Dismissal, BusinessClosure, EncouragedResignation, DismissalForMisconduct, Death,
-    RenewalIntent, RenewalSought, RenewalNotSought
+    RenewalSought, RenewalNotSought
 )
 import example.socialinsurance (
     DeterminationBasis, OnAcquisition, RegularDetermination, OccasionalRevision

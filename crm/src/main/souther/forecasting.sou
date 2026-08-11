@@ -41,7 +41,7 @@ import example.org ( RoleNode, RoleName )
 import example.pipeline ( OpportunityId, OpportunityName, Opportunity, OpenOpportunity, ClosedWon
                         , Prospecting, Qualification, NeedsAnalysis, ValueProposition
                         , IdDecisionMakers, PerceptionAnalysis, ProposalPriceQuote, NegotiationReview
-                        , ClosedLost, ForecastCategory, Pipeline, BestCase, Commit, Closed, Omitted
+                        , ClosedLost, ForecastCategory
                         , categoryOf, probabilityFor )
 import example.activity ( StaleReport )
 

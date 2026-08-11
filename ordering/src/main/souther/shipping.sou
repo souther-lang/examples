@@ -40,7 +40,7 @@ module example.shipping exposing (
     planCalendar
 )
 import example.cart ( Sku, LineItem, PricedCart )
-import example.inventory ( Allocated, Location )
+import example.inventory ( Location )
 import List ( map, fold, filterMap, length, sum )
 
 // A dispatch note number. Assigned by the carrier, so it only ever arrives from outside and its

@@ -37,7 +37,7 @@ module example.inventory exposing (
     StockLine,
     StockSnapshot
 )
-import List ( all, indexBy, fold, map )
+import List ( all, indexBy, fold )
 import example.cart ( Sku, LineItem, PricedCart )
 
 // === A quantity and the unit it is counted in ===
