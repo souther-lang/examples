@@ -107,7 +107,7 @@ behavior 登録する : (要求: 登録要求) -> 登録済み | 重複メール
 
 let 登録する (要求, findByEmail, 発番する, saveMember) =
     match findByEmail(要求.メール) with
-        | 会員 as _ -> 重複メール
+        | 会員     -> 重複メール
         | 会員なし   -> saveMember(会員 {
             id = 発番する(要求),
             メール = 未アクティベート(要求.メール),
