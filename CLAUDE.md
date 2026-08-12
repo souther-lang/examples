@@ -31,3 +31,6 @@ cd issuetracker && ./gradlew build                      # Kotlin, its own Gradle
 
 `ordering` and `issuetracker` start Spring Boot against H2, so their first build needs network to
 fetch the starters; after that `mvn -o` and `./gradlew --offline` work.
+
+Java boundary conventions for code written against generated Souther types are in
+`docs/java-boundary-conventions.md`.

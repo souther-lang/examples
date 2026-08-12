@@ -28,6 +28,7 @@
         <module>whodunit</module>
         <module>shippingfee</module>
         <module>realworld</module>
+        <module>todomvc</module>
     </modules>
 
     <properties>

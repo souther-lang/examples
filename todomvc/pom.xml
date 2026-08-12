@@ -1,0 +1,53 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>example.souther</groupId>
+        <artifactId>souther-examples</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+    <artifactId>todomvc</artifactId>
+    <description>
+        TodoMVC done as data + invariant only: todomvc.sou states the shape of a Todo, the one rule a
+        title must hold, and the two pure view rules (visibleTodos, remainingCount). Every read and
+        write behavior is left injected — no `let`, no fake, no example — because there is no domain
+        rule behind them to prove; see PROMPT.md for the coding-agent brief that builds the CRUD
+        boundary against schema.sql, and README.md for why the module stops here. The boundary's
+        framework and library choices are fixed here, the same way ordering/pom.xml fixes them for its
+        own boundary, so PROMPT.md doesn't have to argue for them in prose: Spring Boot + jOOQ + H2,
+        wired the way spring-boot-starter-jooq autoconfigures it.
+    </description>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>4.1.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency><groupId>org.souther-lang</groupId><artifactId>souther-runtime</artifactId></dependency>
+        <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh</artifactId></dependency>
+        <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh-jooq</artifactId></dependency>
+
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-jooq</artifactId></dependency>
+        <dependency><groupId>com.h2database</groupId><artifactId>h2</artifactId><scope>runtime</scope></dependency>
+
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>4.1.0</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>

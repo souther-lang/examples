@@ -1,0 +1,129 @@
+// TodoMVC: the smallest CRUD app people already know by heart, chosen on purpose because it has
+// almost no domain logic. Everything a todo app does is injected behavior — store a row, read the
+// rows back, set a flag, delete a row — and this module states plainly what stays true even so: the
+// shape of a Todo, the one invariant a title must hold, and the two small rules (which todos a filter
+// shows, how many remain) that are worth writing once instead of re-deriving in every UI.
+//
+// The shape of Todo, and which behaviors exist, follow the todo-backend contract
+// (https://www.todobackend.com/specs/index.html, from its js/specs.js) rather than an invented API:
+// a Todo is `{title, completed, order, url}`; a client may set `order` at creation and change it
+// later; `completed` is set to an explicit value, not toggled; the collection can be cleared
+// wholesale (`DELETE` on the root), not just its completed items. `url` is not a domain field — it is
+// the boundary's own address for a row, minted once the row exists — so it stays out of `Todo` and is
+// the coding agent's job, per PROMPT.md.
+//
+// What is on show:
+//   - A module that is almost entirely `behavior` with no `let`. storeTodo through deleteAllTodos are
+//     interfaces only, the same shape as `comments.sou`'s storeComment/readComments/removeComment: the
+//     compiler states their signatures and invariants, and a boundary — here, a coding agent working
+//     from PROMPT.md against schema.sql — supplies the bodies. Nothing here is faked or exampled for
+//     them, because there is no rule to prove; the persistence itself is the whole behavior.
+//   - The two rules that are not injected. Which todos a `Filter` shows and how many remain are pure
+//     functions of the list a boundary already read back, so they belong here rather than being
+//     reimplemented per view — and being pure, they get the usual `example` proof. Neither is part of
+//     the todo-backend contract itself (there is no filter query param in that spec); they exist for
+//     whatever frontend the coding agent points at this backend, todo-backend's own reference one
+//     included, which filters and counts client-side against the same data these rules describe.
+//   - The point this whole example makes: even an app with no domain logic worth the name still has
+//     data and an invariant that must be written down somewhere. Writing them in Souther first, then
+//     handing a coding agent the compiled contract plus a migration to build the CRUD boundary against,
+//     is cheaper than writing that boundary by hand and no less rigorous where it matters — the shape
+//     and the invariant are still compiler-checked, only the SQL and the HTTP wiring are not.
+module example.todomvc exposing (
+    TodoId,
+    Title,
+    Position,
+    Todo,
+    Filter,
+    TodoNotFound,
+    Removed,
+    storeTodo,
+    readTodos,
+    findTodo,
+    renameTodo,
+    setCompleted,
+    repositionTodo,
+    removeTodo,
+    deleteAllTodos,
+    visibleTodos,
+    remainingCount
+)
+
+// The store hands out the id, so the invariant says only that one exists — the same reasoning as
+// `comments.sou`'s CommentId.
+data TodoId = Int
+    invariant value >= 1
+
+data Title = String
+    invariant String.length(value) >= 1 && String.length(value) <= 255
+
+// todo-backend's sort key. A client may set it to anything, including negative or repeated values
+// (the spec's own examples use 523, 10, 95), so there is no invariant here beyond being an Int.
+data Position = Int
+
+data Todo =
+    { id: TodoId
+    , title: Title
+    , completed: Bool
+    , order: Position
+    }
+
+data Filter = All | Active | Completed
+
+// === the injected reads and writes ===
+// Every one of these is a CRUD statement against the `todos` table in schema.sql, and every one is
+// left unimplemented here on purpose — PROMPT.md is the spec a coding agent implements them from.
+behavior storeTodo : (title: Title, order: Position) -> Todo
+
+behavior readTodos : () -> List<Todo>
+
+behavior findTodo : (id: TodoId) -> Todo | TodoNotFound
+    constructs TodoNotFound
+
+behavior renameTodo : (todo: Todo, title: Title) -> Todo
+
+// PATCH sets `completed` to whatever the request body says, not a flip of the current value — the
+// spec's own test PATCHes `{completed:true}` onto a freshly created (and so already-false) todo.
+behavior setCompleted : (todo: Todo, completed: Bool) -> Todo
+
+behavior repositionTodo : (todo: Todo, order: Position) -> Todo
+
+behavior removeTodo : (todo: Todo) -> Removed
+    constructs Removed
+
+// A DELETE on the root clears every todo, completed or not — the spec's pre-requisite tests reset
+// state this way between examples. There is no narrower "clear completed" in the contract; a client
+// wanting that sends one DELETE per completed todo's own url instead.
+behavior deleteAllTodos : () -> Removed
+
+// === the two rules that are not injected ===
+behavior visibleTodos : (todos: List<Todo>, filter: Filter) -> List<Todo>
+
+let visibleTodos (todos, filter) =
+    match filter with
+        | All -> todos
+        | Active -> List.filter(t -> Bool.not(t.completed), todos)
+        | Completed -> List.filter(t -> t.completed, todos)
+
+behavior remainingCount : (todos: List<Todo>) -> Int
+
+let remainingCount (todos) =
+    List.length(List.filter(t -> Bool.not(t.completed), todos))
+
+let buyMilk = Todo { id = TodoId(1), title = Title("Buy milk"), completed = false, order = Position(0) }
+let walkDog = Todo { id = TodoId(2), title = Title("Walk the dog"), completed = true, order = Position(1) }
+let payRent = Todo { id = TodoId(3), title = Title("Pay rent"), completed = false, order = Position(2) }
+
+example visibleTodos
+    | "All shows everything, done or not" :
+        ([buyMilk, walkDog, payRent], All) -> [buyMilk, walkDog, payRent]
+    | "Active hides what is already done" :
+        ([buyMilk, walkDog, payRent], Active) -> [buyMilk, payRent]
+    | "Completed keeps only what is done" :
+        ([buyMilk, walkDog, payRent], Completed) -> [walkDog]
+
+example remainingCount
+    | "counts what Active would show" :
+        ([buyMilk, walkDog, payRent]) -> 2
+    | "an empty list has nothing left" :
+        ([]) -> 0
