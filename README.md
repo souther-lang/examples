@@ -24,8 +24,9 @@ at a time. It is written in Japanese, as the domain it models is, and it needs n
 
 ## How generation works: a javac annotation processor
 
-`.sou → .class` is done not by a dedicated build-tool plugin but by a **javac annotation processor**
-(`souther.compiler.apt.SoutherProcessor`). Whenever `mvn compile` (or plain javac, or
+`.sou → .class` is done not by a dedicated build-tool plugin but by a **javac annotation processor**,
+which javac finds by itself from the `META-INF/services` entry in the `souther-compiler` jar — no
+class name is written anywhere in the build. Whenever `mvn compile` (or plain javac, or
 Gradle) runs, the processor compiles the `.sou` files in `src/main/souther` and emits the generated
 types into `target/classes`. Because `target/classes` is on javac's compile classpath, the
 hand-written code (and the smoke tests) **compile directly against those generated types**. No exec
