@@ -33,9 +33,11 @@ perl -pi -e "s{(org\.souther-lang/souther-(?:runtime|compiler) \{:mvn/version )\
 perl -pi -e "s{(val southerVersion = )\"[^\"]*\"}{\${1}\"$version\"}" \
     issuetracker/build.gradle.kts
 
-# 4. The annotation-processor snippet in the README (${1} delimits the backreference so a version
-#    starting with a digit is not read as $1<digit>).
-perl -pi -e "s{(org\.souther-lang:souther-compiler:)[^<\s\"]*}{\${1}$version}g" \
+# 4. The Maven annotation-processor snippet in the README. The match is anchored on the <path> tag
+#    the Maven snippet writes, because the Gradle snippet further down spells the same coordinate
+#    with $southerVersion and has to keep the property rather than take a literal version. (${1}
+#    delimits the backreference so a version starting with a digit is not read as $1<digit>.)
+perl -pi -e "s{(<path>org\.souther-lang:souther-compiler:)[^<]*}{\${1}$version}g" \
     README.md
 
 echo "Set Souther version to $version (pom, account, issuetracker, README)."
