@@ -47,10 +47,8 @@ data CommentThread = { comments: List<Comment> }
 behavior storeComment  : (slug: Slug, body: CommentBody, author: Profile, at: DateTime) -> Comment
 behavior readComments  : (slug: Slug) -> CommentThread
 behavior removeComment : (comment: Comment) -> Removed
-    constructs Removed
 
 behavior findComment : (id: CommentId) -> Comment | CommentNotFound
-    constructs CommentNotFound
 
 // === the one rule ===
 behavior deleteComment : (comment: Comment, deleter: Username) -> Removed | NotTheAuthor

@@ -180,15 +180,14 @@ let coverageExclusions (terms: EmploymentTerms, on: Date): List<CoverageExclusio
 data InsuredCategory = GeneralInsured | ElderlyInsured
 
 behavior judgeInsuredCategory : (birthday: Date, on: Date) -> GeneralInsured | ElderlyInsured
-    constructs GeneralInsured, ElderlyInsured
 
 let judgeInsuredCategory (birthday, on) =
     if attainedAgeOn(birthday, on) >= 65 then ElderlyInsured else GeneralInsured
 
 behavior judgeInsuredStatus : (terms: EmploymentTerms, birthday: Date, on: Date)
         -> InsuredStatus | NotInsured
-    constructs InsuredStatus, NotInsured, OfficerExcluded, WeeklyHoursUnderTwenty,
-               EmploymentUnderThirtyOneDays, DaytimeStudentExcluded
+    constructs InsuredStatus, NotInsured, WeeklyHoursUnderTwenty,
+               EmploymentUnderThirtyOneDays
 
 // judgeInsuredCategory depends on nothing, so it is called by name rather than injected — the seam a
 // `depends on` marks is the outside world, and an age is not outside anything.
@@ -230,7 +229,6 @@ data SeparationCategory =
 // Death is not a benefit question. Nobody claims the basic allowance, and the money that is owed is a
 // different provision entirely — so it is a case beside the three rather than a fourth kind of them.
 behavior classifySeparation : (reason: SeparationReason) -> SeparationCategory | NoClaimant
-    constructs SpecifiedEligibleRecipient, SpecifiedReasonRecipient, GeneralRecipient, NoClaimant
 
 let classifySeparation (reason) =
     match reason with
@@ -255,7 +253,6 @@ data BenefitRestriction = NoRestriction | RestrictedOneMonth | RestrictedThreeMo
 
 behavior judgeBenefitRestriction : (reason: SeparationReason)
         -> NoRestriction | RestrictedOneMonth | RestrictedThreeMonths
-    constructs NoRestriction, RestrictedOneMonth, RestrictedThreeMonths
 
 let judgeBenefitRestriction (reason) =
     match reason with
@@ -272,7 +269,7 @@ data InsufficientInsuredPeriod = { required: InsuredMonths, actual: InsuredMonth
 // The two windows are why InsuredHistory carries two counts rather than one.
 behavior judgeBenefitEntitlement : (category: SeparationCategory, history: InsuredHistory)
         -> Entitled | InsufficientInsuredPeriod
-    constructs Entitled, InsufficientInsuredPeriod, InsuredMonths
+    constructs InsufficientInsuredPeriod, InsuredMonths
 
 let judgeBenefitEntitlement (category, history) =
     match category with
@@ -299,8 +296,6 @@ data InsuredPeriodBand =
 // instead, which is a number of days of the basic allowance rather than a period of entitlement. So the
 // banding answers with them by name rather than with a band that would be a lie.
 behavior bandOfAge : (birthday: Date, on: Date) -> AgeBand | ElderlyJobSeeker
-    constructs UnderThirty, ThirtyToThirtyFour, ThirtyFiveToFortyFour, FortyFiveToFiftyNine,
-               SixtyToSixtyFour, ElderlyJobSeeker
 
 let bandOfAge (birthday, on) = {
     let age = attainedAgeOn(birthday, on)
@@ -313,7 +308,6 @@ let bandOfAge (birthday, on) = {
 }
 
 behavior bandOfInsuredPeriod : (months: InsuredMonths) -> InsuredPeriodBand
-    constructs UnderOneYear, OneToFiveYears, FiveToTenYears, TenToTwentyYears, TwentyYearsOrMore
 
 let bandOfInsuredPeriod (months) =
     if months < 12 then UnderOneYear

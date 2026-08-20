@@ -226,7 +226,7 @@ let followUpMeeting = Meeting
 // cases rather than aborts — and neither rule is written here, only the case it departs by.
 behavior scheduleMeeting : (draft: MeetingDraft, minutes: Int)
         -> Meeting | DurationOutOfRange | NoAttendees
-    constructs Meeting, DurationMinutes, Attendees, DurationOutOfRange, NoAttendees
+    constructs Meeting, DurationMinutes, Attendees
 
 let scheduleMeeting (draft, minutes) = {
     guard DurationMinutes(minutes) as duration else DurationOutOfRange
@@ -316,7 +316,7 @@ let dateOf (a: Activity): Date =
         | Meeting { startAt }  -> DateTime.toDate(startAt)
 
 behavior lastActivityOn : (activities: List<Activity>, today: Date) -> Recency | NeverTouched
-    constructs Recency, NeverTouched
+    constructs Recency
 
 let lastActivityOn (activities, today) = {
     guard List.length(activities) >= 1 else NeverTouched
@@ -424,7 +424,7 @@ let actionFor (opp: OpenOpportunity): Subject =
         | NegotiationReview  -> Subject("Agree the last point and put a signature date on it")
 
 behavior nextStepFor : (opp: OpenOpportunity, recency: Recency, today: Date) -> NextStep | Overdue
-    constructs NextStep, Subject, CadenceDays, Overdue
+    constructs NextStep, Subject, CadenceDays
 
 let nextStepFor (opp, recency, today) = {
     let cadence = cadenceFor(opp)

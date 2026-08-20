@@ -11,7 +11,7 @@ plugins {
     id("org.springframework.boot") version "4.0.7"
 }
 
-val southerVersion = "0.1.0-SNAPSHOT"
+val southerVersion = "0.1.0-rc5"
 val raohVersion = "0.7.0"
 
 java {

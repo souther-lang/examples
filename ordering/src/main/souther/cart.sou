@@ -52,7 +52,7 @@ data InvalidQuantity = { invalidCount: Int }
 // EmptyCart carries no fields, and the output below is where it is named — so it has no `data` line
 // of its own (8.4 unit-data). It is exposed and matched at the boundary like any other case.
 behavior quote : (c: Cart) -> PricedCart | EmptyCart | InvalidQuantity
-    constructs PricedCart, EmptyCart, InvalidQuantity
+    constructs PricedCart, InvalidQuantity
 
 let quote (c) = {
     guard length(activeItems(c)) >= 1 else EmptyCart

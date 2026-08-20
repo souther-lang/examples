@@ -286,9 +286,8 @@ behavior judgeCoverage : (
     birthday:      Date,
     on:            Date
 ) -> Covered | CoverageNotRequired
-    constructs Covered, CoverageNotRequired, AttainedSeventyFive, WeeklyHoursBelowTwenty,
-               ScheduledWageBelowFloor, EnrolledAsDaytimeStudent, OfficeBelowSpecifiedSize,
-               RegularRoute, ShortTimeRoute, HealthAndPension, HealthOnly, Yen
+    constructs Covered, CoverageNotRequired, WeeklyHoursBelowTwenty,
+               ScheduledWageBelowFloor, OfficeBelowSpecifiedSize, Yen
 
 // Two attempts, one per stage of the test. The age exclusion is asked of everybody; the short-time
 // conditions are asked only of somebody the three-quarters rule already turned away, which is what makes
@@ -350,7 +349,7 @@ let decisionFor (basis: DeterminationBasis, monthly: Yen, appliesFrom: Contribut
 // what makes this a different determination from the other two rather than a special case of them.
 behavior acquireCoverage : (verdict: Covered, remuneration: MonthlyRemuneration, on: Date) -> Insured
     constructs Insured, GradeDecision, GradeRow, GradeTable, HealthGrade, PensionGrade,
-               ContributionMonth, Yen, OnAcquisition
+               ContributionMonth, Yen
 
 let acquireCoverage (verdict, remuneration, on) =
     Insured { acquiredOn = on
@@ -363,7 +362,7 @@ let acquireCoverage (verdict, remuneration, on) =
 // still a covered day, which is what makes the following rule move a whole month for one day of
 // difference.
 behavior loseCoverage : (insured: Insured, separatedOn: Date) -> CoverageLost | LossBeforeAcquisition
-    constructs CoverageLost, LossBeforeAcquisition
+    constructs CoverageLost
 
 let loseCoverage (insured, separatedOn) = {
     guard Date.daysBetween(insured.acquiredOn, separatedOn) >= 0 else LossBeforeAcquisition
@@ -421,7 +420,7 @@ let averageRemuneration (records: List<MonthlyPayRecord>): Yen =
 // than a computation this module can make.
 behavior decideRegularly : (window: ThreeMonthWindow) -> GradeDecision | NoPayableMonth
     constructs GradeDecision, GradeRow, GradeTable, HealthGrade, PensionGrade, ContributionMonth,
-               Yen, NoPayableMonth, RegularDetermination
+               Yen
 
 let decideRegularly (window) = {
     let payable = payableMonths(window)
@@ -466,8 +465,7 @@ behavior judgeOccasionalRevision : (
     window:            ThreeMonthWindow
 ) -> GradeDecision | RevisionNotRequired
     constructs GradeDecision, GradeRow, GradeTable, HealthGrade, PensionGrade, ContributionMonth,
-               Yen, RevisionNotRequired, FixedWageUnchanged, PaidDaysBelowSeventeen,
-               GradeDifferenceBelowTwo, OccasionalRevision
+               Yen, RevisionNotRequired, PaidDaysBelowSeventeen, GradeDifferenceBelowTwo
 
 let judgeOccasionalRevision (current, previousFixedWage, window) = {
     let average = averageRemuneration(monthsOf(window))
@@ -499,7 +497,6 @@ data LongTermCareStatus = LongTermCareInsured | OutsideLongTermCare
 
 behavior judgeLongTermCareCategory : (birthday: Date, on: Date)
         -> LongTermCareInsured | OutsideLongTermCare
-    constructs LongTermCareInsured, OutsideLongTermCare
 
 let judgeLongTermCareCategory (birthday, on) = {
     let age = attainedAgeOn(birthday, on)
@@ -513,7 +510,6 @@ let judgeLongTermCareCategory (birthday, on) = {
 data PremiumLiability = PremiumExempt | PremiumDue
 
 behavior judgePremiumExemption : (employee: ActiveEmployee) -> PremiumExempt | PremiumDue
-    constructs PremiumExempt, PremiumDue
 
 let judgePremiumExemption (employee) =
     match employee with

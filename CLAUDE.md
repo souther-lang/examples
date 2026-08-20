@@ -19,9 +19,9 @@ English. Domain models in `.sou` use the language of the domain they model: Japa
 
 ## Building
 
-The examples build against `souther.version` in the root `pom.xml`, a `-SNAPSHOT` published nowhere
-but `~/.m2`, so the compiler has to be installed from its own repository first
-(`mvn -f souther/pom.xml install -DskipTests`).
+The examples build against `souther.version` in the root `pom.xml`, `0.1.0-rc5`, released to Maven
+Central — nothing has to be installed first. The version is written in four places; `bin/set-version.sh
+<version>` moves all of them and `bin/check-version-consistency.sh` fails if they disagree.
 
 ```sh
 mvn verify                                              # every Maven module: generate → compile → smoke test
@@ -31,6 +31,9 @@ cd issuetracker && ./gradlew build                      # Kotlin, its own Gradle
 
 `ordering` and `issuetracker` start Spring Boot against H2, so their first build needs network to
 fetch the starters; after that `mvn -o` and `./gradlew --offline` work.
+
+The `souther` CLI, which `shippingfee/README.md` runs, is not on Central: take it from a compiler
+release or build it from a clone.
 
 Java boundary conventions for code written against generated Souther types are in
 `docs/java-boundary-conventions.md`.

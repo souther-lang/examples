@@ -97,7 +97,6 @@ data NotificationKind =
 // is the reason example.socialinsurance keeps the basis on the determination rather than inferring it
 // from the effective month. A fourth way of deciding a grade would be a compile error here.
 behavior notificationForDetermination : (basis: DeterminationBasis) -> NotificationKind
-    constructs CoverageAcquisition, RegularDeterminationFiling, OccasionalRevisionFiling
 
 let notificationForDetermination (basis) =
     match basis with
@@ -116,7 +115,6 @@ let monthStart (d: Date): Date = Date.addDays(1 - Date.day(d), d)
 // (健康保険法施行規則第25条). The occasional revision is filed "promptly" and no provision names a day,
 // which is a real answer and gets a case of its own rather than a date nobody can be held to.
 behavior deadlineFor : (kind: NotificationKind, eventOn: Date) -> Date | NoStatutoryDeadline
-    constructs NoStatutoryDeadline
 
 let deadlineFor (kind, eventOn) =
     match kind with
@@ -137,7 +135,7 @@ let deadlineFor (kind, eventOn) =
 data Overdue = { deadline: Date, filedOn: Date, daysLate: Int }
 
 behavior judgeFilingTimeliness : (deadline: Date, filedOn: Date) -> WithinDeadline | Overdue
-    constructs WithinDeadline, Overdue
+    constructs Overdue
 
 let judgeFilingTimeliness (deadline, filedOn) = {
     guard Date.daysBetween(filedOn, deadline) < 0 else WithinDeadline
@@ -158,7 +156,7 @@ data SeparationCode = String
     invariant String.matches("[0-9][A-E]", value)
 
 behavior separationCodeFor : (reason: SeparationReason) -> SeparationCode | NoSeparationCertificate
-    constructs SeparationCode, NoSeparationCertificate
+    constructs SeparationCode
 
 let separationCodeFor (reason) =
     match reason with
@@ -236,7 +234,7 @@ let prepare (kind, subject, eventOn, on) =
     Drafted { kind = kind, subject = subject, eventOn = eventOn, preparedOn = on }
 
 behavior submit : (draft: Drafted, on: Date) -> Submitted | SubmissionBeforePreparation
-    constructs Submitted, SubmissionBeforePreparation
+    constructs Submitted
 
 let submit (draft, on) = {
     guard Date.daysBetween(draft.preparedOn, on) >= 0 else SubmissionBeforePreparation
@@ -245,7 +243,7 @@ let submit (draft, on) = {
 
 behavior review : (filing: Submitted, reviewer: EmployeeId, on: Date)
         -> Reviewed | ReviewBeforeSubmission
-    constructs Reviewed, ReviewBeforeSubmission
+    constructs Reviewed
 
 let review (filing, reviewer, on) = {
     guard Date.daysBetween(filing.submittedOn, on) >= 0 else ReviewBeforeSubmission
@@ -257,7 +255,7 @@ let review (filing, reviewer, on) = {
 // no other way to hold one.
 behavior transmit : (filing: Reviewed, receipt: ReceiptNumber, on: Date)
         -> Filed | TransmissionBeforeReview
-    constructs Filed, TransmissionBeforeReview
+    constructs Filed
 
 let transmit (filing, receipt, on) = {
     guard Date.daysBetween(filing.reviewedOn, on) >= 0 else TransmissionBeforeReview

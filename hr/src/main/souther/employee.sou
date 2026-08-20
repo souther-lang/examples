@@ -339,7 +339,7 @@ behavior hire : (prospect: Prospective) -> Employed
 let hire (prospect) = Employed { ...prospect, hiredOn = prospect.hireOn }
 
 behavior beginLeave : (employee: Employed, kind: LeaveKind, from: Date) -> OnLeave | LeaveBeforeHire
-    constructs OnLeave, LeaveBeforeHire
+    constructs OnLeave
 
 let beginLeave (employee, kind, from) = {
     // The guard discharges OnLeave's invariant, which would otherwise abort — and an abort is not
@@ -350,7 +350,7 @@ let beginLeave (employee, kind, from) = {
 }
 
 behavior returnFromLeave : (employee: OnLeave, on: Date) -> Employed | ReturnBeforeLeave
-    constructs Employed, ReturnBeforeLeave
+    constructs Employed
 
 let returnFromLeave (employee, on) = {
     guard Date.daysBetween(employee.leaveFrom, on) >= 0 else ReturnBeforeLeave
@@ -365,7 +365,7 @@ let returnFromLeave (employee, on) = {
 // what the behavior states is the rule and nothing about which active state the employee was in.
 behavior separate : (employee: ActiveEmployee, on: Date, reason: SeparationReason)
         -> Separated | SeparationBeforeHire
-    constructs Separated, SeparationBeforeHire
+    constructs Separated
 
 let separate (employee, on, reason) = {
     guard Date.daysBetween(employee.hiredOn, on) >= 0 else SeparationBeforeHire
@@ -391,7 +391,6 @@ let expectedCheckDigit (body: List<Int>): Int = {
 }
 
 behavior verifyMyNumber : (number: MyNumber) -> MyNumberVerified | CheckDigitMismatch
-    constructs MyNumberVerified, CheckDigitMismatch
 
 let verifyMyNumber (number) = {
     let codes = String.codePoints(number.value)

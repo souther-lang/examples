@@ -87,7 +87,7 @@ data ChartOfAccounts =
 // company is holding — which is why it is a liability and not revenue. Three lines, and they balance
 // because the invoice's own arithmetic says gross is net plus tax.
 behavior postInvoice : (invoice: Invoice, chart: ChartOfAccounts) -> JournalEntry
-    constructs JournalEntry, Posting, Debit, Credit
+    constructs JournalEntry, Posting
 
 let postInvoice (invoice, chart) =
     JournalEntry { date = invoice.issuedOn, source = invoice.no, postings =
@@ -101,7 +101,7 @@ let postInvoice (invoice, chart) =
 // sold and what came back are two figures a reader wants separately — netting them off loses the
 // return rate, which is a number somebody is measured on.
 behavior postCreditNote : (note: CreditNote, chart: ChartOfAccounts) -> JournalEntry
-    constructs JournalEntry, Posting, Debit, Credit
+    constructs JournalEntry, Posting
 
 let postCreditNote (note, chart) =
     JournalEntry { date = note.issuedOn, source = note.against, postings =

@@ -146,7 +146,7 @@ data DueDateViolation = { rule: DueDateRule, nominal: Date, landed: Date }
 
 behavior unpayableDueDates : (calendar: PaymentCalendar, from: Date, days: Int)
         -> List<DueDateViolation>
-    constructs DueDateViolation, PaymentCalendar, PrecedingBusinessDay, FollowingBusinessDay
+    constructs DueDateViolation, PaymentCalendar
 
 // Every nominal date from `from` through `days` more, under each walking rule. The calendar's own
 // rule is not read: the sweep asks about both directions whatever the trading agreement says.

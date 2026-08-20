@@ -255,7 +255,6 @@ behavior qualifyAsInsuranceDependant : (
     on:             Date
 ) -> InsuranceDependant | InsuranceDependencyBlocked
     constructs InsuranceDependant, InsuranceDependencyBlocked, AnnualRevenue,
-               OutsideKinshipRange, CohabitationRequired, CoveredByLatterStageMedical,
                RevenueOverCeiling, RevenueOverHalfOfInsured, RevenueOverRemittance
 
 let qualifyAsInsuranceDependant (person, tie, revenue, insuredRevenue, on) =
@@ -352,10 +351,7 @@ behavior classifyTaxDependant : (
     income: TotalIncome,
     on:     Date
 ) -> TaxDependant | TaxDependencyBlocked
-    constructs TaxDependant, TaxDependencyBlocked,
-               OutsideTaxKinshipRange, NotSharingLivelihood, SpouseIsDeductedSeparately,
-               UnderSixteen, IncomeOverTaxCeiling,
-               GeneralDependant, SpecifiedDependant, ElderlyDependant, CoresidentElderlyParent
+    constructs TaxDependant, TaxDependencyBlocked, IncomeOverTaxCeiling
 
 let classifyTaxDependant (person, tie, income, on) =
     if TaxDependencyBlocked { reasons = taxBlockers(person, tie, income, on) } as blocked

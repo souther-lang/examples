@@ -80,8 +80,7 @@ let holds (clue: Clue, w: World): Bool =
 data Unraveled = { culprit: Suspect, places: List<Placement> }
 
 behavior solve : (clues: List<Clue>) -> Unraveled | NoConsistentStory | StillAmbiguous
-    constructs Unraveled, NoConsistentStory, StillAmbiguous,
-               World, Placement, Alice, Bob, Carol, Kitchen, Study, Garden
+    constructs Unraveled, World, Placement
 
 let solve (clues) = {
     let fitting = filter(w -> all(clue -> holds(clue, w), clues), worlds)

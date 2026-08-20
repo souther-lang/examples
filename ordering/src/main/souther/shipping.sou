@@ -72,7 +72,7 @@ data PickList = { lines: List<PickLine> }
 // reject reusing it here anyway, and the two are not the same event). It carries no fields, so the
 // output below is its declaration (8.4 unit-data).
 behavior planPicks : (order: PricedCart, shelf: Map<Sku, Location>) -> PickList | NothingToShip
-    constructs PickList, PickLine, NothingToShip
+    constructs PickList, PickLine
 
 let pickLineFor (i: LineItem, shelf: Map<Sku, Location>): Option<PickLine> =
     Map.get(i.sku, shelf)

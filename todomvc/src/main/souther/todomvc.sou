@@ -78,7 +78,6 @@ behavior storeTodo : (title: Title, order: Position) -> Todo
 behavior readTodos : () -> List<Todo>
 
 behavior findTodo : (id: TodoId) -> Todo | TodoNotFound
-    constructs TodoNotFound
 
 behavior renameTodo : (todo: Todo, title: Title) -> Todo
 
@@ -89,7 +88,6 @@ behavior setCompleted : (todo: Todo, completed: Bool) -> Todo
 behavior repositionTodo : (todo: Todo, order: Position) -> Todo
 
 behavior removeTodo : (todo: Todo) -> Removed
-    constructs Removed
 
 // A DELETE on the root clears every todo, completed or not — the spec's pre-requisite tests reset
 // state this way between examples. There is no narrower "clear completed" in the contract; a client

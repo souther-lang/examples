@@ -113,7 +113,7 @@ let periodLabel (d: Date, fyStart: Int): String =
          ++ "-Q" ++ String.fromInt(quarterOf(d, fyStart))
 
 behavior periodOf : (closeDate: Date, fiscalYearStartMonth: Int) -> FiscalPeriod | InvalidFiscalYearStart
-    constructs FiscalPeriod, InvalidFiscalYearStart
+    constructs FiscalPeriod
 
 let periodOf (closeDate, fiscalYearStartMonth) = {
     guard fiscalYearStartMonth >= 1 && fiscalYearStartMonth <= 12 else InvalidFiscalYearStart
@@ -216,7 +216,7 @@ let unpriced (opps: List<OpenOpportunity>, rates: RateTable): Set<CurrencyCode> 
 behavior weightedForecast : (owner: UserId, opps: List<OpenOpportunity>, fiscalYearStartMonth: Int,
                              rates: RateTable)
         -> Forecast | InvalidFiscalYearStart | UnconvertibleCurrency
-    constructs Forecast, FiscalPeriod, Amount, InvalidFiscalYearStart, UnconvertibleCurrency
+    constructs Forecast, FiscalPeriod, Amount, UnconvertibleCurrency
 
 // `List.filterMap` drops the deals that could not be converted, and the guard then says the count has
 // to match: a forecast that quietly lost a deal is worse than no forecast, because it looks like one.
@@ -364,7 +364,7 @@ let attainmentOf (forecast: Decimal, quota: Decimal): Attainment =
 
 behavior quotaGap : (forecast: Forecast, quota: Quota, period: FiscalPeriod)
         -> OnTrack | ShortOfQuota | NoForecastForPeriod
-    constructs OnTrack, ShortOfQuota, NoForecastForPeriod, Amount, Attainment
+    constructs OnTrack, ShortOfQuota, Amount, Attainment
 
 let quotaGap (forecast, quota, period) =
     match Map.get(period, forecast.byPeriod) with
@@ -393,7 +393,7 @@ example quotaGap
 behavior attainmentFor : (owner: UserId, forecast: Forecast, period: FiscalPeriod)
         -> OnTrack | ShortOfQuota | NoForecastForPeriod
     depends on quotaFor
-    constructs OnTrack, ShortOfQuota, NoForecastForPeriod, Amount, Attainment
+    constructs OnTrack, ShortOfQuota, Amount, Attainment
 
 let attainmentFor (owner, forecast, period, quotaFor) =
     match Map.get(period, forecast.byPeriod) with
@@ -431,7 +431,7 @@ let staleDaysOf (opp: OpenOpportunity, stale: StaleReport): Int =
 
 behavior dealsAtRisk : (opps: List<OpenOpportunity>, stale: StaleReport, staleAfter: Int)
         -> RiskReport | NoActivityRecorded
-    constructs RiskReport, Amount, NoActivityRecorded
+    constructs RiskReport, Amount
 
 let dealsAtRisk (opps, stale, staleAfter) = {
     guard Map.size(stale.daysSince) >= 1 else NoActivityRecorded

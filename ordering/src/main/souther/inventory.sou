@@ -208,7 +208,7 @@ data Barcode = String
 data InspectionPassed = { code: Barcode }
 
 behavior inspectBarcode : (barcode: Barcode) -> InspectionPassed | ScanError
-    constructs InspectionPassed, ScanError
+    constructs InspectionPassed
 
 // EAN-13 weighted sum: positions 1,3,5.. (even index from 0) weigh 1, positions 2,4,6.. (odd index)
 // weigh 3. A valid code has its 13-digit weighted sum divisible by 10 (the 13th check digit is chosen

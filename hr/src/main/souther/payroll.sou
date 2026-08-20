@@ -100,7 +100,7 @@ data HourlyRate = Decimal
 // uplift is computed on — which is exactly the split example.employee's four allowance fields carry.
 behavior hourlyRateFor : (remuneration: MonthlyRemuneration, monthlyScheduledHours: Hours)
         -> HourlyRate | NoScheduledHours
-    constructs HourlyRate, NoScheduledHours
+    constructs HourlyRate
 
 let hourlyRateFor (remuneration, monthlyScheduledHours) = {
     guard monthlyScheduledHours >= 1.0m else NoScheduledHours
@@ -186,7 +186,7 @@ behavior taxableAmount : (
     upliftPay:     Yen,
     socialInsurance: Yen
 ) -> Yen | DeductionsExceedGross
-    constructs Yen, DeductionsExceedGross
+    constructs Yen
 
 let taxableAmount (remuneration, upliftPay, socialInsurance) = {
     let gross = totalRemuneration(remuneration) + upliftPay
@@ -223,7 +223,7 @@ data PaySlip =
 
 behavior buildPaySlip : (month: PayMonth, earnings: Earnings, deductions: List<Deduction>)
         -> PaySlip | DeductionsExceedGross
-    constructs PaySlip, Yen, DeductionsExceedGross
+    constructs PaySlip, Yen
 
 let buildPaySlip (month, earnings, deductions) = {
     // Why this is a business outcome and not an abort: a month of unpaid leave with premiums still owed

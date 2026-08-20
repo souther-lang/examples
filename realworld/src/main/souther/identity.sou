@@ -77,10 +77,8 @@ data Registration = { username: Username, email: Email, password: Password }
 behavior hashPassword : (password: Password) -> PasswordHash
 
 behavior findUserByEmail : (email: Email) -> User | UserNotFound
-    constructs UserNotFound
 
 behavior findUserByName : (username: Username) -> User | UserNotFound
-    constructs UserNotFound
 
 // Writes a new user and the hash of its password, and answers the user as stored.
 behavior storeUser : (user: User, hash: PasswordHash) -> User
@@ -195,7 +193,6 @@ data Credentials  = { email: Email, password: Password }
 data Credentialed = { user: User, hash: PasswordHash }
 
 behavior findLogin : (email: Email) -> Credentialed | UserNotFound
-    constructs UserNotFound
 
 behavior verifyPassword : (password: Password, hash: PasswordHash) -> Bool
 

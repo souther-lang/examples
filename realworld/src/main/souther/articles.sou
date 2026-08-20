@@ -171,7 +171,6 @@ let changedBody (change: ArticleChange, current: Body): Body =
 // boundary that checked the author itself for one and asked the domain for the other would be stating
 // one rule in two places.
 behavior removeArticle : (article: Article) -> Removed
-    constructs Removed
 
 behavior deleteArticle : (article: Article, remover: Username) -> Removed | NotTheAuthor
     depends on removeArticle
@@ -210,7 +209,6 @@ data ArticlePage = { articles: List<ArticleSummary>, total: Int }
 behavior readArticles : (query: ArticleQuery) -> ArticlePage
 
 behavior readArticle : (slug: Slug) -> Article | ArticleNotFound
-    constructs ArticleNotFound
 
 // Which of a page's articles the viewer has favorited, and how many favorites each has. Both are read
 // once for the whole page: the first is about the viewer, the second is about the articles, and asking

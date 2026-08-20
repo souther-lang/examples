@@ -39,7 +39,7 @@ The whole Maven wiring is just this (set once for all modules in the root `pom.x
   <artifactId>maven-compiler-plugin</artifactId>
   <configuration>
     <annotationProcessorPaths>
-      <path>org.souther-lang:souther-compiler:0.1.0-SNAPSHOT</path>
+      <path>org.souther-lang:souther-compiler:0.1.0-rc5</path>
     </annotationProcessorPaths>
     <compilerArgs><arg>-Asouther.source=${project.basedir}/src/main/souther</arg></compilerArgs>
   </configuration>
@@ -162,13 +162,10 @@ one.
 
 ## Running
 
-The examples track the compiler's `develop`, so they build against `souther.version` in the root
-`pom.xml` — currently a `-SNAPSHOT`, which is not published anywhere. Install it from the compiler
-repository first:
+The examples build against `souther.version` in the root `pom.xml` — `0.1.0-rc5`, a release on Maven
+Central. Nothing has to be installed first:
 
 ```sh
-git clone https://github.com/souther-lang/souther.git
-mvn -f souther/pom.xml install -DskipTests   # souther-runtime / souther-compiler into ~/.m2
 mvn verify                                   # generate → compile → smoke-test every example
 ```
 
@@ -180,11 +177,17 @@ cd account       && clojure -X:gen && clojure -X:test   # Clojure
 cd issuetracker  && ./gradlew build                     # Kotlin
 ```
 
-Both still resolve `souther-compiler` from `~/.m2`, so the `mvn install` above is what they need too.
+Both resolve `souther-compiler` from Central the same way.
 
-CI runs all three: it checks out `souther-lang/souther` at `develop`, installs it, and then runs
-`mvn verify`, the account job, and the issuetracker job. A change in the compiler that breaks an
-example turns this build red on the next run.
+CI runs all three: `mvn verify`, the account job, and the issuetracker job.
+
+The version is written in four places — the root pom, `account/deps.edn`, `issuetracker/build.gradle.kts`
+and the annotation-processor snippet above. `bin/set-version.sh <version>` moves all four, and
+`bin/check-version-consistency.sh` (which CI runs) fails if they disagree.
+
+The `souther` CLI is not published to Maven Central, and `shippingfee/README.md` runs it. It ships as
+the `souther` asset of a [release](https://github.com/souther-lang/souther/releases), or is built from
+a clone of the compiler (`mvn -f souther/pom.xml install -DskipTests`, then `souther-cli/target/souther`).
 
 `ordering` and `issuetracker` actually start Spring Boot, and `issuetracker` also needs the Kotlin
 compiler, so **their first build needs network to fetch the starters, and issuetracker's also fetches
@@ -359,8 +362,8 @@ because the generated classes live in another source set's output.
 Three smaller things the build pins down: `jvmTarget` is `21`, because kotlinc still defaults to 1.8
 and 21 is Souther's runtime floor, so the boundary asks no more of a JVM than the generated code it
 drives; `bootJar` is disabled so the artifact stays a plain jar, as the Maven examples' are; and
-`settings.gradle.kts` lists `mavenLocal()` first, since `souther.version` is a `-SNAPSHOT` published
-nowhere but `~/.m2`.
+`settings.gradle.kts` lists `mavenLocal()` first, so a compiler built and installed locally is taken
+over the released one on Central.
 
 ### What Kotlin brings to the boundary
 

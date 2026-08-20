@@ -120,7 +120,6 @@ let salaryCeiling = Yen(20000000)
 data YearEndEmployment = EmployedAtYearEnd | LeftDuringYear
 
 behavior employmentAtYearEnd : (employment: Employee) -> EmployedAtYearEnd | LeftDuringYear
-    constructs EmployedAtYearEnd, LeftDuringYear
 
 let employmentAtYearEnd (employment) =
     match employment with
@@ -137,8 +136,7 @@ behavior judgeYearEndEligibility : (
     salary:      Yen,
     declaration: DeclarationStatus
 ) -> YearEndEligible | YearEndNotApplicable
-    constructs YearEndEligible, YearEndNotApplicable, SalaryOverTwentyMillion,
-               NoDependantDeclaration, NotEmployedAtYearEnd, Yen
+    constructs YearEndNotApplicable, SalaryOverTwentyMillion, Yen
 
 let judgeYearEndEligibility (employment, salary, declaration) = {
     let reasons =
@@ -300,7 +298,7 @@ data AdditionalCollection = { amount: Yen }
 data Settlement = Refund | AdditionalCollection | Settled
 
 behavior settleYearEnd : (yearTax: Yen, withheld: Yen) -> Refund | AdditionalCollection | Settled
-    constructs Refund, AdditionalCollection, Settled, Yen
+    constructs Refund, AdditionalCollection, Yen
 
 let settleYearEnd (yearTax, withheld) =
     if withheld > yearTax then Refund { amount = Yen(withheld.value - yearTax.value) }

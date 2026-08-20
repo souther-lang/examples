@@ -242,9 +242,8 @@ let ordinaryBreaches (h: OvertimeHistory): List<LimitBreach> =
 
 behavior judgeOvertimeLimits : (clause: SpecialClause, history: OvertimeHistory)
         -> WithinLimits | LimitsExceeded
-    constructs WithinLimits, LimitsExceeded, Hours, MonthlyLimitExceeded,
-               AbsoluteMonthlyLimitReached, RollingAverageExceeded, AnnualLimitExceeded,
-               TooManyExtendedMonths
+    constructs LimitsExceeded, Hours, MonthlyLimitExceeded, AbsoluteMonthlyLimitReached,
+               RollingAverageExceeded, AnnualLimitExceeded, TooManyExtendedMonths
 
 let judgeOvertimeLimits (clause, history) = {
     let breaches = match clause with
@@ -332,7 +331,7 @@ behavior grantAnnualLeave : (
     weekly:     WeeklyScheduledHours,
     rate:       AttendanceRate
 ) -> LeaveGrant | AttendanceRateTooLow
-    constructs LeaveGrant, LeaveDays, AttendanceRateTooLow
+    constructs LeaveGrant, LeaveDays
 
 let grantAnnualLeave (band, weeklyDays, weekly, rate) = {
     guard rate >= 0.8m else AttendanceRateTooLow
@@ -351,7 +350,7 @@ let grantAnnualLeave (band, weeklyDays, weekly, rate) = {
 data DesignationRequired = { shortfall: Int }
 
 behavior judgeDesignationDuty : (grant: LeaveGrant, taken: Int) -> DutyDischarged | DesignationRequired
-    constructs DutyDischarged, DesignationRequired
+    constructs DesignationRequired
 
 let judgeDesignationDuty (grant, taken) = {
     guard grant.days >= 10 else DutyDischarged
