@@ -2,8 +2,9 @@ version: 2
 updates:
   # The Spring / jOOQ / Kotlin / JUnit versions the examples pin were watched by the compiler
   # repository's dependabot while they lived there. They are here now, so this is where they are
-  # watched. souther-* is deliberately not excluded: souther.version is a -SNAPSHOT, so there is
-  # nothing for dependabot to bump until a release is pinned.
+  # watched. souther-* is deliberately not excluded: `main` pins a release, so a souther bump is
+  # dependabot's to open like any other. It targets the default branch, `main`; those bumps reach
+  # `develop` by a merge.
   - package-ecosystem: maven
     directory: "/"
     schedule:

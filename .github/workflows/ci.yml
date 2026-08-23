@@ -1,9 +1,13 @@
 name: CI
 
+# `main` only. `develop` builds against the compiler's develop, a SNAPSHOT that resolves nowhere
+# until the compiler is built from source, so there is nothing here for CI to run against; that
+# branch is verified locally.
 on:
   push:
     branches: [ main ]
   pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:

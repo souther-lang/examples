@@ -1,15 +1,27 @@
 # CLAUDE.md
 
-## No pull requests here
+## Branches, and no pull requests
 
-This repository does not use pull requests. Commit the work to `main` and push it. No feature
-branch is required, no PR, no review gate. This overrides the PR-based workflow in the global
-`~/.claude/CLAUDE.md`: there is no `develop` and no `master`, and `main` is the only long-lived
-branch.
+This repository does not use pull requests. Commit the work and push it: no review gate. This
+overrides the PR-based workflow in the global `~/.claude/CLAUDE.md`: there is no `master`, and
+nothing goes through a PR.
 
-Working on a topic branch is fine when it helps to keep a series of commits together, but it is
-merged into `main` locally (`git merge --no-ff`) rather than through a PR. The exception is
-Dependabot, which opens PRs of its own; those are merged on GitHub.
+Two branches are long-lived:
+
+- `develop` is where the work goes. It builds against the compiler's `develop`, a `0.1.0-SNAPSHOT`
+  published nowhere, so the compiler is installed from a clone first.
+- `main` is the state that builds against the latest released compiler, and is the default branch.
+  It moves when a release is pinned: on `develop`, run `bin/set-version.sh <release>`, then
+  `git merge --no-ff develop` into `main`. The four places that carry the version conflict on every
+  such merge; set-version.sh puts all four right in one pass.
+
+Working on a topic branch off `develop` is fine when it keeps a series of commits together; it is
+merged back locally with `git merge --no-ff`. The exception is Dependabot, which opens PRs of its
+own against `main`; those are merged on GitHub and reach `develop` by a `main` -> `develop` merge.
+
+CI runs on pushes to `main` and on PRs against it, so it checks the released version only. It
+cannot run on `develop`: the SNAPSHOT it needs resolves nowhere until the compiler is built from
+source. A commit on `develop` is verified locally instead, with the commands under Building.
 
 ## Language
 
