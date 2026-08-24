@@ -17,10 +17,11 @@ the Souther notation; they are **derived** from the data shape (JSON key = field
 single primitive field is a newtype = the bare primitive; the discriminator field of a sum is
 `"type"` and the tag is the case name).
 
-[`TUTORIAL.md`](TUTORIAL.md) builds `businesstrip`'s model from scratch, starting from a copy of the
-spreadsheet the business trip requests live in today and refining it one `souther examples` report
-at a time. It is written in Japanese, as the domain it models is, and it needs nothing but the
-`souther` executable — no Maven module, no generated code.
+The [tutorial](https://souther-lang.org/tutorial/) builds `businesstrip`'s model from scratch,
+starting from the fields the business trip requests are recorded in today and refining it one
+`souther examples` report at a time. It needs nothing but the `souther` executable — no Maven
+module, no generated code. It names its types in English; the model in this directory names them in
+Japanese, and is the fuller one the tutorial ends by pointing at.
 
 ## How generation works: a javac annotation processor
 
