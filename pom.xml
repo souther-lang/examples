@@ -12,7 +12,7 @@
         Souther の開発ライフサイクルを検証する例。各モジュールは .sou を持ち、javac の
         アノテーションプロセッサ SoutherProcessor が生成した型を、型付きの Java から使う。
         souther-lang/souther とは別リポジトリで、`mvn verify` でまとめて検証する。
-        （souther.version は SNAPSHOT なので、先に souther-lang/souther を
+        （souther.version が SNAPSHOT のブランチでは、先に souther-lang/souther を
         `mvn install` して ~/.m2 に入れておくこと。）
     </description>
 
@@ -34,7 +34,7 @@
     <properties>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <souther.version>0.1.0-rc5</souther.version>
+        <souther.version>0.1.0-SNAPSHOT</souther.version>
         <raoh.version>0.7.0</raoh.version>
         <junit.version>6.1.2</junit.version>
         <spring.version>7.0.8</spring.version>
