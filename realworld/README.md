@@ -102,3 +102,56 @@ Some things are worth pointing at:
   are composed behaviors, because each has a rule. Unfollowing, favoriting and commenting are injected
   writes the boundary calls directly, because they have none. A composed behavior that only forwarded
   its argument would state nothing.
+
+## Holding the SQL to the model
+
+Every other test in this module drives the API over HTTP and asserts in Java what came back. Two do
+not. `ReadArticlesExamplesTest` and `SlugExistsDifferentialTest` bind the jOOQ implementation that
+`RealWorldConfig` wires into the running application, and what decides them is written in the `.sou`
+files beside the behaviors they are about.
+
+```java
+BoundExamples bound = SoutherExamples.of(MODEL).bind(new JooqArticles.ReadPage(dsl));
+return bound.rows().stream().map(row -> dynamicTest(
+        row.shown(), () -> assertTrue(bound.evaluate(row).held(), ...)));
+```
+
+One test per recorded row, named by the row. The only assertion is that the row held; when one does
+not, what is printed is the compiler's own sentence about where the two values part. The source is
+read when the test runs rather than travelling with the classes, so a model edited after the
+implementation was compiled is found out here.
+
+`readArticles` is the behavior worth doing this to. Its input is a sum of two shapes carrying three
+optional filters, so the `where` underneath is assembled differently for every combination — the code
+a reader cannot check by reading. The ten rows in `articles.sou` are ten combinations, and each names
+a way the assembly goes wrong while still reading correctly: a filter dropped, a total counted after
+the limit, an offset applied without a tie-breaker, a feed of nobody shown everything.
+
+What the rows are worth is measurable. `SlugExistsDifferentialTest` and the `or`-for-`and` factory in
+`ReadArticlesExamplesTest` bind implementations with one thing changed, and the second is the sharper
+of the two: combining the filters with `or` instead of `and` returns the union of what each matches,
+and **seven of the ten rows still hold against it**. A tag alone cannot tell a union from an
+intersection, an author alone cannot, and neither can a tag and an author that one article satisfies
+together. What catches it is the row where the two filters disagree — the one whose result is empty,
+which is the row nobody writing assertions by hand thinks to write, because an empty page looks like
+nothing to assert about.
+
+`slugExists` is the other half. Its `fake` table exists so that `createArticle`'s rows have something
+to dispatch to, but it is a statement about the real dependency all the same: that
+`how-to-train-your-dragon` names no article and `taken` does. Nothing had ever checked it — ADR-0093
+compares a fake with its behavior's recorded rows, and `slugExists` had none. It has two now, stating
+the same inputs, and the test asks both questions of one implementation under one world:
+`evaluate` adjudicates what the behavior owes, `observe` relates what the fake states to what the SQL
+answered, and `alsoBy` ties an entry to the rows stating its input. Read the wrong column and both
+move together while the two texts go on agreeing with each other, which is what says the
+implementation is the one that moved.
+
+The world is arranged by the test and not by the model, because the same entry reads `AsStated` under
+one world and `OtherThanStated` under another. Nothing in the API can know that two of its calls saw
+one world; the caller is the only thing that does.
+
+One thing this does not yet do. `souther examples --generate` proposes rows for what nothing covers,
+and it works — remove the two feed rows and it hands back a `FeedQuery` row to fill in. But it reads
+`query` as a single axis of two cases and does not see the three optional filters inside
+`GlobalQuery`, so the combinations that decide the `where` are not among what it proposes. The ten
+rows were reasoned out by hand.

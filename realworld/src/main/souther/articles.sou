@@ -207,6 +207,7 @@ data ArticleQuery = GlobalQuery | FeedQuery
 data ArticlePage = { articles: List<ArticleSummary>, total: Int }
 
 behavior readArticles : (query: ArticleQuery) -> ArticlePage
+    ensures List.length(value.articles) <= query.limit.value
 
 behavior readArticle : (slug: Slug) -> Article | ArticleNotFound
 
@@ -265,6 +266,21 @@ fake slugExists
     | (Slug("how-to-train-your-dragon")) -> false
     | (Slug("taken")) -> true
     | _ -> false
+
+// The same two inputs the table above states, written as what `slugExists` owes rather than as what
+// stands in for it. Until these were here the table was held to nothing: ADR-0093 compares a `fake`
+// with its behavior's recorded rows and reports a disagreement, and `slugExists` had no rows for it
+// to reach. What the two texts now say is one thing, and `ReadArticlesDifferentialTest` is where an
+// implementation is held to both of them at once.
+//
+// They describe a world rather than a moment: `taken` names an article and `how-to-train-your-dragon`
+// does not. That world is the test's to arrange, which is why the same entry reads `AsStated` under
+// it and `OtherThanStated` under another.
+example slugExists
+    | "a slug no article is stored under is free" :
+        (Slug("how-to-train-your-dragon")) -> false
+    | "a slug an article already carries is taken" :
+        (Slug("taken")) -> true
 
 // A write answers what it stored, so the table is the identity over the articles these rows build.
 fake storeArticle
@@ -325,3 +341,89 @@ example deleteArticle
         (dragons, Username("jake")) -> Removed
     | "somebody who is not the author may not" :
         (dragons, Username("gerome")) -> NotTheAuthor
+
+
+// === asking for a page: the rows a bound implementation is held to ===
+// These are the first rows in this repository written for an injected behavior. Nothing here can run
+// them at compile time — there is no `let` to run and a `fake` would only be answering itself. They
+// are a record of what `readArticles` owes, and what runs them is `ReadArticlesExamplesTest`, which
+// binds the jOOQ implementation and holds it to each one.
+//
+// Why this behavior and not one of the other twenty-four injected ones: its input is a sum of two
+// shapes and three optional filters, so the SQL underneath is assembled differently for every
+// combination. That is the code a reader cannot check by reading, and it is where the combinations
+// below earn their keep — each names a way the assembly goes wrong that still reads correctly.
+//
+// One world, seeded by the test to match: jake wrote two articles tagged `dragons`, gerome wrote one
+// tagged `fp`, and gerome favorited one of jake's. Every row is true of that world, because a row
+// carries its inputs and its expectation and not the world it is asked in.
+let gerome = Profile { username = Username("gerome"), bio = None, image = None }
+
+let dragonsAreReal = ArticleSummary
+    { slug = Slug("dragons-are-real")
+    , title = Title("Dragons are real")
+    , description = Description("They are")
+    , tagList = [ Tag("dragons") ]
+    , author = jake
+    , createdAt = DateTime("2026-08-06T04:00:00")
+    , updatedAt = DateTime("2026-08-06T04:00:00")
+    }
+
+let trainYourDragon = ArticleSummary
+    { slug = Slug("how-to-train-your-dragon")
+    , title = Title("How to train your dragon")
+    , description = Description("Ever wonder how?")
+    , tagList = [ Tag("dragons"), Tag("training") ]
+    , author = jake
+    , createdAt = DateTime("2026-08-06T03:22:56")
+    , updatedAt = DateTime("2026-08-06T03:22:56")
+    }
+
+let onFunctionalProgramming = ArticleSummary
+    { slug = Slug("on-functional-programming")
+    , title = Title("On functional programming")
+    , description = Description("A monad is")
+    , tagList = [ Tag("fp") ]
+    , author = gerome
+    , createdAt = DateTime("2026-08-06T02:00:00")
+    , updatedAt = DateTime("2026-08-06T02:00:00")
+    }
+
+// The unfiltered first page. Every global row below spreads this and names only what it changes, so
+// what a row is about is the one line that differs from it.
+let firstPage = GlobalQuery
+    { limit = Limit(20), offset = Offset(0), tag = None, author = None, favoritedBy = None }
+
+example readArticles
+    | "no filter lists every article, newest first" :
+        (firstPage)
+        -> ArticlePage { articles = [dragonsAreReal, trainYourDragon, onFunctionalProgramming]
+                       , total = 3 }
+    | "a tag narrows to the articles carrying it" :
+        (GlobalQuery { ...firstPage, tag = Tag("dragons") })
+        -> ArticlePage { articles = [dragonsAreReal, trainYourDragon], total = 2 }
+    | "an author narrows to what they wrote" :
+        (GlobalQuery { ...firstPage, author = Username("jake") })
+        -> ArticlePage { articles = [dragonsAreReal, trainYourDragon], total = 2 }
+    | "two filters narrow together, so one nobody satisfies matches nothing" :
+        (GlobalQuery { ...firstPage, tag = Tag("dragons"), author = Username("gerome") })
+        -> ArticlePage { articles = [], total = 0 }
+    | "two filters one article satisfies keeps that article" :
+        (GlobalQuery { ...firstPage, tag = Tag("dragons"), author = Username("jake") })
+        -> ArticlePage { articles = [dragonsAreReal, trainYourDragon], total = 2 }
+    | "favoritedBy is who favorited it, not who wrote it" :
+        (GlobalQuery { ...firstPage, favoritedBy = Username("gerome") })
+        -> ArticlePage { articles = [trainYourDragon], total = 1 }
+    | "total is how many the query matched, not how many this page holds" :
+        (GlobalQuery { ...firstPage, tag = Tag("dragons"), limit = Limit(1) })
+        -> ArticlePage { articles = [dragonsAreReal], total = 2 }
+    | "the second page carries the next one, not the first again" :
+        (GlobalQuery { ...firstPage, tag = Tag("dragons"), limit = Limit(1), offset = Offset(1) })
+        -> ArticlePage { articles = [trainYourDragon], total = 2 }
+    | "a feed is the articles of the people followed" :
+        (FeedQuery { limit = Limit(20), offset = Offset(0)
+                   , followees = Set.singleton(Username("jake")) })
+        -> ArticlePage { articles = [dragonsAreReal, trainYourDragon], total = 2 }
+    | "a feed of nobody is empty, not everything" :
+        (FeedQuery { limit = Limit(20), offset = Offset(0), followees = Set.empty })
+        -> ArticlePage { articles = [], total = 0 }

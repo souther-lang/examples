@@ -53,6 +53,7 @@
 
         <!-- Test: @SpringBootTest actually starts Boot, and the tests drive real HTTP against it. -->
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+        <dependency><groupId>org.souther-lang</groupId><artifactId>souther-compiler</artifactId><version>${souther.version}</version><scope>test</scope></dependency>
     </dependencies>
 
     <build>
