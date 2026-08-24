@@ -208,6 +208,27 @@ data ArticlePage = { articles: List<ArticleSummary>, total: Int }
 
 behavior readArticles : (query: ArticleQuery) -> ArticlePage
     ensures List.length(value.articles) <= query.limit.value
+    ensures List.all(article -> matchesQuery(query, article), value.articles)
+
+// What a query asks of every article it is answered with. The rows say what ten particular queries
+// answer; this says what any query answers, and it is the sentence the `where` underneath is an
+// assembly of. A test can hold the SQL to it without anybody writing the page out.
+//
+// `favoritedBy` is not read here and cannot be: an ArticleSummary carries no favouriting, so there
+// is nothing in the answer to hold to that filter. A page filtered only on it keeps this clause
+// without the clause having borne on it.
+//
+// The two optionals are read with `Option.map` rather than matched on, which says the same thing.
+// A `match` on an optional inside a `let` an `ensures` reaches leaves every row of the behavior
+// unable to establish an answerer — souther-lang/souther#1049.
+let matchesQuery (query: ArticleQuery, article: ArticleSummary): Bool =
+    match query with
+        | GlobalQuery as global ->
+            Option.withDefault(true, Option.map(t -> List.contains(t, article.tagList), global.tag))
+                && Option.withDefault(true,
+                        Option.map(a -> article.author.username == a, global.author))
+        | FeedQuery as feed ->
+            Set.contains(article.author.username, feed.followees)
 
 behavior readArticle : (slug: Slug) -> Article | ArticleNotFound
 

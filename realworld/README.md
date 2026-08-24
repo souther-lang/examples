@@ -121,6 +121,22 @@ not, what is printed is the compiler's own sentence about where the two values p
 read when the test runs rather than travelling with the classes, so a model edited after the
 implementation was compiled is found out here.
 
+The same ten inputs are asked a second question, by a second factory:
+
+```java
+ContractObservation observed = bound.checkContract(row);
+assertInstanceOf(ContractObservation.NoClauseWasBroken.class, observed, observed.shown());
+```
+
+`evaluate` holds the answer to the page somebody wrote out; `checkContract` holds it to the
+behavior's `ensures` and to nothing the row records. `readArticles` states two things — that a page
+never holds more than the limit asked for, and that every article in it matches the query it was
+asked with — and the second is the whole of what the `where` underneath is for. That question keeps
+its meaning in a world the rows were not recorded in, where the written page is no longer the answer
+and the declaration still is. What it does not claim is that a clause bore on the answer:
+`NoClauseWasBroken` is the absence of a violation, and the row filtering only on `favoritedBy` proves
+nothing, because an ArticleSummary carries no favouriting for a clause to read.
+
 `readArticles` is the behavior worth doing this to. Its input is a sum of two shapes carrying three
 optional filters, so the `where` underneath is assembled differently for every combination — the code
 a reader cannot check by reading. The ten rows in `articles.sou` are ten combinations, and each names
@@ -135,6 +151,13 @@ intersection, an author alone cannot, and neither can a tag and an author that o
 together. What catches it is the row where the two filters disagree — the one whose result is empty,
 which is the row nobody writing assertions by hand thinks to write, because an empty page looks like
 nothing to assert about.
+
+The declaration catches that same implementation on that same row, and catches it without being
+shown a page anybody wrote: a union holds articles matching one filter and not the other, which is
+what the clause refuses. So the row nobody thinks to write is one the model decides by itself — the
+inputs are still somebody's, and the answer is not. On the other nine rows the two oracles agree
+with each other, and the clause is blind where the rows are: a tag on its own cannot tell a union
+from an intersection whichever question is asked.
 
 `slugExists` is the other half. Its `fake` table exists so that `createArticle`'s rows have something
 to dispatch to, but it is a statement about the real dependency all the same: that

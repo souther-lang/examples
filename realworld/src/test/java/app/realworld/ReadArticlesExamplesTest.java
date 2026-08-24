@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import souther.compiler.examples.BoundExamples;
+import souther.compiler.examples.ContractObservation;
 import souther.compiler.examples.RecordedRow;
 import souther.compiler.examples.RowEvaluation;
 import souther.compiler.examples.SoutherExamples;
@@ -36,6 +37,7 @@ import static org.jooq.impl.DSL.select;
 import static org.jooq.impl.DSL.table;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -44,8 +46,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Every other test in this module asserts in Java what the implementation should return. These
  * do not: the expectations are in the model, beside the behavior they are about, and what is written
- * here is the world they are asked in and the loop that asks them. The only assertion is that a row
- * held; when one does not, what is printed is the compiler's own sentence about it.
+ * here is the world they are asked in and the loop that asks them. When something does not hold,
+ * what is printed is the compiler's own sentence about it.
+ *
+ * <p>The rows are asked two questions. {@code evaluate} holds the answer to the page recorded beside
+ * the behavior; {@code checkContract} holds it to what the behavior states of what it answers, and
+ * to nothing the row records.
  *
  * <p>The source is read at the time the run happens rather than travelling with the classes, so a
  * model edited after the implementation was compiled is found out here. {@link #anOrForAnAndIsCaught}
@@ -103,6 +109,29 @@ class ReadArticlesExamplesTest {
     }
 
     /**
+     * The same ten inputs, decided by what the behavior states rather than by what a person wrote
+     * out.
+     *
+     * <p>{@code evaluate} above asks whether the implementation answered the recorded page;
+     * {@code checkContract} asks only whether the answer keeps the {@code ensures} clauses, and
+     * nothing about the record is consulted. That is the question a contract test asks, and it is
+     * the one that survives a world the rows were not recorded in — a shared database, a snapshot of
+     * another size — where the written page is no longer the answer and the declaration still is.
+     *
+     * <p>{@code behaviorsWithContracts} is asserted rather than read: without it, a model edited to
+     * drop the clauses would leave every row here answering {@code NothingStated}, and this factory
+     * would go on being green while asking nothing.
+     */
+    @TestFactory
+    Stream<DynamicTest> theJooqImplementationKeepsWhatReadArticlesStates() {
+        BoundExamples bound = SoutherExamples.of(MODEL).bind(new JooqArticles.ReadPage(dsl));
+        assertEquals(List.of("readArticles"), bound.behaviorsWithContracts(),
+                "the clauses this factory is the whole of are no longer in the model");
+        return bound.rows().stream().map(row -> DynamicTest.dynamicTest(
+                row.shown(), () -> assertKeptWhatIsStated(bound, row)));
+    }
+
+    /**
      * The effect, pinned so it cannot quietly stop being true.
      *
      * <p>{@link OrForAnAnd} is {@code ReadPage} with one character changed: the filters are combined
@@ -114,19 +143,35 @@ class ReadArticlesExamplesTest {
      * <p>What catches it is the row where the two filters disagree. That is the row a person writing
      * assertions by hand does not think to write, because the query it describes matches nothing and
      * there is nothing to assert about an empty page.
+     *
+     * <p>The declaration catches it on that same row, and catches it without being shown the page
+     * anybody wrote: what {@code ensures} says is that every article answered matches the query
+     * asked, and a union holds articles that match one filter and not the other. So the row a person
+     * would not have thought to write is one the model decides on its own — the inputs are still
+     * somebody's, and the answer is not.
      */
     @TestFactory
     Stream<DynamicTest> anOrForAnAndIsCaught() {
         BoundExamples bound = SoutherExamples.of(MODEL).bind(new OrForAnAnd(dsl));
+        String disagreeing = "two filters narrow together, so one nobody satisfies matches nothing";
         return Stream.of(
                 DynamicTest.dynamicTest("the row where the two filters disagree does not hold", () -> {
-                    RowEvaluation caught = bound.evaluate(named(bound,
-                            "two filters narrow together, so one nobody satisfies matches nothing"));
+                    RowEvaluation caught = bound.evaluate(named(bound, disagreeing));
                     assertFalse(caught.held(),
                             "an or for an and went unnoticed: " + caught.shown(Locale.ENGLISH));
                 }),
+                DynamicTest.dynamicTest("the declaration alone catches it, with no page written", () -> {
+                    ContractObservation caught = bound.checkContract(named(bound, disagreeing));
+                    ContractObservation.Broken broken = assertInstanceOf(
+                            ContractObservation.Broken.class, caught,
+                            "an or for an and kept what readArticles states: " + caught.shown());
+                    assertFalse(broken.why().isBlank(), "a broken clause said nothing");
+                }),
                 DynamicTest.dynamicTest("a tag on its own cannot tell the two apart", () ->
                         assertHeld(bound, named(bound, "a tag narrows to the articles carrying it"))),
+                DynamicTest.dynamicTest("nor can the declaration, on that row", () ->
+                        assertKeptWhatIsStated(bound,
+                                named(bound, "a tag narrows to the articles carrying it"))),
                 DynamicTest.dynamicTest("two filters one article satisfies cannot either", () ->
                         assertHeld(bound, named(bound,
                                 "two filters one article satisfies keeps that article"))));
@@ -135,6 +180,18 @@ class ReadArticlesExamplesTest {
     private static void assertHeld(BoundExamples bound, RecordedRow row) {
         RowEvaluation evaluated = bound.evaluate(row);
         assertTrue(evaluated.held(), evaluated.shown(Locale.ENGLISH));
+    }
+
+    /**
+     * Held to the declaration and to nothing the row records.
+     *
+     * <p>{@code NoClauseWasBroken} is the absence of a violation and not proof that a clause bore on
+     * this answer: the rule says nothing about a page filtered only on {@code favoritedBy}, because
+     * an ArticleSummary carries no favouriting, and that row arrives here having proved nothing.
+     */
+    private static void assertKeptWhatIsStated(BoundExamples bound, RecordedRow row) {
+        ContractObservation observed = bound.checkContract(row);
+        assertInstanceOf(ContractObservation.NoClauseWasBroken.class, observed, observed.shown());
     }
 
     /** `evaluate` takes the enumerated row, so a row named here is looked up among them. */
