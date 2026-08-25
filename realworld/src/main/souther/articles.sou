@@ -217,18 +217,22 @@ behavior readArticles : (query: ArticleQuery) -> ArticlePage
 // `favoritedBy` is not read here and cannot be: an ArticleSummary carries no favouriting, so there
 // is nothing in the answer to hold to that filter. A page filtered only on it keeps this clause
 // without the clause having borne on it.
-//
-// The two optionals are read with `Option.map` rather than matched on, which says the same thing.
-// A `match` on an optional inside a `let` an `ensures` reaches leaves every row of the behavior
-// unable to establish an answerer — souther-lang/souther#1049.
 let matchesQuery (query: ArticleQuery, article: ArticleSummary): Bool =
     match query with
         | GlobalQuery as global ->
-            Option.withDefault(true, Option.map(t -> List.contains(t, article.tagList), global.tag))
-                && Option.withDefault(true,
-                        Option.map(a -> article.author.username == a, global.author))
+            carriesTag(global, article) && writtenBy(global, article)
         | FeedQuery as feed ->
             Set.contains(article.author.username, feed.followees)
+
+let carriesTag (query: GlobalQuery, article: ArticleSummary): Bool =
+    match query.tag with
+        | None   -> true
+        | Some t -> List.contains(t, article.tagList)
+
+let writtenBy (query: GlobalQuery, article: ArticleSummary): Bool =
+    match query.author with
+        | None   -> true
+        | Some a -> article.author.username == a
 
 behavior readArticle : (slug: Slug) -> Article | ArticleNotFound
 
