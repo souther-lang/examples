@@ -173,8 +173,9 @@ The world is arranged by the test and not by the model, because the same entry r
 one world and `OtherThanStated` under another. Nothing in the API can know that two of its calls saw
 one world; the caller is the only thing that does.
 
-One thing this does not yet do. `souther examples --generate` proposes rows for what nothing covers,
-and it works — remove the two feed rows and it hands back a `FeedQuery` row to fill in. But it reads
-`query` as a single axis of two cases and does not see the three optional filters inside
-`GlobalQuery`, so the combinations that decide the `where` are not among what it proposes. The ten
-rows were reasoned out by hand.
+The ten rows were reasoned out by hand, and today they would not have to be. When they were written,
+`souther examples --generate` read `query` as a single axis of two cases and did not see the three
+optional filters inside `GlobalQuery`. It now reads four axes — the sum's two cases and each filter's
+`Some`/`None` — and with the rows removed it hands back twenty-six to fill in, covering the filter
+positions and the `Limit` and `Offset` boundaries. What it still cannot decide is what each one
+answers, which is the half that is not the machine's.

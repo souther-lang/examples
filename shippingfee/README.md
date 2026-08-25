@@ -36,8 +36,6 @@ example.shippingfee                                      measurement: partial
       · not accounted for: invariant 注文番号 #1 — which values may stand at 注文.番号
     combination pairs 7 reached / 7 known reachable, 9 untried
     border      borders 3   coverage items 4/8   excluded 4
-      ! no row is at the ON point 送料を求める/注文.合計 = 0 (invariant 商品合計 #1)
-      ! no row is at the ON point 送料を求める/注文.合計 = 1000000 (invariant 商品合計 #1)
       ! no row is at an IN point of 送料を求める/注文.合計, 0 <= 注文.合計 < 4999 (comparison@48:23)
       ! no row is at an OUT point of 送料を求める/注文.合計, 5000 < 注文.合計 <= 1000000 (comparison@48:23)
       · no OFF point is owed at 注文.合計 = 0 (invariant 商品合計 #1): excluded — the rules leave no value there
@@ -49,6 +47,9 @@ example.shippingfee                                      measurement: partial
       ! no row goes through `case 離島` (59:5)
       ! no row goes through `case 離島` (53:5)
       ! no row goes through `case 北海道沖縄` (53:5)
+  商品合計
+      ! no row is at the ON point value = 0 (invariant 商品合計 #1)
+      ! no row is at the ON point value = 1000000 (invariant 商品合計 #1)
 
 1 behavior: 1 implemented, 0 unimplemented, 0 injected; 0 rows waiting for a `let`.
 adequacy: not satisfied
@@ -63,6 +64,11 @@ by naming it.
 `not accounted for: invariant 注文番号 #1` is the report declining to guess. An order number has a
 format, not a set of classes, so there is nothing to divide it into; the report names the invariant
 it could not turn into classes rather than counting the field as covered.
+
+The last two are not under the behavior, because they are not about it. `商品合計` says a total is
+between 0 and 1,000,000, and whether a row stands at either end is a question about that data — asked
+once, wherever the rows that answer it are. What is under `送料を求める` is what its own rules draw:
+the guard at 5,000 and the arms of its `match`.
 
 The `!` marks are the subset a `--strict` build fails over, and the count at the end is of those.
 
