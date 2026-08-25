@@ -35,7 +35,13 @@ On `develop`, `souther.version` in the root `pom.xml` is a `-SNAPSHOT` published
 so the compiler is installed from its own repository first (`mvn -f souther/pom.xml install
 -DskipTests`). On `main` it is the latest release on Maven Central and nothing has to be installed.
 Either way the version is written in four places; `bin/set-version.sh <version>` moves all of them
-and `bin/check-version-consistency.sh` fails if they disagree.
+and `bin/check-version-consistency.sh` fails if they disagree. The build plugins carry a version of
+their own (`souther.plugin.version`), which moves on its own schedule and has no script: the same
+check reads it.
+
+`.sou` is compiled by `souther-maven-plugin`, and by `souther-gradle-plugin` in `issuetracker`. Only
+`account` still generates through the javac annotation processor, which `souther-clj` drives, and it
+is the one module left with a `package-info.java` written to give javac a source.
 
 ```sh
 mvn verify                                              # every Maven module: generate → compile → smoke test

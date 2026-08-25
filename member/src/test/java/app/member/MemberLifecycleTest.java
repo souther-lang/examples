@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 開発ライフサイクルの検証: member.sou を SoutherProcessor がコンパイル時に生成し、その型付き
+ * 開発ライフサイクルの検証: member.sou を souther-maven-plugin がビルド時に生成し、その型付き
  * decoder / encoder を Java から直接叩く。生成型を参照できている時点で「.sou → 生成 → 型付き利用」
  * が通っている（ワイルドカードもキャストも要らず Result&lt;T&gt; が得られる）。
  */

@@ -23,49 +23,58 @@ starting from the fields the business trip requests are recorded in today and re
 module, no generated code. It names its types in English; the model in this directory names them in
 Japanese, and is the fuller one the tutorial ends by pointing at.
 
-## How generation works: a javac annotation processor
+## How generation works: a build-tool plugin
 
-`.sou → .class` is done not by a dedicated build-tool plugin but by a **javac annotation processor**,
-which javac finds by itself from the `META-INF/services` entry in the `souther-compiler` jar — no
-class name is written anywhere in the build. Whenever `mvn compile` (or plain javac, or
-Gradle) runs, the processor compiles the `.sou` files in `src/main/souther` and emits the generated
-types into `target/classes`. Because `target/classes` is on javac's compile classpath, the
-hand-written code (and the smoke tests) **compile directly against those generated types**. No exec
-step, no separate module, no Souther-specific plugin.
+`.sou → .class` is done by a plugin the build declares: `souther-maven-plugin` here,
+`souther-gradle-plugin` in `issuetracker`. It compiles the `.sou` files in `src/main/souther` into
+`target/classes` before javac runs, so the hand-written code (and the smoke tests) **compile
+directly against those generated types**. No exec step and no separate module.
 
-The whole Maven wiring is just this (set once for all modules in the root `pom.xml`):
+The whole Maven wiring is this, set once for all modules in the root `pom.xml`:
 
 ```xml
 <plugin>
-  <artifactId>maven-compiler-plugin</artifactId>
+  <groupId>org.souther-lang</groupId>
+  <artifactId>souther-maven-plugin</artifactId>
+  <version>0.1.0</version>
   <configuration>
-    <annotationProcessorPaths>
-      <path>org.souther-lang:souther-compiler:0.1.0-SNAPSHOT</path>
-    </annotationProcessorPaths>
-    <compilerArgs><arg>-Asouther.source=${project.basedir}/src/main/souther</arg></compilerArgs>
+    <southerVersion>0.1.0-SNAPSHOT</southerVersion>
   </configuration>
+  <executions>
+    <execution><goals><goal>compile</goal></goals></execution>
+  </executions>
 </plugin>
 ```
 
-`souther-compiler` only sits on `annotationProcessorPaths`; it is not an app dependency and does not
-end up in the artifact jar. With Gradle you use the same processor via an `annotationProcessor`
-dependency plus the `-Asouther.source` compiler arg.
+The compiler is not on the plugin's class path. `<southerVersion>0.1.0-SNAPSHOTalready uses and runs behind `souther-build-api` in a class loader of its own — so the plugin and the
+Souther it runs are released on their own terms. A project naming no version gets the Souther the
+plugin release was verified against. The plugin also checks that the pom declares `souther-runtime`
+at the same version rather than adding it, because what a plugin adds is not in the pom you publish.
+
+Gradle is `id("org.souther-lang.souther")`, and there the runtime is added rather than checked;
+`issuetracker/build.gradle.kts` is the whole of it.
+
+The plugin is what a project written only in Souther needed. Before it, generation ran as a javac
+annotation processor, and javac does nothing at all when a compilation has no Java source: every
+module with no Java of its own carried one `package-info.java`, written in a language the project had
+chosen not to use, so that the processor would run. Those files are gone. `account` still has one —
+it drives generation from Clojure through `souther-clj`, which runs the processor over a trigger
+directory the same way.
+
+A `.sou` edited without `clean` is compiled. Under the annotation processor it was not:
+maven-compiler-plugin's incremental check reads Java sources only, so a `mvn verify` after a `.sou`
+edit recompiled nothing and reported success over the previous run's classes.
 
 Importing a module another project compiled needs nothing beyond the dependency itself. `sharedmoney`
 publishes `shared.money`; `invoicing` depends on that jar, has only its own `.sou` under
-`src/main/souther`, and writes `import shared.money ( Amount )`. The processor reads what the module
-declared off the classes on the compile classpath, which is what depending on a jar already puts
-there, and `invoicing`'s output holds no `shared/money` class — the dependency's classes are its own
-build's.
-
-Both of those projects carry a `package-info.java` they would rather not need: an annotation
-processor runs as part of compiling Java, and javac does nothing at all when a project has no Java
-source. A project written only in Souther has to write one file in another language to be built.
+`src/main/souther`, and writes `import shared.money ( Amount )`. What the module declared is read off
+the classes on the compile classpath, which is what depending on a jar already puts there, and
+`invoicing`'s output holds no `shared/money` class — the dependency's classes are its own build's.
 
 A compile error is reported the way the CLI reports it — the title, the position, the offending line
-with a caret, and the hint. `-Asouther.lang=ja` picks the language of the message; without it the
-processor follows `SOUTHER_LANG`, and English when that is unset too. The machine's own locale is
-never read, which is what `souther --lang` does as well.
+with a caret, and the hint. `<languageTag>` (or `-Dsouther.lang=ja`) picks the language of the
+message; without it the compile follows `SOUTHER_LANG`, and English when that is unset too. The
+machine's own locale is never read, which is what `souther --lang` does as well.
 
 ## Modules
 
@@ -104,11 +113,9 @@ never read, which is what `souther --lang` does as well.
 | `comments` | Comments on an article, and the module where **the shape says which of two operations carries a decision**. Writing one asks the domain nothing — anybody logged in may comment — so there is no composed behavior wrapping the write and the boundary calls it directly; deleting one carries exactly one rule, so it goes through `deleteComment` and answers `NotTheAuthor`, the same way articles answer it about editing. It is the third module in the chain: it imports `articles` for the `Slug` a comment hangs on and `identity` for the `Profile` that wrote it, and `articles` imports `identity` too, so the two paths to `Profile` meet and agree |
 | `whodunit` | A logic puzzle solved at compile time, and **each `example` row is one puzzle**: the clues are the row's inputs, the verdict is its expected value, and the build passing proves each puzzle has exactly the answer its row states. The candidate worlds are a fixed product written as nested `flatMap` over the same three rooms — nothing recurses, so nothing needs `partial` — and `allDistinctBy` keeps the seatings injective. The verdict is a three-case sum (`Unraveled \| NoConsistentStory \| StillAmbiguous`), so an over- or under-constrained puzzle is an answer rather than an error. The pattern generalises: enumerate a small domain, filter by the rules, and state the survivors in an `example` — the same bounded exhaustive check `billing`'s `unpayableDueDates` runs over a month of due dates |
 
-Modules that are `.sou`-only with no hand-written Java (crm/hr/businesstrip)
-carry a single minimal `package-info.java` to trigger the processor (javac does not run annotation
-processing unless there is at least one source). One is enough however many Souther modules a project
-holds: `hr` has eight, generating into eight packages, and still carries exactly one `package-info.java`,
-because the processor reads the source directory it is handed and not the list of packages. The smoke tests call the generated
+Modules that are `.sou`-only with no hand-written Java (crm/hr/businesstrip) have no
+`src/main/java` at all: the plugin compiles the source directory it is handed, however many Souther
+modules that directory holds — `hr` has eight, generating into eight packages. The smoke tests call the generated
 `decoder()`/`encoder()` in a typed way (`decoder()` is `Decoder<…, T>`; `decode(input)` returns
 `Result<T>`, and `Ok`/`Err` are told apart by pattern match — no wildcard, no cast). A `Path` is
 passed only where the decoder is handed one field of a larger input and could not otherwise know
@@ -319,55 +326,39 @@ behavior detachLabel : (request: LabelRequest) -> Issue | IssueNotFound  depends
 `IssueNotFound` through without writing. The remaining behaviors (`assigneeOf`, `sharedLabels`,
 `countByLabel`, `topLabels`, `busyLabels`) are pure, so they need no injection, and each one has a route.
 
-### Making a javac annotation processor work in a Kotlin Gradle build
+### Compiling the model in a Kotlin Gradle build
 
-Souther generates through a javac annotation processor, and kotlinc is not javac — so the build needs
-an order: javac (with `SoutherProcessor`, over the one `package-info.java`) emits the generated
-classes, and only then does kotlinc run, with those classes on its compile classpath. Nothing on the
-Java side depends on Kotlin here, and everything on the Kotlin side depends on generated bytecode.
-
-That is the reverse of what Gradle's Kotlin plugin does. Within a source set it compiles Kotlin
-first and Java second, with the Kotlin output on javac's classpath — so a processor running in
-`compileJava` would produce its classes after kotlinc had already needed them.
-
-The build does not fight that ordering; it steps out of it. The processor gets a source set of its
-own, `souther`, holding the single `package-info.java`:
+The whole of it is the plugin and the version it compiles with:
 
 ```kotlin
-val souther by sourceSets.creating {
-    java.setSrcDirs(listOf("src/main/java"))
-    resources.setSrcDirs(emptyList<String>())
+plugins {
+    kotlin("jvm") version "2.2.21"
+    id("org.souther-lang.souther") version "0.1.0"
 }
 
-tasks.named<JavaCompile>(souther.compileJavaTaskName) {
-    options.compilerArgs.add("-Asouther.source=${southerSource.asFile.absolutePath}")
-    inputs.dir(southerSource)
-        .withPropertyName("southerSource")
-        .withPathSensitivity(PathSensitivity.RELATIVE)
-}
-
-dependencies {
-    implementation(souther.output)
-    "southerAnnotationProcessor"("org.souther-lang:souther-compiler:$southerVersion")
-    "southerAnnotationProcessor"("org.souther-lang:souther-runtime:$southerVersion")
+souther {
+    southerVersion = "0.1.0-SNAPSHOT"
 }
 ```
 
-`implementation(souther.output)` is what does the sequencing: a source set's output carries the task
-that builds it, so declaring it as a dependency puts `compileSoutherJava` before `compileKotlin`
-without either task naming the other. It reaches the test source set too, since `testImplementation`
-extends `implementation`.
+`compileSouther` writes into the `main` source set, so the generated classes reach kotlinc, the test
+compile class path and the jar. The plugin also adds `souther-runtime` at the version that compiled
+the model, which is why this build declares no runtime dependency of its own.
 
-The `inputs.dir` line is not optional. A `.sou` is not a javac source, so nothing else tells Gradle
-this compilation reads it — without it, editing `issues.sou` leaves the task `UP-TO-DATE` and the
-previously generated classes in place. The jar has to be told as well (`tasks.jar { from(souther.output) }`),
-because the generated classes live in another source set's output.
+Wiring this by hand took about forty lines here, and three of them were load-bearing in a way nothing
+reported. The Kotlin plugin compiles Kotlin before Java within a source set, which is the wrong way
+round when everything Kotlin depends on generated bytecode — so the processor needed a source set of
+its own, and `implementation(souther.output)` was what ordered the two. A `.sou` is not a javac
+source, so without `inputs.dir` editing `issues.sou` left the task `UP-TO-DATE` and the previously
+generated classes in place. And the jar had to be told to take the other source set's output, or it
+was empty. All three builds succeeded while being wrong.
 
-Three smaller things the build pins down: `jvmTarget` is `21`, because kotlinc still defaults to 1.8
-and 21 is Souther's runtime floor, so the boundary asks no more of a JVM than the generated code it
-drives; `bootJar` is disabled so the artifact stays a plain jar, as the Maven examples' are; and
-`settings.gradle.kts` lists `mavenLocal()` first, since `souther.version` is a `-SNAPSHOT`
-published nowhere but `~/.m2`.
+Three smaller things the build still pins down: `jvmTarget` is `21`, because kotlinc still defaults
+to 1.8 and 21 is Souther's runtime floor, so the boundary asks no more of a JVM than the generated
+code it drives; `bootJar` is disabled so the artifact stays a plain jar, as the Maven examples' are;
+and `settings.gradle.kts` lists `mavenLocal()` first, since `souther.version` is a `-SNAPSHOT`
+published nowhere but `~/.m2` — the plugin resolves the compiler from the repositories the project
+already declares.
 
 ### What Kotlin brings to the boundary
 
@@ -404,7 +395,7 @@ using Souther needs one.
 
 | Kotlin file | Role |
 | --- | --- |
-| `build.gradle.kts` | The build. The `souther` source set that runs the annotation processor, and `implementation(souther.output)` ordering it before kotlinc (above) |
+| `build.gradle.kts` | The build. `souther-gradle-plugin` compiles the model, and what is left is the Kotlin and Spring wiring (above) |
 | `IssueRows.kt` | The one place that knows the issue tables. An issue spans `issues` and its `issue_labels` rows, so reading one produces the Map `Issue.decoder()` takes (labels as a list → a `Set` on decode; an absent assignee left out of the Map → `None`). Reading values out of a domain value is plain property access (`issue.id.value`), since a generated data is a record — construction is the guarded direction, not reading. A private `Option.orNull()` at the bottom is the one place a Souther optional meets a nullable column |
 | `JooqIssueStore.kt` | The three injected implementations, each **extending** the generated abstract base. A Kotlin subclass reaches the base's `protected` factories, so the unit case is built with the inherited `IssueNotFound()`; values read out of storage go through the public `decoder()`, which re-checks their invariants — on this service's own writing rather than a caller's input, so a refusal there is `getOrThrow` and a 500, not a 400. SQL exceptions are not caught |
 | `web/IssueTrackerConfig.kt` | The generated-side beans: the injected implementations, `AttachLabel.bind(...)` and friends, the pure behaviors' `of()`, and a jOOQ `Settings` that turns identifier quoting off. DataSource / DSLContext / TransactionManager come from autoconfig |
@@ -472,7 +463,9 @@ time by the guard just above it. If funds are short it returns `InsufficientFund
 The `.sou`-side compile-time check (`fake` + `example` confirm the three cases with no DB) runs
 whenever `SoutherProcessor` generates the classes — here that is `clojure -X:gen` (account is a
 Clojure/`deps.edn` project, not a Maven reactor module). The account module has no hand-written Java,
-so it carries a single minimal `package-info.java` to trigger the processor. **The Clojure app puts
+so it carries a single minimal `package-info.java` for the processor to have something to run over —
+the last one in this repository, since the Maven and Gradle examples moved to the build plugins.
+`souther-clj` drives javac itself and takes that directory as its `:trigger-dir`. **The Clojure app puts
 that generated output (`target/classes`) straight on its classpath** (`target/classes` is in
 `:paths` in `deps.edn`).
 
