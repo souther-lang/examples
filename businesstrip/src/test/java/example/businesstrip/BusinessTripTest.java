@@ -22,7 +22,9 @@ class BusinessTripTest {
 
     private static final Map<String, Object> 一般社員 =
             Map.of("従業員ID", "e-002",
-                    "役職", Map.of("type", "一般社員"),
+                    // 管理職 も 一般社員 も項目を持たない単位データなので、役職は裸の名前で渡る。
+                    // 決裁レベルを落とすまでは 管理職 がレコードで、ここは {"type": ...} だった。
+                    "役職", "一般社員",
                     "上長ID", "m-001");
 
     /**
@@ -110,7 +112,8 @@ class BusinessTripTest {
                 出張を完了する.of().apply(承認済み, 実費, "訪問して受注",
                         LocalDateTime.parse("2026-08-05T18:00:00")));
 
-        最終承認待ち 最終待ち = 最終承認を依頼する.of().apply(完了);
+        最終承認待ち 最終待ち = 最終承認を依頼する.of()
+                .apply(完了, LocalDateTime.parse("2026-08-05T19:00:00"));
         承認完了 完了済み = assertInstanceOf(承認完了.class,
                 最終承認する.of().apply(最終待ち, 上長, LocalDateTime.parse("2026-08-06T09:00:00")));
 
