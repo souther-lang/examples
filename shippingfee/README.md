@@ -33,7 +33,7 @@ example.shippingfee                                      measurement: partial
     partition   axes 3   equivalence partitions 5/7   (not all of it was measured)
       · no row is in `北海道沖縄` at 注文.地域
       · no row is in `離島` at 注文.地域
-      · not accounted for: invariant 注文番号 #1 — which values may stand at 注文.番号
+      · not accounted for: invariant 注文番号 #1 — which values may stand at 注文.番号: written in a form this compiler does not read
     combination pairs 7 reached / 7 known reachable, 9 untried
     border      borders 3   coverage items 4/8   excluded 4
       ! no row is at an IN point of 送料を求める/注文.合計, 0 <= 注文.合計 < 4999 (comparison@48:23)
@@ -61,9 +61,10 @@ types name, the boundaries are the ones its `invariant`s and `guard`s state, and
 arms of its own `match`. Nobody decided that 北海道沖縄 is a case worth testing; the regulation did,
 by naming it.
 
-`not accounted for: invariant 注文番号 #1` is the report declining to guess. An order number has a
-format, not a set of classes, so there is nothing to divide it into; the report names the invariant
-it could not turn into classes rather than counting the field as covered.
+`not accounted for: invariant 注文番号 #1` is the report declining to guess, and it says why: the
+rule is `matches("[0-9]{4}-[0-9]{6}", value)`, a format rather than a set of classes, so there is
+nothing to divide the field into. The invariant is named as one nothing was accounted for, rather
+than the field being counted as covered.
 
 The last two are not under the behavior, because they are not about it. `商品合計` says a total is
 between 0 and 1,000,000, and whether a row stands at either end is a question about that data — asked
@@ -155,7 +156,7 @@ example.shippingfee                                      measurement: partial
   送料を求める             implemented   rows 8    pending 0
     signature   out specified 2/2  observed 2/2  verified 2/2
     partition   axes 3   equivalence partitions 7/7   (not all of it was measured)
-      · not accounted for: invariant 注文番号 #1 — which values may stand at 注文.番号
+      · not accounted for: invariant 注文番号 #1 — which values may stand at 注文.番号: written in a form this compiler does not read
     combination pairs 13 reached / 13 known reachable, 3 untried
     border      borders 3   coverage items 8/8   excluded 4
       · no OFF point is owed at 注文.合計 = 0 (invariant 商品合計 #1): excluded — the rules leave no value there
@@ -184,7 +185,7 @@ What is not ordinary is that they are now measurably short, and by exactly this 
 ```
     partition   axes 3   equivalence partitions 7/8   (not all of it was measured)
       · no row is in `沖縄` at 注文.地域
-      · not accounted for: invariant 注文番号 #1 — which values may stand at 注文.番号
+      · not accounted for: invariant 注文番号 #1 — which values may stand at 注文.番号: written in a form this compiler does not read
     combination pairs 13 reached / 13 known reachable, 7 untried
     branch      10/12
       ! no row goes through `case 沖縄` (61:5)
