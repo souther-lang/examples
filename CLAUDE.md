@@ -31,9 +31,17 @@ English. Domain models in `.sou` use the language of the domain they model: Japa
 
 ## Building
 
-The examples build against `souther.version` in the root `pom.xml`, `0.1.0-rc5`, released to Maven
-Central — nothing has to be installed first. The version is written in four places; `bin/set-version.sh
-<version>` moves all of them and `bin/check-version-consistency.sh` fails if they disagree.
+On `develop`, `souther.version` in the root `pom.xml` is a `-SNAPSHOT` published nowhere but `~/.m2`,
+so the compiler is installed from its own repository first (`mvn -f souther/pom.xml install
+-DskipTests`). On `main` it is the latest release on Maven Central and nothing has to be installed.
+Either way the version is written in four places; `bin/set-version.sh <version>` moves all of them
+and `bin/check-version-consistency.sh` fails if they disagree. The build plugins carry a version of
+their own (`souther.plugin.version`), which moves on its own schedule and has no script: the same
+check reads it.
+
+`.sou` is compiled by `souther-maven-plugin`, and by `souther-gradle-plugin` in `issuetracker`. Only
+`account` still generates through the javac annotation processor, which `souther-clj` drives, and it
+is the one module left with a `package-info.java` written to give javac a source.
 
 ```sh
 mvn verify                                              # every Maven module: generate → compile → smoke test
@@ -44,8 +52,8 @@ cd issuetracker && ./gradlew build                      # Kotlin, its own Gradle
 `ordering` and `issuetracker` start Spring Boot against H2, so their first build needs network to
 fetch the starters; after that `mvn -o` and `./gradlew --offline` work.
 
-The `souther` CLI, which `shippingfee/README.md` runs, is not on Central: take it from a compiler
-release or build it from a clone.
+The `souther` CLI, which `shippingfee/README.md` runs, is not on Central: it comes out of the same
+clone, as `souther-cli/target/souther`.
 
 Java boundary conventions for code written against generated Souther types are in
 `docs/java-boundary-conventions.md`.

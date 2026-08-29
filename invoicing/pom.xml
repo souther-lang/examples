@@ -10,7 +10,7 @@
     <description>
         別プロジェクトが公開した Souther モジュールを import する側。src/main/souther には
         自分の .sou しか無く、shared.money は sharedmoney の jar から解決される。設定は
-        依存を1つ足すだけで、アノテーションプロセッサに渡す追加のオプションは無い。
+        依存を1つ足すだけで、ビルドプラグインに渡す追加の設定は無い。
     </description>
 
     <dependencies>

@@ -102,3 +102,80 @@ Some things are worth pointing at:
   are composed behaviors, because each has a rule. Unfollowing, favoriting and commenting are injected
   writes the boundary calls directly, because they have none. A composed behavior that only forwarded
   its argument would state nothing.
+
+## Holding the SQL to the model
+
+Every other test in this module drives the API over HTTP and asserts in Java what came back. Two do
+not. `ReadArticlesExamplesTest` and `SlugExistsDifferentialTest` bind the jOOQ implementation that
+`RealWorldConfig` wires into the running application, and what decides them is written in the `.sou`
+files beside the behaviors they are about.
+
+```java
+BoundExamples bound = SoutherExamples.of(MODEL).bind(new JooqArticles.ReadPage(dsl));
+return bound.rows().stream().map(row -> dynamicTest(
+        row.shown(), () -> assertTrue(bound.evaluate(row).held(), ...)));
+```
+
+One test per recorded row, named by the row. The only assertion is that the row held; when one does
+not, what is printed is the compiler's own sentence about where the two values part. The source is
+read when the test runs rather than travelling with the classes, so a model edited after the
+implementation was compiled is found out here.
+
+The same ten inputs are asked a second question, by a second factory:
+
+```java
+ContractObservation observed = bound.checkContract(row);
+assertInstanceOf(ContractObservation.NoClauseWasBroken.class, observed, observed.shown());
+```
+
+`evaluate` holds the answer to the page somebody wrote out; `checkContract` holds it to the
+behavior's `ensures` and to nothing the row records. `readArticles` states two things — that a page
+never holds more than the limit asked for, and that every article in it matches the query it was
+asked with — and the second is the whole of what the `where` underneath is for. That question keeps
+its meaning in a world the rows were not recorded in, where the written page is no longer the answer
+and the declaration still is. What it does not claim is that a clause bore on the answer:
+`NoClauseWasBroken` is the absence of a violation, and the row filtering only on `favoritedBy` proves
+nothing, because an ArticleSummary carries no favouriting for a clause to read.
+
+`readArticles` is the behavior worth doing this to. Its input is a sum of two shapes carrying three
+optional filters, so the `where` underneath is assembled differently for every combination — the code
+a reader cannot check by reading. The ten rows in `articles.sou` are ten combinations, and each names
+a way the assembly goes wrong while still reading correctly: a filter dropped, a total counted after
+the limit, an offset applied without a tie-breaker, a feed of nobody shown everything.
+
+What the rows are worth is measurable. `SlugExistsDifferentialTest` and the `or`-for-`and` factory in
+`ReadArticlesExamplesTest` bind implementations with one thing changed, and the second is the sharper
+of the two: combining the filters with `or` instead of `and` returns the union of what each matches,
+and **seven of the ten rows still hold against it**. A tag alone cannot tell a union from an
+intersection, an author alone cannot, and neither can a tag and an author that one article satisfies
+together. What catches it is the row where the two filters disagree — the one whose result is empty,
+which is the row nobody writing assertions by hand thinks to write, because an empty page looks like
+nothing to assert about.
+
+The declaration catches that same implementation on that same row, and catches it without being
+shown a page anybody wrote: a union holds articles matching one filter and not the other, which is
+what the clause refuses. So the row nobody thinks to write is one the model decides by itself — the
+inputs are still somebody's, and the answer is not. On the other nine rows the two oracles agree
+with each other, and the clause is blind where the rows are: a tag on its own cannot tell a union
+from an intersection whichever question is asked.
+
+`slugExists` is the other half. Its `fake` table exists so that `createArticle`'s rows have something
+to dispatch to, but it is a statement about the real dependency all the same: that
+`how-to-train-your-dragon` names no article and `taken` does. Nothing had ever checked it — ADR-0093
+compares a fake with its behavior's recorded rows, and `slugExists` had none. It has two now, stating
+the same inputs, and the test asks both questions of one implementation under one world:
+`evaluate` adjudicates what the behavior owes, `observe` relates what the fake states to what the SQL
+answered, and `alsoBy` ties an entry to the rows stating its input. Read the wrong column and both
+move together while the two texts go on agreeing with each other, which is what says the
+implementation is the one that moved.
+
+The world is arranged by the test and not by the model, because the same entry reads `AsStated` under
+one world and `OtherThanStated` under another. Nothing in the API can know that two of its calls saw
+one world; the caller is the only thing that does.
+
+The ten rows were reasoned out by hand, and today they would not have to be. When they were written,
+`souther examples --generate` read `query` as a single axis of two cases and did not see the three
+optional filters inside `GlobalQuery`. It now reads four axes — the sum's two cases and each filter's
+`Some`/`None` — and with the rows removed it hands back twenty-six to fill in, covering the filter
+positions and the `Limit` and `Offset` boundaries. What it still cannot decide is what each one
+answers, which is the half that is not the machine's.
