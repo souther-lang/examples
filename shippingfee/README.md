@@ -27,13 +27,13 @@ souther examples src/main/souther/*.sou
 (`souther` is the CLI; the root README says where to get it.)
 
 ```
-example.shippingfee                                      measurement: partial
+example.shippingfee                                      measurement: complete
   送料を求める             implemented   rows 3    pending 0
     signature   out specified 2/2  observed 2/2  verified 2/2
-    partition   axes 3   equivalence partitions 5/7   (not all of it was measured)
+    partition   axes 3   equivalence partitions 5/7
       · no row is in `北海道沖縄` at 注文.地域
       · no row is in `離島` at 注文.地域
-      · not accounted for: invariant 注文番号 #1 — which values may stand at 注文.番号: written in a form this compiler does not read
+      · not derivable: 注文.番号
     combination pairs 7 reached / 7 known reachable, 9 untried
     border      borders 3   coverage items 4/8   excluded 4
       ! no row is at an IN point of 送料を求める/注文.合計, 0 <= 注文.合計 < 4999 (comparison@48:23)
@@ -61,10 +61,9 @@ types name, the boundaries are the ones its `invariant`s and `guard`s state, and
 arms of its own `match`. Nobody decided that 北海道沖縄 is a case worth testing; the regulation did,
 by naming it.
 
-`not accounted for: invariant 注文番号 #1` is the report declining to guess, and it says why: the
-rule is `matches("[0-9]{4}-[0-9]{6}", value)`, a format rather than a set of classes, so there is
-nothing to divide the field into. The invariant is named as one nothing was accounted for, rather
-than the field being counted as covered.
+`not derivable: 注文.番号` is the report declining to guess. What the model says about an order
+number is `matches("[0-9]{4}-[0-9]{6}", value)` — a format rather than a set of classes — so there is
+nothing there to divide the field into, and the position is named rather than counted as covered.
 
 The last two are not under the behavior, because they are not about it. `商品合計` says a total is
 between 0 and 1,000,000, and whether a row stands at either end is a question about that data — asked
@@ -73,10 +72,9 @@ the guard at 5,000 and the arms of its `match`.
 
 The `!` marks are the subset a `--strict` build fails over, and the count at the end is of those.
 
-The two words at the ends are different answers. `measurement: partial` says one of the measures
-could not be made in full — the order-number invariant is the one, which is why the partition line
-ends `(not all of it was measured)`. `adequacy: not satisfied` says what was measured leaves a gap.
-The first is about how far the compiler got, the second about what the rows reach.
+The two words at the ends are different answers. `measurement: complete` says every measure could be
+made; `adequacy: not satisfied` says what was measured leaves a gap. Here both are true at once —
+everything was looked at, and this is what nothing covers.
 
 ## The rows it hands back
 
@@ -152,11 +150,11 @@ Fill the five in and the behavior is at `branch 10/10`, and that is the state th
 committed in:
 
 ```
-example.shippingfee                                      measurement: partial
+example.shippingfee                                      measurement: complete
   送料を求める             implemented   rows 8    pending 0
     signature   out specified 2/2  observed 2/2  verified 2/2
-    partition   axes 3   equivalence partitions 7/7   (not all of it was measured)
-      · not accounted for: invariant 注文番号 #1 — which values may stand at 注文.番号: written in a form this compiler does not read
+    partition   axes 3   equivalence partitions 7/7
+      · not derivable: 注文.番号
     combination pairs 13 reached / 13 known reachable, 3 untried
     border      borders 3   coverage items 8/8   excluded 4
       · no OFF point is owed at 注文.合計 = 0 (invariant 商品合計 #1): excluded — the rules leave no value there
@@ -183,9 +181,9 @@ pass again.
 What is not ordinary is that they are now measurably short, and by exactly this much:
 
 ```
-    partition   axes 3   equivalence partitions 7/8   (not all of it was measured)
+    partition   axes 3   equivalence partitions 7/8
       · no row is in `沖縄` at 注文.地域
-      · not accounted for: invariant 注文番号 #1 — which values may stand at 注文.番号: written in a form this compiler does not read
+      · not derivable: 注文.番号
     combination pairs 13 reached / 13 known reachable, 7 untried
     branch      10/12
       ! no row goes through `case 沖縄` (61:5)
