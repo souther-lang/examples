@@ -34,7 +34,7 @@
     <properties>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <souther.version>0.1.0-SNAPSHOT</souther.version>
+        <souther.version>0.1.0</souther.version>
         <souther.plugin.version>0.1.0</souther.plugin.version>
         <raoh.version>0.7.0</raoh.version>
         <junit.version>6.1.2</junit.version>

@@ -38,7 +38,7 @@ The whole Maven wiring is this, set once for all modules in the root `pom.xml`:
   <artifactId>souther-maven-plugin</artifactId>
   <version>0.1.0</version>
   <configuration>
-    <southerVersion>0.1.0-SNAPSHOT</southerVersion>
+    <southerVersion>0.1.0</southerVersion>
   </configuration>
   <executions>
     <execution><goals><goal>compile</goal></goals></execution>
@@ -339,7 +339,7 @@ plugins {
 }
 
 souther {
-    southerVersion = "0.1.0-SNAPSHOT"
+    southerVersion = "0.1.0"
 }
 ```
 
