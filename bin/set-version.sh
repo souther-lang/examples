@@ -34,8 +34,10 @@ perl -pi -e "s{(^\s*southerVersion = )\"[^\"]*\"}{\${1}\"$version\"}" \
     issuetracker/build.gradle.kts
 
 # 4. The README's two plugin snippets: <southerVersion> for Maven and southerVersion = for Gradle.
-#    (${1} delimits the backreference so a version starting with a digit is not read as $1<digit>.)
-perl -pi -e "s{(<southerVersion>)[^<]*}{\${1}$version}g;
+#    The closing tag is part of the match, because the README also names `<southerVersion>` in prose
+#    and a pattern that stops at the next `<` eats the sentence it is written in. (${1} delimits the
+#    backreference so a version starting with a digit is not read as $1<digit>.)
+perl -pi -e "s{(<southerVersion>)[^<]*(</southerVersion>)}{\${1}$version\${2}}g;
              s{(^\s*southerVersion = )\"[^\"]*\"}{\${1}\"$version\"}" \
     README.md
 

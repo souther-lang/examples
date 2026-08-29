@@ -46,7 +46,9 @@ The whole Maven wiring is this, set once for all modules in the root `pom.xml`:
 </plugin>
 ```
 
-The compiler is not on the plugin's class path. `<southerVersion>0.1.0-SNAPSHOTalready uses and runs behind `souther-build-api` in a class loader of its own — so the plugin and the
+The compiler is not on the plugin's class path. `<southerVersion>` names
+`org.souther-lang:souther-build-driver`, which the plugin resolves from the repositories the project
+already uses and runs behind `souther-build-api` in a class loader of its own — so the plugin and the
 Souther it runs are released on their own terms. A project naming no version gets the Souther the
 plugin release was verified against. The plugin also checks that the pom declares `souther-runtime`
 at the same version rather than adding it, because what a plugin adds is not in the pom you publish.
