@@ -160,9 +160,9 @@ behavior employmentIncomeDeductionFor : (salary: Yen) -> Yen
 
 let employmentIncomeDeductionFor (salary) =
     if salary <= 1900000 then Yen(650000)
-    else if salary <= 3600000 then Yen(salary.value * 30 / 100 + 80000)
-    else if salary <= 6600000 then Yen(salary.value * 20 / 100 + 440000)
-    else if salary <= 8500000 then Yen(salary.value * 10 / 100 + 1100000)
+    else if salary <= 3600000 then Yen(Rational.toInt(DOWN, salary.value * 30 / 100) + 80000)
+    else if salary <= 6600000 then Yen(Rational.toInt(DOWN, salary.value * 20 / 100) + 440000)
+    else if salary <= 8500000 then Yen(Rational.toInt(DOWN, salary.value * 10 / 100) + 1100000)
     else Yen(1950000)
 
 // 給与所得. The result is a TotalIncome — the type example.dependents states its own ceiling against —
@@ -258,7 +258,7 @@ behavior taxableIncomeFrom : (income: TotalIncome, deductions: Yen) -> TaxableIn
     constructs TaxableIncome
 
 let taxableIncomeFrom (income, deductions) =
-    TaxableIncome(Int.max(0, income.value - deductions.value) / 1000 * 1000)
+    TaxableIncome(Rational.toInt(DOWN, Int.max(0, income.value - deductions.value) / 1000) * 1000)
 
 // Why: the progressive rates and the deduction that flattens each band's step
 // (所得税法第89条第1項). Seven arms, and the deduction figures are what make the table a table rather
@@ -267,13 +267,13 @@ behavior incomeTaxOn : (taxable: TaxableIncome) -> Yen
     constructs Yen
 
 let incomeTaxOn (taxable) =
-    if taxable <= 1950000 then Yen(taxable.value * 5 / 100)
-    else if taxable <= 3300000 then Yen(taxable.value * 10 / 100 - 97500)
-    else if taxable <= 6950000 then Yen(taxable.value * 20 / 100 - 427500)
-    else if taxable <= 9000000 then Yen(taxable.value * 23 / 100 - 636000)
-    else if taxable <= 18000000 then Yen(taxable.value * 33 / 100 - 1536000)
-    else if taxable <= 40000000 then Yen(taxable.value * 40 / 100 - 2796000)
-    else Yen(taxable.value * 45 / 100 - 4796000)
+    if taxable <= 1950000 then Yen(Rational.toInt(DOWN, taxable.value * 5 / 100))
+    else if taxable <= 3300000 then Yen(Rational.toInt(DOWN, taxable.value * 10 / 100) - 97500)
+    else if taxable <= 6950000 then Yen(Rational.toInt(DOWN, taxable.value * 20 / 100) - 427500)
+    else if taxable <= 9000000 then Yen(Rational.toInt(DOWN, taxable.value * 23 / 100) - 636000)
+    else if taxable <= 18000000 then Yen(Rational.toInt(DOWN, taxable.value * 33 / 100) - 1536000)
+    else if taxable <= 40000000 then Yen(Rational.toInt(DOWN, taxable.value * 40 / 100) - 2796000)
+    else Yen(Rational.toInt(DOWN, taxable.value * 45 / 100) - 4796000)
 
 // Why: the housing-loan credit comes off the computed tax rather than off income, the reconstruction
 // surtax of 2.1 per cent is then added on the remainder (東日本大震災復興財源確保法第13条), and the
@@ -284,7 +284,7 @@ behavior yearEndTaxFor : (taxable: TaxableIncome, housingLoanCredit: Yen) -> Yen
 
 let yearEndTaxFor (taxable, housingLoanCredit) = {
     let afterCredit = Int.max(0, incomeTaxOn(taxable).value - housingLoanCredit.value)
-    Yen(Decimal.toInt(DOWN, Decimal.fromInt(afterCredit) * 1.021m) / 100 * 100)
+    Yen(Rational.toInt(DOWN, Decimal.toInt(DOWN, Decimal.fromInt(afterCredit) * 1.021m) / 100) * 100)
 }
 
 // === The difference ===

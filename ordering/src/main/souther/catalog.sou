@@ -140,7 +140,7 @@ behavior buildableFrom : (kit: Component, onHand: Map<Sku, Int>) -> Buildable
 let supportedBy (perKit: Map<Sku, Int>, onHand: Map<Sku, Int>, sku: Sku): Int = {
     let need = Map.get(sku, perKit) |> Option.withDefault(1)
     let have = Map.get(sku, onHand) |> Option.withDefault(0)
-    have / need
+    Rational.toInt(DOWN, have / need)
 }
 
 // Two skus can support the same number of kits, and then which one is named is a decision. Leaving

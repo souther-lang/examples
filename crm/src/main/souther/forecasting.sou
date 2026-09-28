@@ -106,7 +106,7 @@ let fiscalYearOf (d: Date, fyStart: Int): Int =
     if Date.month(d) >= fyStart then Date.year(d) else Date.year(d) - 1
 
 let quarterOf (d: Date, fyStart: Int): Int =
-    Int.floorMod(Date.month(d) - fyStart + 12, 12) / 3 + 1
+    Rational.toInt(DOWN, Int.floorMod(Date.month(d) - fyStart + 12, 12) / 3) + 1
 
 let periodLabel (d: Date, fyStart: Int): String =
     "FY" ++ String.padLeft(2, "0", String.fromInt(Int.floorMod(fiscalYearOf(d, fyStart), 100)))
@@ -360,7 +360,8 @@ behavior quotaFor : (owner: UserId, period: FiscalPeriod) -> Quota
 // never return.
 let attainmentOf (forecast: Decimal, quota: Decimal): Attainment =
     Attainment(Int.clamp(0, 999,
-        Decimal.toInt(FLOOR, Decimal.round(0, HALF_UP, forecast * 100.0m)) / Decimal.toInt(FLOOR, quota)))
+        Rational.toInt(DOWN,
+            Decimal.toInt(FLOOR, Decimal.round(0, HALF_UP, forecast * 100.0m)) / Decimal.toInt(FLOOR, quota))))
 
 behavior quotaGap : (forecast: Forecast, quota: Quota, period: FiscalPeriod)
         -> OnTrack | ShortOfQuota | NoForecastForPeriod

@@ -409,8 +409,9 @@ let payableMonths (w: ThreeMonthWindow): List<MonthlyPayRecord> =
     List.filter(r -> r.paidBaseDays >= 17, monthsOf(w))
 
 let averageRemuneration (records: List<MonthlyPayRecord>): Yen =
-    Yen(List.sum(List.map(r -> totalRemuneration(r.remuneration).value, records))
-        / List.length(records))
+    Yen(Rational.toInt(DOWN,
+        List.sum(List.map(r -> totalRemuneration(r.remuneration).value, records))
+        / List.length(records)))
 
 // === The regular determination (算定基礎届) ===
 

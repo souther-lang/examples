@@ -104,7 +104,8 @@ behavior hourlyRateFor : (remuneration: MonthlyRemuneration, monthlyScheduledHou
 
 let hourlyRateFor (remuneration, monthlyScheduledHours) = {
     guard monthlyScheduledHours >= 1.0m else NoScheduledHours
-    HourlyRate(Decimal.fromInt(scheduledWage(remuneration).value) / monthlyScheduledHours.value)
+    HourlyRate(Rational.toDecimal(10, HALF_UP,
+        Decimal.fromInt(scheduledWage(remuneration).value) / monthlyScheduledHours.value))
 }
 
 // Why: overtime is 1.25 of the rate and not 0.25, because those hours are beyond the scheduled ones and

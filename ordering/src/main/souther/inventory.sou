@@ -257,7 +257,7 @@ behavior toCases : (eaches: Eaches, pack: PackSize) -> Shippable | PartialCase
 let toCases (eaches, pack) = {
     let leftover = Int.floorMod(eaches.value, pack.value)
     guard leftover == 0 else PartialCase { leftover = Eaches(leftover) }
-    Shippable { cases = Cases(eaches.value / pack.value) }
+    Shippable { cases = Cases(Rational.toInt(DOWN, eaches.value / pack.value)) }
 }
 
 example toEaches
