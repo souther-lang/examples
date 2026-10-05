@@ -18,7 +18,7 @@ plugins {
 souther {
     // A -SNAPSHOT is published nowhere, so it resolves from the local repository that `mvn install`
     // of the compiler put it in — settings.gradle.kts declares mavenLocal() for that.
-    southerVersion = "0.3.0"
+    southerVersion = "0.3.1-SNAPSHOT"
 }
 
 val raohVersion = "0.7.0"
