@@ -21,7 +21,7 @@ souther {
     southerVersion = "0.3.1-SNAPSHOT"
 }
 
-val raohVersion = "0.7.0"
+val raohVersion = "0.9.0"
 
 java {
     // Built with the JDK the rest of the examples are built with, but everything this build emits
