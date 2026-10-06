@@ -373,3 +373,26 @@ example groupByAssignee
         (Board { issues =
             [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ], assignee = None } ] })
         -> Workload { byAssignee = [] }
+
+// === rows for the assigned side of the optional assignee ===
+// Every row above leaves the assignee out, so what the same rules do for an issue somebody holds was
+// never asked. The ids here are one character, the shortest IssueId admits.
+example sharedLabels
+    | "assigned issues share labels the same way" :
+        (crashOnSave,
+         Issue { id = IssueId("x"), title = "x", labels = [ Label("bug") ], assignee = Assignee("x") })
+        -> LabelSet { labels = [ Label("bug") ] }
+
+example topLabels
+    | "an assigned issue's labels are ranked too" :
+        (Board { issues =
+            [ Issue { id = IssueId("x"), title = "x", labels = [ Label("bug") ],
+                assignee = Assignee("x") } ] }, 1)
+        -> LabelRanking { labels = [ "bug" ] }
+
+example busyLabels
+    | "an assigned issue's labels are counted too" :
+        (Board { issues =
+            [ Issue { id = IssueId("x"), title = "x", labels = [ Label("bug") ],
+                assignee = Assignee("x") } ] }, 1)
+        -> LabelUsage { counts = [ ("bug", 1) ] }

@@ -112,6 +112,11 @@ let buyMilk = Todo { id = TodoId(1), title = Title("Buy milk"), completed = fals
 let walkDog = Todo { id = TodoId(2), title = Title("Walk the dog"), completed = true, order = Position(1) }
 let payRent = Todo { id = TodoId(3), title = Title("Pay rent"), completed = false, order = Position(2) }
 
+// The two ends a title may have: one character and 255. A title only reaches a row through a todo,
+// so the rules that take a list of todos are where these are written.
+let shortest = Todo { id = TodoId(4), title = Title("x"), completed = false, order = Position(3) }
+let longest = Todo { id = TodoId(5), title = Title("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"), completed = true, order = Position(4) }
+
 example visibleTodos
     | "All shows everything, done or not" :
         ([buyMilk, walkDog, payRent], All) -> [buyMilk, walkDog, payRent]
@@ -125,3 +130,9 @@ example remainingCount
         ([buyMilk, walkDog, payRent]) -> 2
     | "an empty list has nothing left" :
         ([]) -> 0
+
+example visibleTodos
+    | "a one-character title and a 255-character title are both shown by All" :
+        ([shortest, longest], All) -> [shortest, longest]
+    | "the longest title is done, so Active hides it and keeps the shortest" :
+        ([shortest, longest], Active) -> [shortest]
