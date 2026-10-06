@@ -64,6 +64,8 @@ fake currentBalance
 
 fake updateBalance
     | (AccountNo("acc-1"), Balance(700)) -> Withdrawn { account = AccountNo("acc-1"), newBalance = Balance(700) }
+    | (AccountNo("x"), Balance(0)) -> Withdrawn { account = AccountNo("x"), newBalance = Balance(0) }
+    | (AccountNo("x"), Balance(1)) -> Withdrawn { account = AccountNo("x"), newBalance = Balance(1) }
     | _ -> Withdrawn { account = AccountNo("acc-1"), newBalance = Balance(0) }
 
 example withdraw
@@ -76,3 +78,23 @@ example withdraw
     | "no account means NoAccount" :
         (WithdrawRequest { account = AccountNo("acc-empty"), amount = Amount(100) })
             -> NoAccount
+    | "withdrawing nothing from an empty one-character account leaves it at zero" :
+        (WithdrawRequest { account = AccountNo("x"), amount = Amount(0) })
+            -> Withdrawn { account = AccountNo("x"), newBalance = Balance(0) }
+
+// The write is injected, so these rows pin what the fake above answers; they are here because a
+// balance of zero and a balance above it are the two ends the invariant on Balance draws.
+example updateBalance
+    | "a balance of zero is stored as zero" :
+        (AccountNo("x"), Balance(0))
+            -> Withdrawn { account = AccountNo("x"), newBalance = Balance(0) }
+    | "a balance above zero is stored as it is" :
+        (AccountNo("x"), Balance(1))
+            -> Withdrawn { account = AccountNo("x"), newBalance = Balance(1) }
+
+// The read is injected too. Its two answers are the two arms `withdraw` matches on.
+example currentBalance
+    | "an account with money answers its balance" :
+        (AccountNo("acc-1")) -> Balance(1000)
+    | "an account that does not exist answers NoAccount" :
+        (AccountNo("acc-empty")) -> NoAccount
