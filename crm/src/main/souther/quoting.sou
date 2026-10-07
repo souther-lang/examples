@@ -333,6 +333,26 @@ example buildQuote
     | "a validity of ninety-one is past it" :
         (QuoteNumber("0Q0000000000001"), acmeChampioned, [ platformLine ], Date("2026-08-10"), 91)
         -> ValidityOutOfRange
+    | "a negative quantity is no line to quote either" :
+        (QuoteNumber("0Q0000000000001"), acmeChampioned,
+         [ LineRequest { ...platformLine, quantity = -1 } ], Date("2026-08-10"), 30)
+        -> NoLines
+    | "the smallest quote there is: one unit, no discount, good for a day, and a one-character name" :
+        (QuoteNumber("0Q0000000000001"), acmeChampioned,
+         [ LineRequest { ...supportLine, name = ProductName("x") } ], Date("2026-08-10"), 1)
+        -> Quote { number = QuoteNumber("0Q0000000000001")
+                 , opportunityId = OpportunityId("006000000000001")
+                 , accountId = AccountId("001000000000100")
+                 , lines = QuoteLines(
+                       [ QuoteLine { product = ProductCode("SW-2002"), name = ProductName("x")
+                                   , quantity = Quantity(1), listPrice = UnitPrice(100.00m)
+                                   , discount = DiscountRate(0.0m), net = Amount(100.00m) } ])
+                 , subtotal = Amount(100.00m)
+                 , total = Amount(100.00m)
+                 , issuedOn = Date("2026-08-10")
+                 , expiresOn = Date("2026-08-11")
+                 , approval = NotSubmitted
+                 }
 
 // === approvalNeeded: the authority matrix ===
 // Ten per cent is a rep's own call; past that somebody signs. The bands are the ones an enterprise sales org
@@ -341,8 +361,12 @@ example buildQuote
 //
 // The matrix is a helper because two behaviors read it, and it answers the list rather than the outcome:
 // what `approvalNeeded` says is whether approval is needed, and what submitting needs is the role.
+//
+// The worst discount is a fold from nought, not a maximum of the list: a quote's lines are never empty, so a
+// maximum would carry a case for "no lines" that no quote can reach.
 let worstDiscountOf (QuoteLines(lines)): DiscountRate =
-    Option.withDefault(DiscountRate(0.0m), List.max(List.map(l -> l.discount, lines)))
+    List.fold((worst, l) -> if Decimal.compare(l.discount.value, worst.value) > 0 then l.discount else worst,
+              DiscountRate(0.0m), lines)
 
 let roleFor (quote: Quote): List<ApproverRole> = {
     let worst = worstDiscountOf(quote.lines)
@@ -395,6 +419,50 @@ let rejectedQuote = Quote { ...vpQuote
                                                      , note = RejectionNote("margin too thin") }
                           }
 
+// The other two bands, and the state a quote inside the rep's authority is in once it has been submitted.
+let managerQuote = quoteAt(DiscountRate(0.15m), Amount(8500.00m))
+let cfoQuote     = quoteAt(DiscountRate(0.40m), Amount(6000.00m))
+
+let autoApprovedQuote = Quote { ...repQuote, approval = AutoApproved }
+
+// A quote waiting on somebody, at each of the three bands. `waitingOnManager`, below, is the VP's.
+let pendingManagerQuote = Quote { ...managerQuote
+                                , approval = PendingApproval { submittedOn = Date("2026-08-11")
+                                                             , role = SalesManager
+                                                             , awaiting = UserId("u-manager")
+                                                             , remaining = [ ] } }
+
+let pendingCfoQuote = Quote { ...cfoQuote
+                            , approval = PendingApproval { submittedOn = Date("2026-08-11")
+                                                         , role = Cfo
+                                                         , awaiting = UserId("u-manager")
+                                                         , remaining = [ UserId("u-vp"), UserId("u-cfo") ] } }
+
+// Two lines at different discounts, in both orders: the worst of them is the thirty per cent whichever
+// comes first. The nets are what the line rule makes of them: ten at a thousand less thirty per cent, and
+// one at a hundred less ten per cent.
+let platformAtThirty = QuoteLine { product = ProductCode("SW-1001"), name = ProductName("Platform licence")
+                                 , quantity = Quantity(10), listPrice = UnitPrice(1000.00m)
+                                 , discount = DiscountRate(0.30m), net = Amount(7000.00m) }
+let supportAtTen     = QuoteLine { product = ProductCode("SW-2002"), name = ProductName("Support plan")
+                                 , quantity = Quantity(1), listPrice = UnitPrice(100.00m)
+                                 , discount = DiscountRate(0.10m), net = Amount(90.00m) }
+
+let mixedQuote = Quote { ...repQuote
+                       , lines = QuoteLines([ platformAtThirty, supportAtTen ])
+                       , subtotal = Amount(10100.00m)
+                       , total = Amount(7090.00m) }
+
+let mixedQuoteReversed = Quote { ...mixedQuote, lines = QuoteLines([ supportAtTen, platformAtThirty ]) }
+
+// The quote on both of its limits at once: good for a single day, and no discount, so what it totals is
+// what it lists. Both sides of the quote's own invariant are met exactly.
+let listPriceQuote = quoteAt(DiscountRate(0.0m), Amount(10000.00m))
+
+let dayPassQuote = Quote { ...listPriceQuote
+                         , expiresOn = Date("2026-08-11")
+                         , approval = AutoApproved }
+
 // Seven rows: one per band, and both sides of all three boundaries — 10/11, 20/21 and 35/36 hundredths
 // each get a row on each side. A matrix nobody has checked at its edges is a matrix that lets a rep sign
 // off their own thirty per cent, and an edge checked on one side only is a matrix whose bands can drift
@@ -421,6 +489,35 @@ example approvalNeeded
     | "deep discounts stay the CFO's however far they go" :
         (quoteAt(DiscountRate(0.40m), Amount(6000.00m)))
         -> NeedsApproval { role = Cfo, worstDiscount = DiscountRate(0.40m) }
+    | "no discount at all is a rep's own call" :
+        (quoteAt(DiscountRate(0.0m), Amount(10000.00m)))
+        -> WithinAuthority
+    | "the matrix reads the worst line, whichever line it is" :
+        (mixedQuote)
+        -> NeedsApproval { role = RegionalVp, worstDiscount = DiscountRate(0.30m) }
+    | "and reads it the same with the lines the other way round" :
+        (mixedQuoteReversed)
+        -> NeedsApproval { role = RegionalVp, worstDiscount = DiscountRate(0.30m) }
+    // The matrix reads the discount and nothing about where the quote is in its approval, so every state
+    // gets the answer its discount does.
+    | "a quote already approved automatically is still a rep's own call" :
+        (autoApprovedQuote)
+        -> WithinAuthority
+    | "a quote waiting on a manager still needs a manager" :
+        (pendingManagerQuote)
+        -> NeedsApproval { role = SalesManager, worstDiscount = DiscountRate(0.15m) }
+    | "a quote waiting on the VP still needs the VP" :
+        (waitingOnManager)
+        -> NeedsApproval { role = RegionalVp, worstDiscount = DiscountRate(0.21m) }
+    | "a quote waiting on the CFO's chain still needs the CFO" :
+        (pendingCfoQuote)
+        -> NeedsApproval { role = Cfo, worstDiscount = DiscountRate(0.40m) }
+    | "an approved quote needed the VP" :
+        (approvedQuote)
+        -> NeedsApproval { role = RegionalVp, worstDiscount = DiscountRate(0.21m) }
+    | "a rejected quote needed the VP too" :
+        (rejectedQuote)
+        -> NeedsApproval { role = RegionalVp, worstDiscount = DiscountRate(0.21m) }
 
 // === approvalChainFor: who has to sign, in order ===
 // The discount says how far up the quote has to go; the org chart says who is up there. Neither knows the
@@ -517,6 +614,12 @@ example approvalChainFor
     | "somebody who left the org chart cannot have a chain built for them" :
         (acmeOrg, UserId("u-ghost"), SalesManager)
         -> SubmitterNotInHierarchy { submitter = UserId("u-ghost") }
+    | "the chief financial officer has nobody above to sign anything" :
+        (acmeOrg, UserId("u-cfo"), SalesManager)
+        -> NoAuthorityAbove { submitter = UserId("u-cfo"), needed = 1, available = 0 }
+    | "the vice president has one person above, and a vice-president-level discount needs two" :
+        (acmeOrg, UserId("u-vp"), RegionalVp)
+        -> NoAuthorityAbove { submitter = UserId("u-vp"), needed = 2, available = 1 }
 
 let vpChain = ApprovalChain { role = RegionalVp,
                               approvers = [ UserId("u-manager"), UserId("u-vp") ] }
@@ -524,7 +627,40 @@ let vpChain = ApprovalChain { role = RegionalVp,
 example submitForApproval
     | "a quote past the rep's authority goes to the first person on the chain, and keeps the rest" :
         (vpQuote, Date("2026-08-12"), vpChain)
-        -> Quote
+        -> Quote { ...vpQuote
+                 , approval = PendingApproval { submittedOn = Date("2026-08-12"), role = RegionalVp
+                                              , awaiting = UserId("u-manager")
+                                              , remaining = [ UserId("u-vp") ] } }
+    | "a manager-level quote goes to the one manager, and has nobody after" :
+        (managerQuote, Date("2026-08-12"), ApprovalChain { role = SalesManager, approvers = [ UserId("u-manager") ] })
+        -> Quote { ...managerQuote
+                 , approval = PendingApproval { submittedOn = Date("2026-08-12"), role = SalesManager
+                                              , awaiting = UserId("u-manager"), remaining = [ ] } }
+    | "a CFO-level quote goes to the manager first, and keeps the other two" :
+        (cfoQuote, Date("2026-08-12"),
+         ApprovalChain { role = Cfo, approvers = [ UserId("u-manager"), UserId("u-vp"), UserId("u-cfo") ] })
+        -> Quote { ...cfoQuote
+                 , approval = PendingApproval { submittedOn = Date("2026-08-12"), role = Cfo
+                                              , awaiting = UserId("u-manager")
+                                              , remaining = [ UserId("u-vp"), UserId("u-cfo") ] } }
+    | "a quote inside the rep's authority is approved automatically when it is submitted" :
+        (repQuote, Date("2026-08-12"), vpChain)
+        -> Quote { ...repQuote, approval = AutoApproved }
+    | "a quote that needs somebody, handed a chain with nobody on it, is approved automatically" :
+        (vpQuote, Date("2026-08-12"), ApprovalChain { role = RegionalVp, approvers = [ ] })
+        -> Quote { ...vpQuote, approval = AutoApproved }
+    | "an approved quote is not submitted again" :
+        (approvedQuote, Date("2026-08-13"), vpChain)
+        -> AlreadySubmitted
+    | "a rejected quote is not submitted again either" :
+        (rejectedQuote, Date("2026-08-13"), vpChain)
+        -> AlreadySubmitted
+    | "a quote waiting on a manager is not submitted twice" :
+        (pendingManagerQuote, Date("2026-08-13"), vpChain)
+        -> AlreadySubmitted
+    | "a quote waiting on the CFO's chain is not submitted twice" :
+        (pendingCfoQuote, Date("2026-08-13"), vpChain)
+        -> AlreadySubmitted
     | "a quote already waiting on somebody is not submitted twice" :
         (Quote { ...vpQuote
                , approval = PendingApproval { submittedOn = Date("2026-08-11"), role = RegionalVp
@@ -619,6 +755,44 @@ example decideApproval
     | "a rejection still needs a reason" :
         (waitingOnManager, UserId("u-manager"), Date("2026-08-12"), Reject, "   ")
         -> RejectionNoteMissing
+    | "the only manager on the chain signing is the whole approval" :
+        (pendingManagerQuote, UserId("u-manager"), Date("2026-08-12"), Approve, "")
+        -> Quote { ...managerQuote
+                 , approval = ApprovedQuote { approvedOn = Date("2026-08-12"), approver = UserId("u-manager") } }
+    | "a CFO-level chain moves on one signature at a time, keeping the rest" :
+        (pendingCfoQuote, UserId("u-manager"), Date("2026-08-12"), Approve, "")
+        -> Quote { ...cfoQuote
+                 , approval = PendingApproval { submittedOn = Date("2026-08-11"), role = Cfo
+                                              , awaiting = UserId("u-vp"), remaining = [ UserId("u-cfo") ] } }
+    | "a reason of one character is a reason" :
+        (pendingManagerQuote, UserId("u-manager"), Date("2026-08-12"), Reject, "x")
+        -> Quote { ...managerQuote
+                 , approval = RejectedQuote { rejectedOn = Date("2026-08-12"), approver = UserId("u-manager")
+                                            , note = RejectionNote("x") } }
+    | "a quote nobody has submitted has nothing pending to be approved" :
+        (vpQuote, UserId("u-vp"), Date("2026-08-12"), Approve, "")
+        -> NotPending
+    | "a quote nobody has submitted has nothing pending to be rejected" :
+        (vpQuote, UserId("u-vp"), Date("2026-08-12"), Reject, "margin too thin")
+        -> NotPending
+    | "a quote approved automatically has nothing pending to be approved" :
+        (autoApprovedQuote, UserId("u-vp"), Date("2026-08-12"), Approve, "")
+        -> NotPending
+    | "a quote approved automatically has nothing pending to be rejected" :
+        (autoApprovedQuote, UserId("u-vp"), Date("2026-08-12"), Reject, "margin too thin")
+        -> NotPending
+    | "an approved quote has nothing pending to be approved" :
+        (approvedQuote, UserId("u-vp"), Date("2026-08-12"), Approve, "")
+        -> NotPending
+    | "an approved quote has nothing pending to be rejected" :
+        (approvedQuote, UserId("u-vp"), Date("2026-08-12"), Reject, "margin too thin")
+        -> NotPending
+    | "a rejected quote has nothing pending to be approved" :
+        (rejectedQuote, UserId("u-vp"), Date("2026-08-12"), Approve, "")
+        -> NotPending
+    | "a rejected quote has nothing pending to be rejected" :
+        (rejectedQuote, UserId("u-vp"), Date("2026-08-12"), Reject, "margin too thin")
+        -> NotPending
 
 // === acceptQuote ===
 // Only an approved, unexpired quote is accepted, and both halves are one expression. The outer match reaches
@@ -660,6 +834,26 @@ example acceptQuote
     | "a quote nobody has signed off is not accepted either" :
         (vpQuote, Date("2026-09-01"))
         -> ApprovalMissing
+    | "two days after the window the answer says two days late" :
+        (approvedQuote, Date("2026-09-11"))
+        -> QuoteExpired { expiredOn = Date("2026-09-09"), daysLate = 2 }
+    | "a quote approved automatically is accepted like any other" :
+        (autoApprovedQuote, Date("2026-09-01"))
+        -> AcceptedQuote { number = QuoteNumber("0Q0000000000001"), acceptedOn = Date("2026-09-01")
+                         , total = Amount(9000.00m) }
+    | "a quote still waiting on a manager is not accepted" :
+        (pendingManagerQuote, Date("2026-09-01"))
+        -> ApprovalMissing
+    | "a quote still waiting on the VP is not accepted" :
+        (waitingOnManager, Date("2026-09-01"))
+        -> ApprovalMissing
+    | "a quote still waiting on the CFO's chain is not accepted" :
+        (pendingCfoQuote, Date("2026-09-01"))
+        -> ApprovalMissing
+    | "a quote good for one day, with no discount, is accepted on that day" :
+        (dayPassQuote, Date("2026-08-11"))
+        -> AcceptedQuote { number = QuoteNumber("0Q0000000000001"), acceptedOn = Date("2026-08-11")
+                         , total = Amount(10000.00m) }
 
 // === renewQuote ===
 // An expired quote is re-issued, not edited, and re-issuing resets the approval: the discount is being stated
@@ -678,6 +872,49 @@ let renewQuote (quote, on, validity) = {
           , approval = NotSubmitted
           }
 }
+
+example renewQuote
+    | "the day after it expired a quote is re-issued, and its approval starts again" :
+        (approvedQuote, Date("2026-09-10"), 30)
+        -> Quote { ...vpQuote, issuedOn = Date("2026-09-10"), expiresOn = Date("2026-10-10")
+                 , approval = NotSubmitted }
+    | "on the last day of its window a quote is still valid" :
+        (approvedQuote, Date("2026-09-09"), 30)
+        -> StillValid
+    | "a quote well inside its window is not renewed either" :
+        (approvedQuote, Date("2026-09-01"), 30)
+        -> StillValid
+    | "a renewal is held to the same validity window as a quote" :
+        (approvedQuote, Date("2026-09-10"), 91)
+        -> ValidityOutOfRange
+    | "a renewal good for nought days is no renewal" :
+        (approvedQuote, Date("2026-09-10"), 0)
+        -> ValidityOutOfRange
+    // Whatever state the approval was in, an expired quote comes back unsubmitted: the discount is being
+    // stated again, so the authority to state it has to be given again.
+    | "a quote nobody had submitted is renewed some days late, for six weeks" :
+        (vpQuote, Date("2026-09-12"), 45)
+        -> Quote { ...vpQuote, issuedOn = Date("2026-09-12"), expiresOn = Date("2026-10-27") }
+    | "a quote approved automatically loses that when it is renewed" :
+        (autoApprovedQuote, Date("2026-09-20"), 14)
+        -> Quote { ...repQuote, issuedOn = Date("2026-09-20"), expiresOn = Date("2026-10-04")
+                 , approval = NotSubmitted }
+    | "a quote that was waiting on a manager is no longer waiting" :
+        (pendingManagerQuote, Date("2026-09-15"), 7)
+        -> Quote { ...managerQuote, issuedOn = Date("2026-09-15"), expiresOn = Date("2026-09-22")
+                 , approval = NotSubmitted }
+    | "a quote that was waiting on the VP is no longer waiting" :
+        (waitingOnManager, Date("2026-10-01"), 60)
+        -> Quote { ...vpQuote, issuedOn = Date("2026-10-01"), expiresOn = Date("2026-11-30")
+                 , approval = NotSubmitted }
+    | "a quote that was waiting on the CFO's chain is no longer waiting" :
+        (pendingCfoQuote, Date("2026-09-30"), 90)
+        -> Quote { ...cfoQuote, issuedOn = Date("2026-09-30"), expiresOn = Date("2026-12-29")
+                 , approval = NotSubmitted }
+    | "a rejected quote is renewed for a single day and has to be signed for again" :
+        (rejectedQuote, Date("2026-09-11"), 1)
+        -> Quote { ...vpQuote, issuedOn = Date("2026-09-11"), expiresOn = Date("2026-09-12")
+                 , approval = NotSubmitted }
 
 // === discountExposureOf ===
 // What finance asks for at quarter end: how much revenue is sitting behind each approver's signature. The
@@ -709,3 +946,20 @@ let discountExposureOf (quotes) =
         , worst = Option.withDefault(DiscountRate(0.0m),
                                      List.max(List.map(q -> worstDiscountOf(q.lines), quotes)))
         }
+
+example discountExposureOf
+    | "revenue is counted behind the role each pending quote is waiting on, and only those" :
+        ([ waitingOnManager, pendingManagerQuote, Quote { ...waitingOnManager, total = Amount(7000.00m) }
+         , pendingCfoQuote, approvedQuote, rejectedQuote, autoApprovedQuote, vpQuote ])
+        -> DiscountExposure
+            { byRole = Map.fromList([ (SalesManager, Amount(8500.00m))
+                                    , (RegionalVp, Amount(14900.00m))
+                                    , (Cfo, Amount(6000.00m)) ])
+            , worst = DiscountRate(0.40m)
+            }
+    | "a quote nobody has submitted has nobody holding its revenue" :
+        ([ mixedQuote ])
+        -> DiscountExposure { byRole = Map.empty, worst = DiscountRate(0.30m) }
+    | "nothing is exposed behind nobody, and the worst discount of no quotes is none" :
+        ([ ])
+        -> DiscountExposure { byRole = Map.empty, worst = DiscountRate(0.0m) }
