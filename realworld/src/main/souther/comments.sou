@@ -61,6 +61,22 @@ let deleteComment (comment, deleter, removeComment) = {
 
 let jake = Profile { username = Username("jake"), bio = None, image = None }
 
+// A comment whose author has said everything a profile can. Its id is 2 because 1 is the lowest id
+// there is, and its body is the shortest one the invariant admits.
+let jakeInFull = Profile
+    { username = Username("jake")
+    , bio = blog.identity.Bio("Trains dragons")
+    , image = blog.identity.ImageUrl("https://example.com/jake.png")
+    }
+
+let aSecondThought = Comment
+    { id = CommentId(2)
+    , body = CommentBody("x")
+    , author = jakeInFull
+    , createdAt = DateTime("2026-08-06T03:22:56")
+    , updatedAt = DateTime("2026-08-06T03:22:56")
+    }
+
 let hisNameWasMyNameToo = Comment
     { id = CommentId(1)
     , body = CommentBody("His name was my name too.")
@@ -77,3 +93,5 @@ example deleteComment
         (hisNameWasMyNameToo, Username("jake")) -> Removed
     | "somebody who did not write it may not" :
         (hisNameWasMyNameToo, Username("gerome")) -> NotTheAuthor
+    | "an author with a bio and an image may delete a one-character comment" :
+        (aSecondThought, Username("jake")) -> Removed

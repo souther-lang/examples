@@ -307,13 +307,93 @@ example slugExists
     | "a slug an article already carries is taken" :
         (Slug("taken")) -> true
 
+// A person with everything a profile can say, so a row that carries one shows the bio and the image
+// arriving in the answer rather than being dropped on the way.
+let jakeInFull = Profile
+    { username = Username("jake")
+    , bio = blog.identity.Bio("Trains dragons")
+    , image = blog.identity.ImageUrl("https://example.com/jake.png")
+    }
+
+let profiled = Article { ...dragons, author = jakeInFull }
+
+let later = DateTime("2026-08-06T04:00:00")
+
+// The shortest title and tag the invariants admit, and the longest. The slug is made from the title
+// alone, so a one-letter title is a one-letter slug and a 255-letter one is a 255-letter slug.
+let shortest = Article
+    { slug = Slug("d")
+    , title = Title("D")
+    , description = Description("d")
+    , tagList = [ Tag("t") ]
+    , author = jakeInFull
+    , createdAt = DateTime("2026-08-06T05:00:00")
+    , updatedAt = DateTime("2026-08-06T05:00:00")
+    , body = Body("b")
+    }
+
+let longest = Article
+    { slug = Slug(String.repeat(255, "a"))
+    , title = Title(String.repeat(255, "A"))
+    , description = Description("d")
+    , tagList = [ Tag(String.repeat(60, "t")) ]
+    , author = jake
+    , createdAt = DateTime("2026-08-06T05:00:00")
+    , updatedAt = DateTime("2026-08-06T05:00:00")
+    , body = Body("b")
+    }
+
+// What each way of sending some of the three editable fields leaves behind. A field that was sent
+// replaces the stored one, and a field that was not sent stays as it was.
+let byBody = Article { ...profiled, body = Body("It takes a Jacobian and patience"), updatedAt = later }
+
+let byDescription = Article
+    { ...profiled, description = Description("A Jacobian, mostly"), updatedAt = later }
+
+let byDescriptionAndBody = Article
+    { ...profiled
+    , description = Description("A Jacobian, mostly")
+    , body = Body("It takes a Jacobian and patience")
+    , updatedAt = later
+    }
+
+let byTitleAndBody = Article
+    { ...profiled
+    , title = Title("How to train your dragon, again")
+    , body = Body("It takes a Jacobian and patience")
+    , updatedAt = later
+    }
+
+let byTitleAndDescription = Article
+    { ...profiled
+    , title = Title("How to train your dragon, again")
+    , description = Description("A Jacobian, mostly")
+    , updatedAt = later
+    }
+
+let byAllThree = Article
+    { ...profiled
+    , title = Title("How to train your dragon, again")
+    , description = Description("A Jacobian, mostly")
+    , body = Body("It takes a Jacobian and patience")
+    , updatedAt = later
+    }
+
 // A write answers what it stored, so the table is the identity over the articles these rows build.
 fake storeArticle
-    | (dragons)    -> dragons
-    | (everWonder) -> everWonder
-    | (retitled)   -> retitled
-    | (retimed)    -> retimed
-    | _            -> dragons
+    | (dragons)               -> dragons
+    | (everWonder)            -> everWonder
+    | (retitled)              -> retitled
+    | (retimed)               -> retimed
+    | (shortest)              -> shortest
+    | (longest)               -> longest
+    | (byBody)                -> byBody
+    | (byDescription)         -> byDescription
+    | (byDescriptionAndBody)  -> byDescriptionAndBody
+    | (byTitleAndBody)        -> byTitleAndBody
+    | (byTitleAndDescription) -> byTitleAndDescription
+    | (byAllThree)            -> byAllThree
+    | _                       -> dragons
 
 example createArticle
     | "a title becomes a hyphenated slug" :
@@ -340,6 +420,30 @@ example createArticle
                       , author = jake
                       , at = DateTime("2026-08-06T03:22:56") })
         -> TitleHasNoSlug
+    | "a slug an article already carries is taken, and nothing is written" :
+        (ArticleDraft { title = Title("Taken")
+                      , description = Description("d")
+                      , body = Body("b")
+                      , tagList = []
+                      , author = jake
+                      , at = DateTime("2026-08-06T03:22:56") })
+        -> SlugTaken
+    | "the shortest title and tag are kept, and the author's bio and image come along" :
+        (ArticleDraft { title = Title("D")
+                      , description = Description("d")
+                      , body = Body("b")
+                      , tagList = [ Tag("t") ]
+                      , author = jakeInFull
+                      , at = DateTime("2026-08-06T05:00:00") })
+        -> shortest
+    | "the longest title and tag are kept, and the slug is as long as the title" :
+        (ArticleDraft { title = Title(String.repeat(255, "A"))
+                      , description = Description("d")
+                      , body = Body("b")
+                      , tagList = [ Tag(String.repeat(60, "t")) ]
+                      , author = jake
+                      , at = DateTime("2026-08-06T05:00:00") })
+        -> longest
 
 example updateArticle
     | "the author may change the title, and the slug does not move" :
@@ -357,6 +461,39 @@ example updateArticle
                                                     , description = None, body = None
                                                     , at = DateTime("2026-08-06T04:00:00") })
         -> NotTheAuthor
+    | "a body sent alone replaces the body and nothing else" :
+        (profiled, Username("jake"), ArticleChange { title = None, description = None
+                                                   , body = Body("It takes a Jacobian and patience")
+                                                   , at = later })
+        -> byBody
+    | "a description sent alone replaces the description and nothing else" :
+        (profiled, Username("jake"), ArticleChange { title = None
+                                                   , description = Description("A Jacobian, mostly")
+                                                   , body = None, at = later })
+        -> byDescription
+    | "a description and a body sent together replace both, and the title stays" :
+        (profiled, Username("jake"), ArticleChange { title = None
+                                                   , description = Description("A Jacobian, mostly")
+                                                   , body = Body("It takes a Jacobian and patience")
+                                                   , at = later })
+        -> byDescriptionAndBody
+    | "a title and a body sent together replace both, and the description stays" :
+        (profiled, Username("jake"), ArticleChange { title = Title("How to train your dragon, again")
+                                                   , description = None
+                                                   , body = Body("It takes a Jacobian and patience")
+                                                   , at = later })
+        -> byTitleAndBody
+    | "a title and a description sent together replace both, and the body stays" :
+        (profiled, Username("jake"), ArticleChange { title = Title("How to train your dragon, again")
+                                                   , description = Description("A Jacobian, mostly")
+                                                   , body = None, at = later })
+        -> byTitleAndDescription
+    | "all three sent replace all three, and the slug still does not move" :
+        (profiled, Username("jake"), ArticleChange { title = Title("How to train your dragon, again")
+                                                   , description = Description("A Jacobian, mostly")
+                                                   , body = Body("It takes a Jacobian and patience")
+                                                   , at = later })
+        -> byAllThree
 
 fake removeArticle
     | _ -> Removed
@@ -366,6 +503,8 @@ example deleteArticle
         (dragons, Username("jake")) -> Removed
     | "somebody who is not the author may not" :
         (dragons, Username("gerome")) -> NotTheAuthor
+    | "an author with a bio and an image may delete it" :
+        (profiled, Username("jake")) -> Removed
 
 
 // === asking for a page: the rows a bound implementation is held to ===
@@ -452,3 +591,13 @@ example readArticles
     | "a feed of nobody is empty, not everything" :
         (FeedQuery { limit = Limit(20), offset = Offset(0), followees = Set.empty })
         -> ArticlePage { articles = [], total = 0 }
+    | "a tag and a favoriter together keep what carries the tag and was favorited" :
+        (GlobalQuery { ...firstPage, tag = Tag("dragons"), favoritedBy = Username("gerome") })
+        -> ArticlePage { articles = [trainYourDragon], total = 1 }
+    | "an author and a favoriter together keep what the author wrote and was favorited" :
+        (GlobalQuery { ...firstPage, author = Username("jake"), favoritedBy = Username("gerome") })
+        -> ArticlePage { articles = [trainYourDragon], total = 1 }
+    | "the largest page the limit admits lists everything there is" :
+        (GlobalQuery { ...firstPage, limit = Limit(100) })
+        -> ArticlePage { articles = [dragonsAreReal, trainYourDragon, onFunctionalProgramming]
+                       , total = 3 }

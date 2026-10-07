@@ -170,8 +170,18 @@ let updateUser (current, wanted, findUserByEmail, findUserByName, storeUserUpdat
 // is nothing left for a composed behavior to decide and the boundary calls this write directly.
 behavior storePassword : (username: Username, hash: PasswordHash) -> PasswordHash
 
+let jakeInFull = User
+    { ...jake, bio = Bio("Trains dragons"), image = ImageUrl("https://example.com/jake.png") }
+let jakeAtANewAddress = User { ...jake, email = Email("jake@new.example") }
+let jacob = User { ...jake, username = Username("jacob") }
+
+// What is stored is the user that was asked for, so the table answers each of the users these rows
+// ask for with itself, and everything else with jake.
 fake storeUserUpdate
-    | _ -> jake
+    | (Username("jake"), jakeInFull)        -> jakeInFull
+    | (Username("jake"), jakeAtANewAddress) -> jakeAtANewAddress
+    | (Username("jake"), jacob)             -> jacob
+    | _                                     -> jake
 
 example updateUser
     | "a user who moved neither name is written back with no lookup at all" :
@@ -184,6 +194,14 @@ example updateUser
         (jake, User { username = Username("taken"), bio = None, image = None
                     , email = Email("jake@jake.jake") })
         -> UsernameTaken
+    | "a bio and an image may be added, and the user asked for is what is stored" :
+        (jake, jakeInFull) -> jakeInFull
+    | "a bio and an image may be dropped, and the user asked for is what is stored" :
+        (jakeInFull, jake) -> jake
+    | "moving to an address nobody holds is stored" :
+        (jake, jakeAtANewAddress) -> jakeAtANewAddress
+    | "moving to a username nobody holds is stored" :
+        (jake, jacob) -> jacob
 
 // === logging in ===
 // What a login reads is one row: the user and the hash to check the password against. They are read
@@ -259,3 +277,7 @@ example follow
     | "following yourself is refused, and nothing is written" :
         (Username("jake"), Username("jake"))
         -> CannotFollowSelf
+    | "the shortest name cannot follow itself either" :
+        (Username("a"), Username("a")) -> CannotFollowSelf
+    | "nor can the longest" :
+        (Username(String.repeat(40, "a")), Username(String.repeat(40, "a"))) -> CannotFollowSelf
