@@ -36,12 +36,15 @@
 //   - A rollup keyed by a sum. ForecastCategory's five cases are all unit data, so the category itself keys
 //     the map and the five names are written once, where they are declared.
 module example.forecasting
-import example.crm ( Amount, UserId, AccountId, CurrencyCode, ConversionRate, RateTable )
+import example.crm ( Amount, UserId, AccountId, CurrencyCode, ConversionRate, RateTable, CompanyName )
 import example.org ( RoleNode, RoleName )
 import example.pipeline ( OpportunityId, OpportunityName, Opportunity, OpenOpportunity, ClosedWon
                         , Prospecting, Qualification, NeedsAnalysis, ValueProposition
                         , IdDecisionMakers, PerceptionAnalysis, ProposalPriceQuote, NegotiationReview
-                        , ClosedLost, ForecastCategory
+                        , ClosedLost, ForecastCategory, Pipeline, BestCase, Commit, Closed, Omitted
+                        , acme, acmeQualified, acmeDiscovered, acmeValued, acmeIdentified, acmeChampioned
+                        , acmeQuoted, acmeInNegotiation, acmeWon, acmeLost
+                        , CompetitorLoss, IncumbentRetained, NoBudget, NoDecision, PriceLoss
                         , categoryOf, probabilityFor )
 import example.activity ( StaleReport )
 
@@ -136,6 +139,24 @@ example periodOf
     | "there is no thirteenth month, and that is a case rather than an abort" :
         (Date("2026-09-30"), 13)
         -> InvalidFiscalYearStart
+    | "there is no month nought" :
+        (Date("2026-09-30"), 0)
+        -> InvalidFiscalYearStart
+    | "nor a month before the first" :
+        (Date("2026-09-30"), -1)
+        -> InvalidFiscalYearStart
+    | "nor one far past the twelfth" :
+        (Date("2026-09-30"), 14)
+        -> InvalidFiscalYearStart
+    | "a fiscal year that starts in December has barely begun by the end of September of the year after" :
+        (Date("2026-09-30"), 12)
+        -> FiscalPeriod("FY25-Q4")
+    | "a date in the start month itself is in the first quarter of the year that begins there" :
+        (Date("2026-05-10"), 5)
+        -> FiscalPeriod("FY26-Q1")
+    | "a date two months before the start month is in the last quarter of the year that began the spring before" :
+        (Date("2026-01-15"), 4)
+        -> FiscalPeriod("FY25-Q4")
 
 // === Reading a deal ===
 // An imported behavior that depends on nothing is called by name, and categoryRollupOf below does exactly
@@ -295,6 +316,43 @@ example weightedForecast
     | "there is still no thirteenth month" :
         (UserId("u-001"), [ ], 13, yenRates)
         -> InvalidFiscalYearStart
+    | "nor a month nought" :
+        (UserId("u-001"), [ ], 0, yenRates)
+        -> InvalidFiscalYearStart
+    | "nor a negative one" :
+        (UserId("u-001"), [ ], -2, yenRates)
+        -> InvalidFiscalYearStart
+    // The probability is the stage's, so each of the eight open stages weighs the same ask differently:
+    // ten, ten, twenty, fifty, sixty, seventy, seventy-five and ninety per cent of four million eight hundred
+    // thousand come to three hundred and eighty-five per cent of it. The fiscal year starts in May, so the
+    // end of September is the second quarter.
+    | "every open stage weighs by its own probability, in the quarter its close date falls in" :
+        (UserId("u-001"),
+         [ acme, acmeQualified, acmeDiscovered, acmeValued, acmeIdentified, acmeChampioned, acmeQuoted
+         , acmeInNegotiation ],
+         5, yenRates)
+        -> Forecast
+            { owner = UserId("u-001")
+            , currency = CurrencyCode("JPY")
+            , periods = [ FiscalPeriod("FY26-Q2") ]
+            , byPeriod = Map.fromList([ (FiscalPeriod("FY26-Q2"), Amount(18480000.00m)) ])
+            , total = Amount(18480000.00m)
+            , dealCount = 8
+            }
+    | "a deal that closes before the fiscal year's start month belongs to the year that began the year before" :
+        (UserId("u-001"),
+         [ acmeDeal, Prospecting { ...acmeDeal, id = OpportunityId("006000000000005")
+                                 , closeDate = Date("2027-02-28") } ],
+         4, yenRates)
+        -> Forecast
+            { owner = UserId("u-001")
+            , currency = CurrencyCode("JPY")
+            , periods = [ FiscalPeriod("FY26-Q2"), FiscalPeriod("FY26-Q4") ]
+            , byPeriod = Map.fromList([ (FiscalPeriod("FY26-Q2"), Amount(100000.00m))
+                                      , (FiscalPeriod("FY26-Q4"), Amount(100000.00m)) ])
+            , total = Amount(200000.00m)
+            , dealCount = 2
+            }
 
 // === categoryRollup ===
 // The forecast categories are what a sales manager reads before the numbers: pipeline is everything, best case
@@ -324,6 +382,37 @@ let categoryRollupOf (opps) = {
         }
 }
 
+example categoryRollupOf
+    | "every stage lands in its category, and a win counts at what it was won at" :
+        ([ acme, acmeQualified, acmeDiscovered, acmeValued, acmeIdentified, acmeInNegotiation, acmeWon
+         , acmeLost ])
+        -> CategoryRollup
+            { byCategory = Map.fromList([ (Pipeline, Amount(19200000.00m)), (BestCase, Amount(4800000.00m))
+                                        , (Commit, Amount(4800000.00m)), (Closed, Amount(4500000.00m))
+                                        , (Omitted, Amount(1200000.00m)) ])
+            , countByCategory = Map.fromList([ (Pipeline, 4), (BestCase, 1), (Commit, 1), (Closed, 1)
+                                             , (Omitted, 1) ])
+            }
+    | "the three stages of best case add up under it" :
+        ([ acmeIdentified, acmeChampioned, acmeQuoted ])
+        -> CategoryRollup
+            { byCategory = Map.fromList([ (BestCase, Amount(14400000.00m)) ])
+            , countByCategory = Map.fromList([ (BestCase, 3) ])
+            }
+    | "every kind of lost deal is omitted from the forecast, and they are counted all the same" :
+        ([ ClosedLost { ...acmeLost, reason = CompetitorLoss { competitor = CompanyName("Rival KK") } },
+         ClosedLost { ...acmeLost, reason = IncumbentRetained { incumbent = CompanyName("Legacy Systems Co") } },
+         ClosedLost { ...acmeLost, reason = NoBudget },
+         ClosedLost { ...acmeLost, reason = NoDecision { lastContactOn = Date("2026-08-01") } },
+         ClosedLost { ...acmeLost, reason = PriceLoss { gapToBudget = Amount(200000.00m) } } ])
+        -> CategoryRollup
+            { byCategory = Map.fromList([ (Omitted, Amount(6000000.00m)) ])
+            , countByCategory = Map.fromList([ (Omitted, 5) ])
+            }
+    | "nothing in the pipeline rolls up to nothing" :
+        ([ ])
+        -> CategoryRollup { byCategory = Map.empty, countByCategory = Map.empty }
+
 // === commitNumber ===
 // The number a rep is actually held to: negotiation only. Everything earlier is a hope and everything closed
 // is history.
@@ -349,6 +438,17 @@ let commitNumber (opps) =
 // Quotas live in the compensation system, which is administered by a different team on a different cycle, so
 // the lookup is injected. Two inputs, which makes its generated base the third injected shape in the project:
 // a standalone abstract class with apply(UserId, FiscalPeriod).
+example commitNumber
+    | "only the deals in negotiation are a commitment, and their asks are added" :
+        ([ acme, acmeQualified, acmeDiscovered, acmeValued, acmeIdentified, acmeChampioned, acmeQuoted
+         , acmeInNegotiation
+         , NegotiationReview { ...acmeInNegotiation, id = OpportunityId("006000000000009")
+                             , amount = Amount(3000000.00m), floorAmount = Amount(2500000.00m) } ])
+        -> Amount(7800000.00m)
+    | "no deal in negotiation is a commitment of nothing" :
+        ([ acme ])
+        -> Amount(0.0m)
+
 behavior quotaFor : (owner: UserId, period: FiscalPeriod) -> Quota
 
 // A period with no deals is not a forecast of zero. The difference matters to the person being asked about the
@@ -359,9 +459,8 @@ behavior quotaFor : (owner: UserId, period: FiscalPeriod) -> Quota
 // rounding named. No DivisionByZero case appears in the output, because the model does not carry a case it can
 // never return.
 let attainmentOf (forecast: Decimal, quota: Decimal): Attainment =
-    Attainment(Int.clamp(0, 999,
-        Rational.toInt(DOWN,
-            Decimal.toInt(FLOOR, Decimal.round(0, HALF_UP, forecast * 100.0m)) / Decimal.toInt(FLOOR, quota))))
+    Attainment(Int.min(999,
+        Rational.toInt(DOWN, Decimal.round(0, HALF_UP, forecast * 100.0m) / quota)))
 
 behavior quotaGap : (forecast: Forecast, quota: Quota, period: FiscalPeriod)
         -> OnTrack | ShortOfQuota | NoForecastForPeriod
@@ -387,6 +486,15 @@ example quotaGap
     | "a quarter with no deals in it has no forecast, which is not a forecast of nothing" :
         (q3Forecast, Quota(100000.00m), FiscalPeriod("FY26-Q4"))
         -> NoForecastForPeriod
+    | "attainment stops at nine hundred and ninety-nine however far past quota the quarter runs" :
+        (q3Forecast, Quota(10000.00m), FiscalPeriod("FY26-Q3"))
+        -> OnTrack { attainment = Attainment(999) }
+    | "a quota of exactly what was forecast is met, at a hundred" :
+        (q3Forecast, Quota(150000.00m), FiscalPeriod("FY26-Q3"))
+        -> OnTrack { attainment = Attainment(100) }
+    | "a quota of a few cents is still a quota" :
+        (q3Forecast, Quota(0.50m), FiscalPeriod("FY26-Q3"))
+        -> OnTrack { attainment = Attainment(999) }
 
 // The same question with the quota read rather than passed: read, compute, answer. This is the shape every
 // behavior in this project that touches the outside world has, and the only reason quotaGap exists beside it is
@@ -422,6 +530,15 @@ example attainmentFor
         (UserId("u-002"), Forecast { ...q3Forecast, owner = UserId("u-002") },
          FiscalPeriod("FY26-Q3"))
         -> ShortOfQuota { gap = Amount(350000.00m), attainment = Attainment(30) }
+    | "a period the forecast has no deals in has nothing to hold against any quota" :
+        (UserId("u-001"), q3Forecast, FiscalPeriod("FY26-Q4"))
+        -> NoForecastForPeriod
+    | "attainment is capped here too" :
+        (UserId("u-002"), Forecast { ...q3Forecast, owner = UserId("u-002")
+                                   , byPeriod = Map.fromList([ (FiscalPeriod("FY26-Q3"), Amount(6000000.00m)) ])
+                                   , total = Amount(6000000.00m) },
+         FiscalPeriod("FY26-Q3"))
+        -> OnTrack { attainment = Attainment(999) }
 
 // === dealsAtRisk ===
 // A commit-category deal with no activity inside the cadence is the deal inspection question. It reads
@@ -443,6 +560,41 @@ let dealsAtRisk (opps, stale, staleAfter) = {
                , healthy = List.length(healthy)
                }
 }
+
+let coldAccount = StaleReport { daysSince = Map.fromList([ (AccountId("001000000000100"), 20) ])
+                              , stale = [ AccountId("001000000000100") ] }
+
+let secondCommit = NegotiationReview { ...acmeInNegotiation, id = OpportunityId("006000000000002")
+                                     , accountId = AccountId("001000000000101")
+                                     , amount = Amount(3000000.00m), floorAmount = Amount(2500000.00m) }
+
+example dealsAtRisk
+    | "a commit deal whose account has gone quiet is at risk, and the ones that have not are healthy" :
+        ([ acmeInNegotiation, secondCommit, acmeQuoted ], coldAccount, 14)
+        -> RiskReport { atRisk = [ OpportunityId("006000000000001") ]
+                      , atRiskAmount = Amount(4800000.00m), healthy = 2 }
+    | "exactly as many days quiet as the cadence allows is already at risk" :
+        ([ acmeInNegotiation, secondCommit, acmeQuoted ], coldAccount, 20)
+        -> RiskReport { atRisk = [ OpportunityId("006000000000001") ]
+                      , atRiskAmount = Amount(4800000.00m), healthy = 2 }
+    | "a day short of that is healthy" :
+        ([ acmeInNegotiation, secondCommit, acmeQuoted ], coldAccount, 21)
+        -> RiskReport { atRisk = [ ], atRiskAmount = Amount(0.0m), healthy = 3 }
+    | "a deal nobody has touched at all is not at risk by the report, which has nothing on it" :
+        ([ secondCommit ], coldAccount, 14)
+        -> RiskReport { atRisk = [ ], atRiskAmount = Amount(0.0m), healthy = 1 }
+    | "every open stage is looked at, and only a commit deal that has gone quiet is at risk" :
+        ([ acme, acmeQualified, acmeDiscovered, acmeValued, acmeIdentified, acmeChampioned, acmeQuoted
+         , acmeInNegotiation ],
+         StaleReport { daysSince = Map.fromList([ (AccountId("001000000000100"), 20)
+                                                , (AccountId("001000000000102"), 3) ])
+                     , stale = [ AccountId("001000000000100") ] },
+         14)
+        -> RiskReport { atRisk = [ OpportunityId("006000000000001") ]
+                      , atRiskAmount = Amount(4800000.00m), healthy = 7 }
+    | "a report with no accounts in it says nothing, so there is nothing to be at risk from" :
+        ([ acmeInNegotiation ], StaleReport { daysSince = Map.empty, stale = [ ] }, 14)
+        -> NoActivityRecorded
 
 // === rollupTeam ===
 // A manager's number is the reps' numbers summed, and Map.union is the wrong tool for it: union is left-biased
@@ -562,3 +714,21 @@ let second (entry: (UserId, Decimal)): Decimal = {
     let (owner, amount) = entry
     amount
 }
+
+example topPerformers
+    | "owners are ranked by what they closed in total, not by their biggest deal" :
+        ([ acmeWon
+         , ClosedWon { ...acmeWon, id = OpportunityId("006000000000011"), owner = UserId("u-002")
+                     , wonAmount = Amount(6000000.00m) }
+         , ClosedWon { ...acmeWon, id = OpportunityId("006000000000012"), wonAmount = Amount(3000000.00m) } ],
+         2)
+        -> Leaderboard { owners = [ UserId("u-001"), UserId("u-002") ] }
+    | "a board of one is the owner who closed the most" :
+        ([ acmeWon
+         , ClosedWon { ...acmeWon, id = OpportunityId("006000000000011"), owner = UserId("u-002")
+                     , wonAmount = Amount(6000000.00m) } ],
+         1)
+        -> Leaderboard { owners = [ UserId("u-002") ] }
+    | "nobody has closed anything, so nobody is on the board" :
+        ([ ], 3)
+        -> Leaderboard { owners = [ ] }

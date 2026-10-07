@@ -32,7 +32,15 @@
 // number and working it out is an operation. The noun keeps the name (`OpenOpportunity`, `WinRate`)
 // because that is what a pipeline report says, so the behaviors are `openFromLead` and `winRateOf`.
 module example.pipeline exposing (
+    acme,
+    acmeQualified,
+    acmeDiscovered,
+    acmeValued,
+    acmeIdentified,
     acmeInNegotiation,
+    acmeQuoted,
+    acmeWon,
+    acmeLost,
     acmeChampioned,
     OpportunityId,
     OpportunityName,
