@@ -136,3 +136,58 @@ example visibleTodos
         ([shortest, longest], All) -> [shortest, longest]
     | "the longest title is done, so Active hides it and keeps the shortest" :
         ([shortest, longest], Active) -> [shortest]
+
+// === the contract with the table ===
+// The behaviors above are implemented outside, so these rows are what the outside world is held to:
+// each says what the table's statement answers, and the implementation bound to it runs them.
+example storeTodo
+    | "a stored todo is not done, and the store hands out its id" :
+        (Title("Buy milk"), Position(0))
+            -> Todo { id = TodoId(1), title = Title("Buy milk"), completed = false, order = Position(0) }
+
+example readTodos
+    | "an empty table reads as no todos" :
+        () -> []
+
+example findTodo
+    | "a todo that is there is found by its id" :
+        (TodoId(1)) -> buyMilk
+    | "an id nothing holds is TodoNotFound" :
+        (TodoId(99)) -> TodoNotFound
+
+example renameTodo
+    | "todo.completed=true" :
+        (walkDog, Title("x"))
+            -> Todo { id = TodoId(2), title = Title("x"), completed = true, order = Position(1) }
+    | "todo.completed=false" :
+        (buyMilk, Title("x"))
+            -> Todo { id = TodoId(1), title = Title("x"), completed = false, order = Position(0) }
+
+example setCompleted
+    | "todo.completed=true" :
+        (walkDog, true)
+            -> Todo { id = TodoId(2), title = Title("Walk the dog"), completed = true, order = Position(1) }
+    | "completed=false" :
+        (buyMilk, false)
+            -> Todo { id = TodoId(1), title = Title("Buy milk"), completed = false, order = Position(0) }
+    | "a done todo can be set back to not done" :
+        (walkDog, false)
+            -> Todo { id = TodoId(2), title = Title("Walk the dog"), completed = false, order = Position(1) }
+    | "PATCH sets the value it is given, it does not flip the stored one" :
+        (buyMilk, true)
+            -> Todo { id = TodoId(1), title = Title("Buy milk"), completed = true, order = Position(0) }
+
+example repositionTodo
+    | "todo.completed=true" :
+        (walkDog, Position(0))
+            -> Todo { id = TodoId(2), title = Title("Walk the dog"), completed = true, order = Position(0) }
+    | "todo.completed=false" :
+        (buyMilk, Position(0))
+            -> Todo { id = TodoId(1), title = Title("Buy milk"), completed = false, order = Position(0) }
+
+example removeTodo
+    | "todo.completed=true" : (walkDog) -> Removed
+    | "todo.completed=false" : (buyMilk) -> Removed
+
+example deleteAllTodos
+    | "a DELETE on the root clears every todo" : () -> Removed
