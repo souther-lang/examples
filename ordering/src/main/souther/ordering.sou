@@ -130,3 +130,8 @@ example report
             , LineItem { sku = Sku("apple"), quantity = 1, unitPrice = 150, weightGrams = 120 } ]
             , total = 200450 })
         -> SalesReport { total = 200450, distinctSkus = [ "apple", "tv" ], lineCount = 3, highValueLines = 1 }
+    | "a one-character order id and a line exactly at the high-value threshold" :
+        (RecordedOrder { orderId = OrderId("A"), items =
+            [ LineItem { sku = Sku("pen"), quantity = 1, unitPrice = 1000, weightGrams = 10 } ]
+            , total = 1000 })
+        -> SalesReport { total = 1000, distinctSkus = [ "pen" ], lineCount = 1, highValueLines = 1 }

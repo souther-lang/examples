@@ -186,6 +186,10 @@ example taxFor
         (PricedCart { items = [ LineItem { sku = Sku("rice"), quantity = 2, unitPrice = 550, weightGrams = 120 } ],
             total = 1100, highValue = false }, ReducedRate, Date("2019-09-30"))
         -> NoRateYet { on = Date("2019-09-30") }
+    | "a high-value order is taxed like any other" :
+        (PricedCart { items = [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000, weightGrams = 120 } ],
+            total = 200000, highValue = true }, StandardRate, Date("2026-07-25"))
+        -> TaxBreakdown { net = 200000, rate = TaxRate(0.10m), rateLabel = "10%", tax = 20000, gross = 220000 }
 
 // === allocateTax: the total shared out over the lines, adding up to itself ===
 // A qualified invoice states the tax per rate, and the figure it states is the one `taxFor` produced:
@@ -257,6 +261,11 @@ example allocateTax
         (PricedCart { items = [ LineItem { sku = Sku("rice"), quantity = 2, unitPrice = 550, weightGrams = 120 } ],
             total = 1100, highValue = false }, ReducedRate, Date("2019-09-30"))
         -> NoRateYet { on = Date("2019-09-30") }
+    | "a high-value order's single line takes the whole total" :
+        (PricedCart { items = [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000, weightGrams = 120 } ],
+            total = 200000, highValue = true }, StandardRate, Date("2026-07-25"))
+        -> TaxAllocation { lines = [ LineTax { sku = Sku("tv"), net = 200000, tax = 20000 } ],
+                           taxTotal = 20000 }
 
 // === What rounding per line would give instead ===
 // The same cart with the tax taken line by line and summed. An invoice may not be taxed this way,
@@ -285,3 +294,22 @@ example taxRoundedPerLine
             , LineItem { sku = Sku("clip"), quantity = 1, unitPrice = 105, weightGrams = 120 } ],
             total = 315, highValue = false }, StandardRate, Date("2026-07-25"))
         -> PerLineTax { tax = 30 }
+    | "at the reduced rate, one dear line and three small ones lose a yen between them" :
+        (PricedCart { items =
+            [ LineItem { sku = Sku("beef"), quantity = 1, unitPrice = 100000, weightGrams = 500 }
+            , LineItem { sku = Sku("gum"), quantity = 1, unitPrice = 105, weightGrams = 20 }
+            , LineItem { sku = Sku("mint"), quantity = 1, unitPrice = 105, weightGrams = 20 }
+            , LineItem { sku = Sku("candy"), quantity = 1, unitPrice = 105, weightGrams = 20 } ],
+            total = 100315, highValue = true }, ReducedRate, Date("2026-07-25"))
+        -> PerLineTax { tax = 8024 }
+    | "before the last revision the old rate is applied line by line" :
+        (PricedCart { items =
+            [ LineItem { sku = Sku("pen"), quantity = 1, unitPrice = 105, weightGrams = 120 }
+            , LineItem { sku = Sku("note"), quantity = 1, unitPrice = 105, weightGrams = 120 }
+            , LineItem { sku = Sku("clip"), quantity = 1, unitPrice = 105, weightGrams = 120 } ],
+            total = 315, highValue = false }, StandardRate, Date("2019-09-30"))
+        -> PerLineTax { tax = 24 }
+    | "a date before the reduced rate existed has no per-line tax either" :
+        (PricedCart { items = [ LineItem { sku = Sku("rice"), quantity = 2, unitPrice = 550, weightGrams = 120 } ],
+            total = 1100, highValue = false }, ReducedRate, Date("2019-09-30"))
+        -> NoRateYet { on = Date("2019-09-30") }

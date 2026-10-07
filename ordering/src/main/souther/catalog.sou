@@ -99,6 +99,9 @@ example explode
     | "a bought part explodes to itself" :
         (Component { sku = Sku("bolt"), quantity = 1, parts = [] }, 5)
             -> Requirement { need = [ (Sku("bolt"), 5) ], purchased = [ Sku("bolt") ] }
+    | "a part the parent takes two of is needed twice per kit" :
+        (Component { sku = Sku("chair"), quantity = 2, parts = [] }, 3)
+            -> Requirement { need = [ (Sku("chair"), 6) ], purchased = [ Sku("chair") ] }
 
 // === bomDepth: how many levels there are ===
 // The number that decides the order requirements are netted in, and the one figure a flat structure

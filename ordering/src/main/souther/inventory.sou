@@ -126,6 +126,9 @@ example allocate
     | "one line over stock fails the whole allocation" :
         (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 999, unitPrice = 150, weightGrams = 120 } ], total = 149850, highValue = true })
             -> InsufficientStock
+    | "a sku the snapshot never mentions is out of stock, not assumed to be there" :
+        (PricedCart { items = [ LineItem { sku = Sku("pear"), quantity = 1, unitPrice = 200, weightGrams = 250 } ], total = 200, highValue = false })
+            -> InsufficientStock
 
 // === stockFrom: the snapshot is a reading of the movements, not a figure kept beside them ===
 // `readStock` above asks the outside world what the on-hand is, which is what a system with a
@@ -164,11 +167,16 @@ let applyMovement (running: Map<Sku, Int>, movement: Movement): Map<Sku, Int> =
 let firstNegative (running: Map<Sku, Int>): Option<Sku> =
     List.sort(Map.keys(Map.filterEntries((sku, on) -> on < 0, running))) |> List.get(0)
 
+// The sku came out of the map's own keys, so the absent branch is a case the model has ruled out.
+let figureOf (running: Map<Sku, Int>, sku: Sku): Int =
+    match Map.get(sku, running) with
+        | Some on -> on
+        | None -> unreachable "the sku was read from the keys of this map"
+
 let stockFrom (movements) = {
     let running: Map<Sku, Int> = fold((acc, m) -> applyMovement(acc, m), Map.empty, movements)
     match firstNegative(running) with
-        | Some sku ->
-            WentNegative { sku = sku, shortBy = Map.get(sku, running) |> Option.withDefault(0) }
+        | Some sku -> WentNegative { sku = sku, shortBy = figureOf(running, sku) }
         | None -> StockSnapshot { rows = List.sortBy(.sku, rowsOf(running)) }
 }
 
@@ -216,10 +224,13 @@ behavior inspectBarcode : (barcode: Barcode) -> InspectionPassed | ScanError
 // of "0" — read from the string itself rather than written as 48, so the arithmetic says where the
 // number comes from. Digits are numeric by the invariant, so the subtraction is total.
 // List.mapIndexed (map with the index) weights each digit; List.sum adds them.
-let zeroCode = List.get(0, String.codePoints("0")) |> Option.withDefault(0)
+let digitValue (c: Int): Int =
+    match List.get(0, String.codePoints("0")) with
+        | Some zero -> c - zero
+        | None -> unreachable "a one-character string has a first code point"
 let weightedSum (code: String) =
     String.codePoints(code)
-        |> List.mapIndexed((i, c) -> (if Int.floorMod(i, 2) == 0 then 1 else 3) * (c - zeroCode))
+        |> List.mapIndexed((i, c) -> (if Int.floorMod(i, 2) == 0 then 1 else 3) * digitValue(c))
         |> List.sum
 
 let inspectBarcode (barcode) = {
@@ -262,12 +273,18 @@ let toCases (eaches, pack) = {
 
 example toEaches
     | "two cases of twelve is twenty-four units" : (Cases(2), PackSize(12)) -> Eaches(24)
+    | "no cases is no units, whatever the pack size" : (Cases(0), PackSize(12)) -> Eaches(0)
+    | "a pack size of one counts a case as a unit" : (Cases(5), PackSize(1)) -> Eaches(5)
 
 example toCases
     | "a multiple of the pack size ships as whole cases" :
         (Eaches(24), PackSize(12)) -> Shippable { cases = Cases(2) }
     | "a remainder is left over, and it is counted in units" :
         (Eaches(25), PackSize(12)) -> PartialCase { leftover = Eaches(1) }
+    | "nothing to ship is no cases and no remainder" :
+        (Eaches(0), PackSize(12)) -> Shippable { cases = Cases(0) }
+    | "a pack size of one never leaves a remainder" :
+        (Eaches(7), PackSize(1)) -> Shippable { cases = Cases(7) }
 
 // === putAway: a passed item onto a shelf location ===
 // A shelf location (aisle-bay-level, e.g. A-03-12). An inspected-and-passed barcode is put away to the
@@ -286,6 +303,9 @@ example putAway
     | "a passed item is put away to a shelf" :
         (InspectionPassed { code = Barcode("9784873115658") }, Location("A-03-12"))
             -> PutAwayRecord { code = Barcode("9784873115658"), location = Location("A-03-12") }
+    | "another item goes to its own shelf" :
+        (InspectionPassed { code = Barcode("4901234567894") }, Location("B-01-04"))
+            -> PutAwayRecord { code = Barcode("4901234567894"), location = Location("B-01-04") }
 
 // === baySlots: where an item may go, as codes this module builds itself ===
 // Until now a Location could only be rejected, never produced: the shelf code arrived from outside and
@@ -352,3 +372,6 @@ example checkExpiry
     | "the best-before day itself still ships" :
         (Lot { sku = Sku("milk"), bestBefore = Date("2026-07-25") }, Date("2026-07-25"))
             -> Fresh { sku = Sku("milk") }
+    | "the day after the best-before is past by one" :
+        (Lot { sku = Sku("milk"), bestBefore = Date("2026-07-24") }, Date("2026-07-25"))
+            -> Expired { daysPast = 1 }
