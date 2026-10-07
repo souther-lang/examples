@@ -400,6 +400,150 @@ example qualifyAsInsuranceDependant
     | "living apart, a remittance smaller than the revenue supports nobody" :
         (kiyoko, motherApart, AnnualRevenue(1250000), AnnualRevenue(6000000), Date("2026-07-01"))
         -> InsuranceDependencyBlocked
+    | "tie.relationship=Child"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("2000-01-01"),
+                disability = Disabled
+            },
+            childAtHome,
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("2026-07-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "tie.relationship=Grandchild"
+        : (
+            hanako,
+            RelativeTie { ...spouseAtHome, relationship = Grandchild },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("2026-07-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "tie.relationship=Sibling"
+        : (
+            hanako,
+            RelativeTie { ...spouseAtHome, relationship = Sibling },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("2026-07-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | (
+        hanako,
+        RelativeTie {
+            relationship = OtherRelative { kind = ByBlood, degree = KinshipDegree(4) },
+            cohabitation = LivingTogether
+        },
+        AnnualRevenue(0),
+        AnnualRevenue(0),
+        Date("2026-07-01")
+    )
+        -> InsuranceDependencyBlocked { reasons = [ OutsideKinshipRange, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "tie.relationship@OtherRelative.kind=ByAffinity"
+        : (
+            hanako,
+            RelativeTie {
+                relationship = OtherRelative { kind = ByAffinity, degree = KinshipDegree(1) },
+                cohabitation = LivingTogether
+            },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("2026-07-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | (
+        kiyoko,
+        RelativeTie {
+            relationship = OtherRelative { kind = ByBlood, degree = KinshipDegree(1) },
+            cohabitation = LivingApart { annualRemittance = Yen(0) }
+        },
+        AnnualRevenue(0),
+        AnnualRevenue(0),
+        Date("2026-07-01")
+    )
+        -> InsuranceDependencyBlocked { reasons = [ CohabitationRequired, RevenueOverRemittance { remittance = Yen(0), revenue = AnnualRevenue(0) } ] }
+    | (
+        DependantPerson {
+            name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+            birthday = Date("2000-01-01"),
+            disability = Disabled
+        },
+        RelativeTie {
+            relationship = OtherRelative { kind = ByBlood, degree = KinshipDegree(5) },
+            cohabitation = LivingTogether
+        },
+        AnnualRevenue(0),
+        AnnualRevenue(0),
+        Date("2026-07-01")
+    )
+        -> InsuranceDependencyBlocked { reasons = [ OutsideKinshipRange, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | (
+        DependantPerson {
+            name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+            birthday = Date("2000-01-01"),
+            disability = Disabled
+        },
+        RelativeTie {
+            relationship = OtherRelative { kind = ByBlood, degree = KinshipDegree(3) },
+            cohabitation = LivingTogether
+        },
+        AnnualRevenue(0),
+        AnnualRevenue(0),
+        Date("2026-07-01")
+    )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | (
+        DependantPerson {
+            name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+            birthday = Date("2000-01-01"),
+            disability = Disabled
+        },
+        RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+        AnnualRevenue(0),
+        AnnualRevenue(1),
+        Date("2026-07-01")
+    )
+        -> InsuranceDependant { appliedCeiling = AnnualRevenue(1800000) }
+    | (
+        DependantPerson {
+            name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+            birthday = Date("2000-01-01"),
+            disability = Disabled
+        },
+        RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+        AnnualRevenue(1),
+        AnnualRevenue(1),
+        Date("2026-07-01")
+    )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(1), revenue = AnnualRevenue(1) } ] }
+    | (
+        DependantPerson {
+            name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+            birthday = Date("2000-01-01"),
+            disability = Disabled
+        },
+        RelativeTie {
+            relationship = Spouse,
+            cohabitation = LivingApart { annualRemittance = Yen(1) }
+        },
+        AnnualRevenue(0),
+        AnnualRevenue(0),
+        Date("2026-07-01")
+    )
+        -> InsuranceDependant { appliedCeiling = AnnualRevenue(1800000) }
+    | "living together, a revenue of half the insured person's is already over half" :
+        (hanako, spouseAtHome, AnnualRevenue(1), AnnualRevenue(2), Date("2026-07-01"))
+        -> InsuranceDependencyBlocked
+              { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(2), revenue = AnnualRevenue(1) } ] }
+    | "one yen under half the insured person's revenue qualifies" :
+        (hanako, spouseAtHome, AnnualRevenue(1), AnnualRevenue(3), Date("2026-07-01"))
+        -> InsuranceDependant { appliedCeiling = AnnualRevenue(1300000) }
+    | "before her birthday in the year, the attained age is one less than the difference of the years" :
+        (hanako, spouseAtHome, AnnualRevenue(1), AnnualRevenue(3), Date("2026-03-01"))
+        -> InsuranceDependant { appliedCeiling = AnnualRevenue(1300000) }
 
 example classifyTaxDependant
     | "a child of twenty-one with no income is a specified dependant" :
@@ -411,3 +555,155 @@ example classifyTaxDependant
     | "a mother living apart on a remittance shares the livelihood, and is elderly but not coresident" :
         (kiyoko, motherApart, TotalIncome(0), Date("2026-12-31"))
         -> TaxDependant { category = ElderlyDependant }
+    | "tie.relationship=Grandchild"
+        : (
+            taro,
+            RelativeTie { ...childAtHome, relationship = Grandchild },
+            TotalIncome(0),
+            Date("2026-12-31")
+        )
+        -> TaxDependant { category = SpecifiedDependant }
+    | "tie.relationship=Sibling"
+        : (
+            taro,
+            RelativeTie { ...childAtHome, relationship = Sibling },
+            TotalIncome(0),
+            Date("2026-12-31")
+        )
+        -> TaxDependant { category = SpecifiedDependant }
+    | (
+        kiyoko,
+        RelativeTie {
+            relationship = LinealAscendant,
+            cohabitation = LivingApart { annualRemittance = Yen(0) }
+        },
+        TotalIncome(0),
+        Date("2026-12-31")
+    )
+        -> TaxDependencyBlocked { reasons = [ NotSharingLivelihood ] }
+    | "tie.relationship@OtherRelative.degree=3 < x <= 6"
+        : (
+            taro,
+            RelativeTie {
+                relationship = OtherRelative { kind = ByBlood, degree = KinshipDegree(4) },
+                cohabitation = LivingTogether
+            },
+            TotalIncome(0),
+            Date("2026-12-31")
+        )
+        -> TaxDependant { category = SpecifiedDependant }
+    | (
+        taro,
+        RelativeTie {
+            relationship = OtherRelative { kind = ByAffinity, degree = KinshipDegree(1) },
+            cohabitation = LivingTogether
+        },
+        TotalIncome(0),
+        Date("2026-12-31")
+    )
+        -> TaxDependant { category = SpecifiedDependant }
+    | (
+        taro,
+        RelativeTie {
+            relationship = OtherRelative { kind = ByAffinity, degree = KinshipDegree(4) },
+            cohabitation = LivingTogether
+        },
+        TotalIncome(0),
+        Date("2026-12-31")
+    )
+        -> TaxDependencyBlocked { reasons = [ OutsideTaxKinshipRange ] }
+    | (
+        DependantPerson {
+            name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+            birthday = Date("2000-01-01"),
+            disability = Disabled
+        },
+        RelativeTie {
+            relationship = OtherRelative { kind = ByBlood, degree = KinshipDegree(6) },
+            cohabitation = LivingTogether
+        },
+        TotalIncome(0),
+        Date("2026-12-31")
+    )
+        -> TaxDependant { category = GeneralDependant }
+    | (
+        DependantPerson {
+            name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+            birthday = Date("2000-01-01"),
+            disability = Disabled
+        },
+        RelativeTie {
+            relationship = OtherRelative { kind = ByAffinity, degree = KinshipDegree(3) },
+            cohabitation = LivingTogether
+        },
+        TotalIncome(0),
+        Date("2026-12-31")
+    )
+        -> TaxDependant { category = GeneralDependant }
+    | (
+        DependantPerson {
+            name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+            birthday = Date("2000-01-01"),
+            disability = Disabled
+        },
+        RelativeTie {
+            relationship = OtherRelative { kind = ByAffinity, degree = KinshipDegree(5) },
+            cohabitation = LivingTogether
+        },
+        TotalIncome(0),
+        Date("2026-12-31")
+    )
+        -> TaxDependencyBlocked { reasons = [ OutsideTaxKinshipRange ] }
+    | (
+        DependantPerson {
+            name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+            birthday = Date("2000-01-01"),
+            disability = Disabled
+        },
+        RelativeTie {
+            relationship = Spouse,
+            cohabitation = LivingApart { annualRemittance = Yen(1) }
+        },
+        TotalIncome(0),
+        Date("2026-12-31")
+    )
+        -> TaxDependencyBlocked { reasons = [ SpouseIsDeductedSeparately ] }
+    | (
+        DependantPerson {
+            name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+            birthday = Date("2000-01-01"),
+            disability = Disabled
+        },
+        RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+        TotalIncome(580001),
+        Date("2026-12-31")
+    )
+        -> TaxDependencyBlocked { reasons = [ SpouseIsDeductedSeparately, IncomeOverTaxCeiling { ceiling = TotalIncome(580000), income = TotalIncome(580001) } ] }
+    | (
+        DependantPerson {
+            name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+            birthday = Date("2000-01-01"),
+            disability = Disabled
+        },
+        RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+        TotalIncome(580000),
+        Date("2026-12-31")
+    )
+        -> TaxDependencyBlocked { reasons = [ SpouseIsDeductedSeparately ] }
+    | "a child of fifteen is declared but earns no national deduction" :
+        (taro, childAtHome, TotalIncome(0), Date("2020-12-31"))
+        -> TaxDependencyBlocked { reasons = [ UnderSixteen ] }
+    | "a sibling of seventy-four is an elderly dependant, and is not a lineal ascendant" :
+        (kiyoko, RelativeTie { ...childAtHome, relationship = Sibling }, TotalIncome(0), Date("2026-12-31"))
+        -> TaxDependant { category = ElderlyDependant }
+    | "a relative by blood of seventy-four in the third degree is elderly too" :
+        (kiyoko, RelativeTie { relationship = OtherRelative { kind = ByBlood, degree = KinshipDegree(3) }
+                             , cohabitation = LivingTogether }
+               , TotalIncome(0), Date("2026-12-31"))
+        -> TaxDependant { category = ElderlyDependant }
+    | "a mother of seventy-four living with the taxpayer is a coresident elderly parent" :
+        (kiyoko, RelativeTie { ...motherApart, cohabitation = LivingTogether }, TotalIncome(0), Date("2026-12-31"))
+        -> TaxDependant { category = CoresidentElderlyParent }
+    | "in March, before his September birthday, he has not yet attained twenty-one" :
+        (taro, childAtHome, TotalIncome(0), Date("2026-03-01"))
+        -> TaxDependant { category = SpecifiedDependant }
