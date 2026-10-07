@@ -20,8 +20,8 @@
 //     it stated stays stated. So a price error becomes a credit note against it, and what the customer
 //     currently owes is the invoice folded together with its credit notes. Nothing rewrites an
 //     `Invoice`, and there is no field on one that a correction would have to reach.
-//   - `Decimal` arithmetic end to end — add / subtract / multiply / compare, with `Decimal.abs`,
-//     `min`, `max` and `clamp` for the settlement arithmetic. Money is never an Int here; what an
+//   - `Decimal` arithmetic end to end — add / subtract / multiply / compare, with `Decimal.min` and
+//     `max` for the settlement arithmetic. Money is never an Int here; what an
 //     invoice states is a Decimal, and Int appears only as a count of days.
 //   - An invoice number assembled rather than received: `String.padLeft` widens the sequence,
 //     `String.join` puts the parts together, and the `InvoiceNo` invariant checks the result exactly
@@ -131,12 +131,15 @@ let onABusinessDay (calendar: PaymentCalendar, nominal: Date): Date =
 // === unpayableDueDates: the walk above, checked for a whole month in one example row ===
 // `firstBusinessDay` looks at ten candidate days and the comment above it claims ten is more than
 // any run of closed days a calendar has. That claim is a property, and a property over a small
-// domain can be an example: enumerate every nominal date in a window crossed with both walking
+// domain can be an example: enumerate every nominal date in a window crossed with the walking
 // rules, keep the ones that land on a closed day, and expect the empty list. One row then says
 // "every due date in July lands on a day money moves" — checked by exhaustion at compile time, not
-// spot-checked. The second row is the property's edge: hand the walk a run of closed days longer
-// than it looks, and the violation comes back as a value naming the date that got stuck. SameDay
-// is not swept — that rule states the nominal day and means it.
+// spot-checked. Another row is the property's edge: hand the walk a run of closed days longer
+// than it looks, and the violation comes back as a value naming the date that got stuck.
+//
+// Which rules are swept is the caller's to say. The two that walk are expected to come back empty.
+// `SameDay` states the nominal day and means it, so it does not walk: sweeping it lists every
+// nominal date that falls on a closed day, which is the property failing, and the last row shows it.
 //
 // The pattern is the point: when the input domain is this small, a behavior that returns the
 // counter-examples and an example row expecting `[ ]` is a bounded exhaustive check, and it costs
@@ -144,13 +147,14 @@ let onABusinessDay (calendar: PaymentCalendar, nominal: Date): Date =
 
 data DueDateViolation = { rule: DueDateRule, nominal: Date, landed: Date }
 
-behavior unpayableDueDates : (calendar: PaymentCalendar, from: Date, days: Int)
-        -> List<DueDateViolation>
+behavior unpayableDueDates : (calendar: PaymentCalendar, from: Date, days: Int,
+                              rules: List<DueDateRule>) -> List<DueDateViolation>
     constructs DueDateViolation, PaymentCalendar
 
-// Every nominal date from `from` through `days` more, under each walking rule. The calendar's own
-// rule is not read: the sweep asks about both directions whatever the trading agreement says.
-let unpayableDueDates (calendar, from, days) =
+// Every nominal date from `from` through `days` more, under each rule given. The calendar's own
+// rule is not read: the sweep asks about the rules the caller names, whatever the trading agreement
+// says.
+let unpayableDueDates (calendar, from, days, rules) =
     flatMap(rule -> {
         let ruled = PaymentCalendar { ...calendar, rule = rule }
         rangeInclusive(0, days)
@@ -161,7 +165,7 @@ let unpayableDueDates (calendar, from, days) =
             })
             |> filter(v -> Bool.not(isBusinessDay(ruled, v.landed)))
         },
-        [ PrecedingBusinessDay, FollowingBusinessDay ])
+        rules)
 
 // === issueInvoice: a recorded order and its tax become a statement ===
 // The number is built here rather than read: `String.padLeft` widens the sequence to six digits and
@@ -229,25 +233,45 @@ let payerCalendar = PaymentCalendar { holidays = Set.fromList([ Date("2026-08-11
                                       aSunday = Date("2026-01-04"),
                                       rule = PrecedingBusinessDay }
 
-// The first row sweeps all of July under both rules — sixty-two walked dates, none stuck. The
-// second hands the walk twelve closed weekdays bracketed by weekends: walking forward from inside
-// that run finds nothing within ten days, so the nominal comes back unwalked, and the row states
-// the one violation. Walking backward from the same day still escapes, which is why the preceding
-// rule contributes no row.
+// The calendar that has no business day within ten days of the fifth of August: two working weeks of
+// closed weekdays, bracketed by weekends. Shared by the sweep below and by an `issueInvoice` row.
+let sixteenDayClosure = PaymentCalendar { holidays = Set.fromList(
+                                            [ Date("2026-08-03"), Date("2026-08-04"), Date("2026-08-05")
+                                            , Date("2026-08-06"), Date("2026-08-07"), Date("2026-08-10")
+                                            , Date("2026-08-11"), Date("2026-08-12"), Date("2026-08-13")
+                                            , Date("2026-08-14") ])
+                                        , aSunday = Date("2026-01-04")
+                                        , rule = SameDay }
+
+// The first row sweeps all of July under both rules — sixty-two walked dates, none stuck. The second
+// repeats it with a calendar whose own rule is the following-day one: the sweep never reads that
+// rule, so the answer is the same. The third hands the walk twelve closed weekdays bracketed by
+// weekends: walking forward from inside that run finds nothing within ten days, so the nominal comes
+// back unwalked, and the row states the one violation. Walking backward from the same day still
+// escapes, which is why the preceding rule contributes no row.
 example unpayableDueDates
     | "every due date in an ordinary July lands on a day money moves" :
-        (payerCalendar, Date("2026-07-01"), 30) -> [ ]
+        (payerCalendar, Date("2026-07-01"), 30, [ PrecedingBusinessDay, FollowingBusinessDay ])
+            -> [ ]
+    | "the calendar's own rule is not read, so a following-day calendar sweeps the same" :
+        (PaymentCalendar { ...payerCalendar, rule = FollowingBusinessDay }, Date("2026-07-01"), 30,
+         [ PrecedingBusinessDay, FollowingBusinessDay ])
+            -> [ ]
     | "a sixteen-day closure is longer than the walk looks, and the stuck date names itself" :
-        (PaymentCalendar { holidays = Set.fromList(
-                                        [ Date("2026-08-03"), Date("2026-08-04"), Date("2026-08-05")
-                                        , Date("2026-08-06"), Date("2026-08-07"), Date("2026-08-10")
-                                        , Date("2026-08-11"), Date("2026-08-12"), Date("2026-08-13")
-                                        , Date("2026-08-14") ])
-                         , aSunday = Date("2026-01-04")
-                         , rule = SameDay }
-        , Date("2026-08-05"), 0)
+        (sixteenDayClosure, Date("2026-08-05"), 0, [ PrecedingBusinessDay, FollowingBusinessDay ])
             -> [ DueDateViolation { rule = FollowingBusinessDay, nominal = Date("2026-08-05"),
                                     landed = Date("2026-08-05") } ]
+    | "a rule that does not walk reports the Saturday and the Sunday it leaves where they fall" :
+        (payerCalendar, Date("2026-07-24"), 2, [ SameDay ])
+            -> [ DueDateViolation { rule = SameDay, nominal = Date("2026-07-25"),
+                                    landed = Date("2026-07-25") }
+               , DueDateViolation { rule = SameDay, nominal = Date("2026-07-26"),
+                                    landed = Date("2026-07-26") } ]
+
+// One order and its breakdown for the rows that vary the terms and the calendar rather than the money.
+let penOrder = RecordedOrder { orderId = OrderId("ORD-6"), items =
+    [ LineItem { sku = Sku("pen"), quantity = 1, unitPrice = 100, weightGrams = 10 } ], total = 100 }
+let penTax = TaxBreakdown { net = 100, rate = TaxRate(0.10m), rateLabel = "10%", tax = 10, gross = 110 }
 
 example issueInvoice
     | "a net-30 invoice states the order's amounts and falls due in thirty days" :
@@ -291,6 +315,48 @@ example issueInvoice
             -> Invoice { no = InvoiceNo("INV-2026-000012"), orderId = OrderId("ORD-5"),
                          issuedOn = Date("2026-07-27"), dueOn = Date("2026-08-10"),
                          net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) }
+    | "same-day terms state the nominal date even when it is a Sunday" :
+        (penOrder, penTax, Net15, Date("2026-07-25"), 13,
+         PaymentCalendar { ...payerCalendar, rule = SameDay })
+            -> Invoice { no = InvoiceNo("INV-2026-000013"), orderId = OrderId("ORD-6"),
+                         issuedOn = Date("2026-07-25"), dueOn = Date("2026-08-09"),
+                         net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) }
+    | "following-day terms push a Sunday net-15 to the Monday" :
+        (penOrder, penTax, Net15, Date("2026-07-25"), 14,
+         PaymentCalendar { ...payerCalendar, rule = FollowingBusinessDay })
+            -> Invoice { no = InvoiceNo("INV-2026-000014"), orderId = OrderId("ORD-6"),
+                         issuedOn = Date("2026-07-25"), dueOn = Date("2026-08-10"),
+                         net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) }
+    | "same-day terms keep a Saturday net-30" :
+        (penOrder, penTax, Net30, Date("2026-07-23"), 15,
+         PaymentCalendar { ...payerCalendar, rule = SameDay })
+            -> Invoice { no = InvoiceNo("INV-2026-000015"), orderId = OrderId("ORD-6"),
+                         issuedOn = Date("2026-07-23"), dueOn = Date("2026-08-22"),
+                         net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) }
+    | "following-day terms push a Saturday net-30 to the Monday" :
+        (penOrder, penTax, Net30, Date("2026-07-23"), 16,
+         PaymentCalendar { ...payerCalendar, rule = FollowingBusinessDay })
+            -> Invoice { no = InvoiceNo("INV-2026-000016"), orderId = OrderId("ORD-6"),
+                         issuedOn = Date("2026-07-23"), dueOn = Date("2026-08-24"),
+                         net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) }
+    | "same-day terms keep the last day of February, a Saturday" :
+        (penOrder, penTax, EndOfNextMonth, Date("2026-01-15"), 17,
+         PaymentCalendar { ...payerCalendar, rule = SameDay })
+            -> Invoice { no = InvoiceNo("INV-2026-000017"), orderId = OrderId("ORD-6"),
+                         issuedOn = Date("2026-01-15"), dueOn = Date("2026-02-28"),
+                         net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) }
+    | "following-day terms push the last day of February to the Monday after" :
+        (penOrder, penTax, EndOfNextMonth, Date("2026-01-15"), 18,
+         PaymentCalendar { ...payerCalendar, rule = FollowingBusinessDay })
+            -> Invoice { no = InvoiceNo("INV-2026-000018"), orderId = OrderId("ORD-6"),
+                         issuedOn = Date("2026-01-15"), dueOn = Date("2026-03-02"),
+                         net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) }
+    | "forward from inside a sixteen-day closure there is no business day to walk to, so the nominal stands" :
+        (penOrder, penTax, Net15, Date("2026-07-21"), 19,
+         PaymentCalendar { ...sixteenDayClosure, rule = FollowingBusinessDay })
+            -> Invoice { no = InvoiceNo("INV-2026-000019"), orderId = OrderId("ORD-6"),
+                         issuedOn = Date("2026-07-21"), dueOn = Date("2026-08-05"),
+                         net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) }
 
 // === settle: a payment against an invoice ===
 // Three outcomes, and none of them is a failure: paid in full, paid short, paid over. `Decimal.compare`
@@ -320,7 +386,7 @@ let settle (invoice, payment) = {
         then Settled { invoiceNo = invoice.no,
                        daysEarly = Date.daysBetween(payment.paidOn, invoice.dueOn) }
         else if sign < 0
-            then PartPaid { invoiceNo = invoice.no, outstanding = Amount(Decimal.abs(diff)) }
+            then PartPaid { invoiceNo = invoice.no, outstanding = Amount(Decimal.subtract(invoice.gross.value, payment.amount.value)) }
             else Overpaid { invoiceNo = invoice.no, refundDue = Amount(diff) }
 }
 
@@ -346,6 +412,13 @@ example settle
         , Payment { invoiceNo = InvoiceNo("INV-2026-000042"), paidOn = Date("2026-08-30"),
                     amount = Amount(350.0m) })
             -> Overpaid { invoiceNo = InvoiceNo("INV-2026-000042"), refundDue = Amount(4.0m) }
+    | "a payment of nothing leaves the whole gross outstanding" :
+        (Invoice { no = InvoiceNo("INV-2026-000042"), orderId = OrderId("ORD-1"),
+                   issuedOn = Date("2026-07-25"), dueOn = Date("2026-08-24"),
+                   net = Amount(315.0m), tax = Amount(31.0m), gross = Amount(346.0m) }
+        , Payment { invoiceNo = InvoiceNo("INV-2026-000042"), paidOn = Date("2026-08-19"),
+                    amount = Amount(0.0m) })
+            -> PartPaid { invoiceNo = InvoiceNo("INV-2026-000042"), outstanding = Amount(346.0m) }
 
 // === ageing: the ledger read by how late it is ===
 // Collections works from buckets, so the report states each one rather than a list the caller has to
@@ -354,9 +427,9 @@ example settle
 // way, and `foldRight` is what a caller reaches for when it does matter. Its step takes the element
 // first and the accumulator second, the opposite of `fold`'s.
 //
-// `Decimal.max` and `Decimal.clamp` keep the readouts inside what they claim: the worst overdue is at
+// `Int.max` and `Decimal.min` keep the readouts inside what they claim: the worst overdue is at
 // least zero even when everything is current, and the exposure figure is capped at the credit limit
-// the caller states.
+// the caller states. An amount is never negative, so the cap needs no floor of zero.
 data AgeingReport =
     { current: Amount
     , overdue30: Amount
@@ -385,7 +458,7 @@ let ageing (invoices, today, creditLimit) = {
         overdue30 = Amount(totalOf(inBand(invoices, today, 1, 31))),
         overdue60 = Amount(totalOf(inBand(invoices, today, 31, 61))),
         worstDaysLate = Int.max(worst, 0),
-        exposure = Amount(Decimal.clamp(0.0m, creditLimit.value, outstanding))
+        exposure = Amount(Decimal.min(creditLimit.value, outstanding))
     }
 }
 
@@ -417,6 +490,57 @@ example ageing
             -> AgeingReport { current = Amount(990.0m), overdue30 = Amount(0.0m),
                               overdue60 = Amount(0.0m), worstDaysLate = 0,
                               exposure = Amount(500.0m) }
+    | "a day either side of each band edge: due in ten years, due today, 1, 30, 31 and 60 days late" :
+        ([ Invoice { no = InvoiceNo("INV-2026-000011"), orderId = OrderId("ORD-11"),
+                     issuedOn = Date("2026-01-05"), dueOn = Date("2036-07-29"),
+                     net = Amount(1.0m), tax = Amount(0.0m), gross = Amount(1.0m) }
+         , Invoice { no = InvoiceNo("INV-2026-000012"), orderId = OrderId("ORD-12"),
+                     issuedOn = Date("2026-01-05"), dueOn = Date("2036-07-30"),
+                     net = Amount(2.0m), tax = Amount(0.0m), gross = Amount(2.0m) }
+         , Invoice { no = InvoiceNo("INV-2026-000013"), orderId = OrderId("ORD-13"),
+                     issuedOn = Date("2026-01-05"), dueOn = Date("2026-08-01"),
+                     net = Amount(4.0m), tax = Amount(0.0m), gross = Amount(4.0m) }
+         , Invoice { no = InvoiceNo("INV-2026-000014"), orderId = OrderId("ORD-14"),
+                     issuedOn = Date("2026-01-05"), dueOn = Date("2026-07-31"),
+                     net = Amount(8.0m), tax = Amount(0.0m), gross = Amount(8.0m) }
+         , Invoice { no = InvoiceNo("INV-2026-000015"), orderId = OrderId("ORD-15"),
+                     issuedOn = Date("2026-01-05"), dueOn = Date("2026-07-02"),
+                     net = Amount(16.0m), tax = Amount(0.0m), gross = Amount(16.0m) }
+         , Invoice { no = InvoiceNo("INV-2026-000016"), orderId = OrderId("ORD-16"),
+                     issuedOn = Date("2026-01-05"), dueOn = Date("2026-07-01"),
+                     net = Amount(32.0m), tax = Amount(0.0m), gross = Amount(32.0m) }
+         , Invoice { no = InvoiceNo("INV-2026-000017"), orderId = OrderId("ORD-17"),
+                     issuedOn = Date("2026-01-05"), dueOn = Date("2026-06-02"),
+                     net = Amount(64.0m), tax = Amount(0.0m), gross = Amount(64.0m) }
+         , Invoice { no = InvoiceNo("INV-2026-000018"), orderId = OrderId("ORD-18"),
+                     issuedOn = Date("2026-01-05"), dueOn = Date("2026-06-01"),
+                     net = Amount(128.0m), tax = Amount(0.0m), gross = Amount(128.0m) }
+         ], Date("2026-08-01"), Amount(2000.0m))
+            -> AgeingReport { current = Amount(5.0m), overdue30 = Amount(24.0m),
+                              overdue60 = Amount(96.0m), worstDaysLate = 61,
+                              exposure = Amount(255.0m) }
+    | "past the last band, or due more than ten years out, an invoice is in no bucket but is still exposure" :
+        ([ Invoice { no = InvoiceNo("INV-2026-000019"), orderId = OrderId("ORD-19"),
+                     issuedOn = Date("2026-01-05"), dueOn = Date("2036-09-17"),
+                     net = Amount(256.0m), tax = Amount(0.0m), gross = Amount(256.0m) }
+         , Invoice { no = InvoiceNo("INV-2026-000020"), orderId = OrderId("ORD-20"),
+                     issuedOn = Date("2026-01-05"), dueOn = Date("2026-05-03"),
+                     net = Amount(512.0m), tax = Amount(0.0m), gross = Amount(512.0m) }
+         , Invoice { no = InvoiceNo("INV-2026-000021"), orderId = OrderId("ORD-21"),
+                     issuedOn = Date("2026-01-05"), dueOn = Date("2026-08-01"),
+                     net = Amount(4.0m), tax = Amount(0.0m), gross = Amount(4.0m) }
+         ], Date("2026-08-01"), Amount(1000.0m))
+            -> AgeingReport { current = Amount(4.0m), overdue30 = Amount(0.0m),
+                              overdue60 = Amount(0.0m), worstDaysLate = 90,
+                              exposure = Amount(772.0m) }
+    | "a credit limit of nothing exposes nothing, however much is outstanding" :
+        ([ Invoice { no = InvoiceNo("INV-2026-000022"), orderId = OrderId("ORD-22"),
+                     issuedOn = Date("2026-01-05"), dueOn = Date("2026-08-24"),
+                     net = Amount(990.0m), tax = Amount(0.0m), gross = Amount(990.0m) }
+         ], Date("2026-08-01"), Amount(0.0m))
+            -> AgeingReport { current = Amount(990.0m), overdue30 = Amount(0.0m),
+                              overdue60 = Amount(0.0m), worstDaysLate = 0,
+                              exposure = Amount(0.0m) }
 
 // === issueCreditNote: a correction is a document of its own ===
 // An invoice states an amount on a day, and a mistake does not make that statement un-made: the
@@ -508,6 +632,27 @@ example issueCreditNote
             -> ExceedsInvoice { against = InvoiceNo("INV-2026-000042"),
                                 alreadyCredited = Amount(330.0m), remaining = Amount(16.0m),
                                 asked = Amount(55.0m) }
+    | "earlier notes count whatever their reason" :
+        (julyInvoice
+        , [ CreditNote { no = InvoiceNo("INV-2026-000043"), against = InvoiceNo("INV-2026-000042"),
+                         issuedOn = Date("2026-08-03"), reason = Returned,
+                         net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) }
+          , CreditNote { no = InvoiceNo("INV-2026-000044"), against = InvoiceNo("INV-2026-000042"),
+                         issuedOn = Date("2026-08-05"), reason = AgreedDiscount,
+                         net = Amount(50.0m), tax = Amount(5.0m), gross = Amount(55.0m) } ]
+        , PriceError, Amount(20.0m), Amount(2.0m), Date("2026-08-10"), 45)
+            -> CreditNote { no = InvoiceNo("INV-2026-000045"), against = InvoiceNo("INV-2026-000042"),
+                            issuedOn = Date("2026-08-10"), reason = PriceError,
+                            net = Amount(20.0m), tax = Amount(2.0m), gross = Amount(22.0m) }
+    | "notes that already credit more than the invoice leave nothing remaining, not a negative" :
+        (julyInvoice
+        , [ CreditNote { no = InvoiceNo("INV-2026-000043"), against = InvoiceNo("INV-2026-000042"),
+                         issuedOn = Date("2026-08-03"), reason = PriceError,
+                         net = Amount(360.0m), tax = Amount(40.0m), gross = Amount(400.0m) } ]
+        , PriceError, Amount(50.0m), Amount(5.0m), Date("2026-08-10"), 44)
+            -> ExceedsInvoice { against = InvoiceNo("INV-2026-000042"),
+                                alreadyCredited = Amount(400.0m), remaining = Amount(0.0m),
+                                asked = Amount(55.0m) }
 
 example netOfCredits
     | "an invoice with no credit notes owes what it states" : (julyInvoice, []) -> Amount(346.0m)
@@ -517,3 +662,18 @@ example netOfCredits
                          issuedOn = Date("2026-08-03"), reason = PriceError,
                          net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) } ])
             -> Amount(236.0m)
+    | "notes of every reason come off alike" :
+        (julyInvoice
+        , [ CreditNote { no = InvoiceNo("INV-2026-000043"), against = InvoiceNo("INV-2026-000042"),
+                         issuedOn = Date("2026-08-03"), reason = Returned,
+                         net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) }
+          , CreditNote { no = InvoiceNo("INV-2026-000044"), against = InvoiceNo("INV-2026-000042"),
+                         issuedOn = Date("2026-08-05"), reason = AgreedDiscount,
+                         net = Amount(50.0m), tax = Amount(5.0m), gross = Amount(55.0m) } ])
+            -> Amount(181.0m)
+    | "credits past the invoice owe nothing, not a negative" :
+        (julyInvoice
+        , [ CreditNote { no = InvoiceNo("INV-2026-000043"), against = InvoiceNo("INV-2026-000042"),
+                         issuedOn = Date("2026-08-03"), reason = PriceError,
+                         net = Amount(360.0m), tax = Amount(40.0m), gross = Amount(400.0m) } ])
+            -> Amount(0.0m)

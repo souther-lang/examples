@@ -108,6 +108,13 @@ example planPicks
             , total = 200000, highValue = true }
         , [ (Sku("apple"), Location("A-03-12")) ])
             -> NothingToShip
+    | "an order that is not high value is walked the same way" :
+        (PricedCart { items =
+            [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 } ]
+            , total = 300, highValue = false }
+        , [ (Sku("apple"), Location("A-03-12")) ])
+            -> PickList { lines =
+                [ PickLine { sku = Sku("apple"), quantity = 2, location = Location("A-03-12") } ] }
 
 // === splitPicks: what ships today and what waits ===
 // Allocation says the order as a whole fits (inventory.allocate); a pick can still find a shelf
