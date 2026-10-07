@@ -348,6 +348,22 @@ example tierOf
     | "one short of a thousand is mid-market" : (betaAccount) -> MidMarket
     | "under a hundred is small business, and a domain may be missing" : (gammaAccount)
         -> SmallBusiness
+    | "a financial partner of five thousand is enterprise" :
+        (Account { ...acmeAccount, industry = Financial, accountType = Partner, employees = EmployeeCount(5000) })
+        -> Enterprise
+    | "a healthcare competitor of five hundred is mid-market" :
+        (Account { ...acmeAccount, industry = Healthcare, accountType = Competitor
+                 , employees = EmployeeCount(500) })
+        -> MidMarket
+    | "a hundred people is the first of mid-market" :
+        (Account { ...acmeAccount, industry = Education, employees = EmployeeCount(100) })
+        -> MidMarket
+    | "a public sector body of fifty is small business" :
+        (Account { ...acmeAccount, industry = PublicSector, employees = EmployeeCount(50) })
+        -> SmallBusiness
+    | "one person is the smallest account there is" :
+        (Account { ...acmeAccount, name = CompanyName("x"), owner = UserId("x"), employees = EmployeeCount(1) })
+        -> SmallBusiness
 
 // === LeadSource: the attribution hierarchy ===
 // Salesforce's LeadSource is a flat picklist, which is why attribution in a real org lives in a
@@ -451,6 +467,25 @@ let acmeWorking = WorkingLead
 
 let acmeDisqualified = DisqualifiedLead
     { ...acmeWorking, disqualifiedOn = Date("2026-07-20"), reason = NoBudget }
+
+// One lead for each other way a lead can arrive, and each of the ways it can be reached. A rule that reads
+// the source reads it at both levels of the sum, and one that is indifferent to it is still handed every
+// kind, so these are the leads the rows of this module are stated against besides `acmeNew`.
+let newViaPhone = NewLead { ...acmeNew, source = PhoneInquiry, title = None, reach = PhoneOnly { phone = PhoneNumber("+81-3-1234-5678") } }
+let newViaChat = NewLead { ...acmeNew, source = ChatRequest, reach = EmailAndPhone { email = EmailAddress("cto@acme.example.com"), phone = PhoneNumber("+81-3-1234-5678") } }
+let newViaPartner = NewLead { ...acmeNew, source = PartnerReferral { partner = AccountId("001000000000009") } }
+let newViaEmployee = NewLead { ...acmeNew, source = EmployeeReferral { employee = UserId("u-007") } }
+let newViaList = NewLead { ...acmeNew, source = PurchasedList { vendor = CompanyName("ListCo") } }
+let newViaTradeShow = NewLead { ...acmeNew, source = TradeShow { campaign = CampaignName("Q3 Expo") } }
+let newViaCold = NewLead { ...acmeNew, source = ColdOutreach }
+
+let workingViaPhone = WorkingLead { ...newViaPhone, firstTouchedOn = Date("2026-07-03"), touches = 3 }
+let workingViaChat = WorkingLead { ...newViaChat, firstTouchedOn = Date("2026-07-03"), touches = 3 }
+let workingViaPartner = WorkingLead { ...newViaPartner, firstTouchedOn = Date("2026-07-03"), touches = 3 }
+let workingViaEmployee = WorkingLead { ...newViaEmployee, firstTouchedOn = Date("2026-07-03"), touches = 3 }
+let workingViaList = WorkingLead { ...newViaList, firstTouchedOn = Date("2026-07-03"), touches = 3 }
+let workingViaTradeShow = WorkingLead { ...newViaTradeShow, firstTouchedOn = Date("2026-07-03"), touches = 3 }
+let workingViaCold = WorkingLead { ...newViaCold, firstTouchedOn = Date("2026-07-03"), touches = 3 }
 
 // The three accounts. Their employee counts are the tier boundaries, beta is the domain a duplicate row
 // hits, and gamma has no domain on file at all — which is what makes it the account a domain rule can
@@ -560,6 +595,48 @@ example recordTouch
     | "a touch dated before the lead existed is reported, not stored" :
         (acmeNew, Date("2026-06-30"))
         -> TouchBeforeCreation
+    | "a first touch on the day the lead was created counts, for a phone inquiry" :
+        (newViaPhone, Date("2026-07-01"))
+        -> WorkingLead { ...newViaPhone, firstTouchedOn = Date("2026-07-01"), touches = 1 }
+    | "a first touch a week before a chat request was created is reported, not stored" :
+        (newViaChat, Date("2026-06-25"))
+        -> TouchBeforeCreation
+    | "a first touch on a lead from PartnerReferral works it" :
+        (newViaPartner, Date("2026-07-07"))
+        -> WorkingLead { ...newViaPartner, firstTouchedOn = Date("2026-07-07"), touches = 1 }
+    | "a first touch on a lead from EmployeeReferral works it" :
+        (newViaEmployee, Date("2026-07-08"))
+        -> WorkingLead { ...newViaEmployee, firstTouchedOn = Date("2026-07-08"), touches = 1 }
+    | "a first touch on a lead from PurchasedList works it" :
+        (newViaList, Date("2026-07-09"))
+        -> WorkingLead { ...newViaList, firstTouchedOn = Date("2026-07-09"), touches = 1 }
+    | "a first touch on a lead from TradeShow works it" :
+        (newViaTradeShow, Date("2026-07-10"))
+        -> WorkingLead { ...newViaTradeShow, firstTouchedOn = Date("2026-07-10"), touches = 1 }
+    | "a first touch on a lead from ColdOutreach works it" :
+        (newViaCold, Date("2026-07-11"))
+        -> WorkingLead { ...newViaCold, firstTouchedOn = Date("2026-07-11"), touches = 1 }
+    | "a later touch on the day the lead was created counts, for a phone inquiry" :
+        (workingViaPhone, Date("2026-07-01"))
+        -> WorkingLead { ...workingViaPhone, touches = 4 }
+    | "a touch a day before a worked chat request was created is reported" :
+        (workingViaChat, Date("2026-06-30"))
+        -> TouchBeforeCreation
+    | "a touch a week before a worked partner referral was created is reported too" :
+        (workingViaPartner, Date("2026-06-24"))
+        -> TouchBeforeCreation
+    | "a later touch on a worked lead from EmployeeReferral counts up" :
+        (workingViaEmployee, Date("2026-07-13"))
+        -> WorkingLead { ...workingViaEmployee, touches = 4 }
+    | "a later touch on a worked lead from PurchasedList counts up" :
+        (workingViaList, Date("2026-07-14"))
+        -> WorkingLead { ...workingViaList, touches = 4 }
+    | "a later touch on a worked lead from TradeShow counts up" :
+        (workingViaTradeShow, Date("2026-07-15"))
+        -> WorkingLead { ...workingViaTradeShow, touches = 4 }
+    | "a later touch on a worked lead from ColdOutreach counts up" :
+        (workingViaCold, Date("2026-07-16"))
+        -> WorkingLead { ...workingViaCold, touches = 4 }
 
 // === scoreLead: the MQL score, read at the outer level of LeadSource ===
 // Inbound leads score highest because they came to you; a purchased list scores lowest because anybody
@@ -577,7 +654,7 @@ behavior scoreLead : (lead: OpenLead, priority: CampaignName) -> LeadScore
     constructs LeadScore
 
 let scoreLead (lead, priority) =
-    LeadScore(Int.clamp(0, 100,
+    LeadScore(Int.min(100,
         sourceBand(sourceOf(lead))
             + touchesOf(lead) * 5
             + (if Set.contains(priority, campaignsOf(lead)) then 25 else 0)))
@@ -599,6 +676,54 @@ example scoreLead
                      , touches = 20
                      }, CampaignName("Q3 Expo"))
         -> LeadScore(100)
+    | "an untouched lead from WebForm in the priority campaign scores 35" :
+        (acmeNew, CampaignName("Q3 Expo"))
+        -> LeadScore(35)
+    | "an untouched lead from PhoneInquiry outside the priority campaign scores 10" :
+        (NewLead { ...newViaPhone, campaigns = [ CampaignName("Newsletter") ] }, CampaignName("Q3 Expo"))
+        -> LeadScore(10)
+    | "an untouched lead from ChatRequest in the priority campaign scores 35" :
+        (newViaChat, CampaignName("Q3 Expo"))
+        -> LeadScore(35)
+    | "an untouched lead from PartnerReferral in the priority campaign scores 55" :
+        (newViaPartner, CampaignName("Q3 Expo"))
+        -> LeadScore(55)
+    | "an untouched lead from EmployeeReferral outside the priority campaign scores 30" :
+        (NewLead { ...newViaEmployee, campaigns = [ CampaignName("Newsletter") ] }, CampaignName("Q3 Expo"))
+        -> LeadScore(30)
+    | "an untouched lead from PurchasedList in the priority campaign scores 30" :
+        (newViaList, CampaignName("Q3 Expo"))
+        -> LeadScore(30)
+    | "an untouched lead from TradeShow outside the priority campaign scores 5" :
+        (NewLead { ...newViaTradeShow, campaigns = [ CampaignName("Newsletter") ] }, CampaignName("Q3 Expo"))
+        -> LeadScore(5)
+    | "an untouched lead from ColdOutreach in the priority campaign scores 30" :
+        (newViaCold, CampaignName("Q3 Expo"))
+        -> LeadScore(30)
+    | "a worked (1 touches) lead from WebForm outside the priority campaign scores 15" :
+        (WorkingLead { ...acmeWorking, touches = 1, campaigns = [ CampaignName("Newsletter") ] }, CampaignName("Q3 Expo"))
+        -> LeadScore(15)
+    | "a worked (2 touches) lead from PhoneInquiry in the priority campaign scores 45" :
+        (WorkingLead { ...workingViaPhone, touches = 2 }, CampaignName("Q3 Expo"))
+        -> LeadScore(45)
+    | "a worked (3 touches) lead from ChatRequest outside the priority campaign scores 25" :
+        (WorkingLead { ...workingViaChat, touches = 3, campaigns = [ CampaignName("Newsletter") ] }, CampaignName("Q3 Expo"))
+        -> LeadScore(25)
+    | "a worked (4 touches) lead from PartnerReferral outside the priority campaign scores 50" :
+        (WorkingLead { ...workingViaPartner, touches = 4, campaigns = [ CampaignName("Newsletter") ] }, CampaignName("Q3 Expo"))
+        -> LeadScore(50)
+    | "a worked (5 touches) lead from EmployeeReferral in the priority campaign scores 80" :
+        (WorkingLead { ...workingViaEmployee, touches = 5 }, CampaignName("Q3 Expo"))
+        -> LeadScore(80)
+    | "a worked (6 touches) lead from PurchasedList outside the priority campaign scores 35" :
+        (WorkingLead { ...workingViaList, touches = 6, campaigns = [ CampaignName("Newsletter") ] }, CampaignName("Q3 Expo"))
+        -> LeadScore(35)
+    | "a worked (7 touches) lead from TradeShow in the priority campaign scores 65" :
+        (WorkingLead { ...workingViaTradeShow, touches = 7 }, CampaignName("Q3 Expo"))
+        -> LeadScore(65)
+    | "a worked (8 touches) lead from ColdOutreach outside the priority campaign scores 45" :
+        (WorkingLead { ...workingViaCold, touches = 8, campaigns = [ CampaignName("Newsletter") ] }, CampaignName("Q3 Expo"))
+        -> LeadScore(45)
 
 // === attributionOf: the same sum, opened to the leaf ===
 // Marketing has to charge every lead home. A referral credits a person or a partner account, an outbound
@@ -643,6 +768,15 @@ example attributionOf
     | "an inbound web form has nobody to credit either" :
         (WebForm)
         -> NoAttribution
+    | "a phone inquiry has nobody to credit" :
+        (PhoneInquiry)
+        -> NoAttribution
+    | "nor does a chat request" :
+        (ChatRequest)
+        -> NoAttribution
+    | "a purchased list charges the vendor" :
+        (PurchasedList { vendor = CompanyName("x") })
+        -> VendorCost { vendor = CompanyName("x") }
 
 // === qualifyLead ===
 // Sixty is the MQL bar. The score arrives raw so that the threshold can be a business outcome: the
@@ -656,7 +790,7 @@ let qualifyLead (lead, on, rawScore, budgetConfirmed) = {
     guard rawScore >= 60 else ScoreBelowThreshold
     QualifiedLead { ...lead
                   , qualifiedOn = on
-                  , score = LeadScore(Int.clamp(0, 100, rawScore))
+                  , score = LeadScore(Int.min(100, rawScore))
                   , budgetConfirmed = budgetConfirmed
                   }
 }
@@ -668,6 +802,33 @@ example qualifyLead
     | "fifty-nine does not, and says which side of the bar it fell" :
         (acmeWorking, Date("2026-07-15"), 59, true)
         -> ScoreBelowThreshold
+    | "a worked lead from PhoneInquiry with a score of 61 qualifies at 61" :
+        (workingViaPhone, Date("2026-07-15"), 61, true)
+        -> QualifiedLead { ...workingViaPhone, qualifiedOn = Date("2026-07-15"), score = LeadScore(61)
+                         , budgetConfirmed = true }
+    | "a worked lead from ChatRequest with a score of 150 qualifies at 100" :
+        (workingViaChat, Date("2026-07-15"), 150, false)
+        -> QualifiedLead { ...workingViaChat, qualifiedOn = Date("2026-07-15"), score = LeadScore(100)
+                         , budgetConfirmed = false }
+    | "a worked lead from PartnerReferral with a score of 60 qualifies at 60" :
+        (workingViaPartner, Date("2026-07-15"), 60, true)
+        -> QualifiedLead { ...workingViaPartner, qualifiedOn = Date("2026-07-15"), score = LeadScore(60)
+                         , budgetConfirmed = true }
+    | "a worked lead from EmployeeReferral with a score of 40 is below the bar" :
+        (workingViaEmployee, Date("2026-07-15"), 40, false)
+        -> ScoreBelowThreshold
+    | "a worked lead from PurchasedList with a score of 80 qualifies at 80" :
+        (workingViaList, Date("2026-07-15"), 80, true)
+        -> QualifiedLead { ...workingViaList, qualifiedOn = Date("2026-07-15"), score = LeadScore(80)
+                         , budgetConfirmed = true }
+    | "a worked lead from TradeShow with a score of 99 qualifies at 99" :
+        (workingViaTradeShow, Date("2026-07-15"), 99, false)
+        -> QualifiedLead { ...workingViaTradeShow, qualifiedOn = Date("2026-07-15"), score = LeadScore(99)
+                         , budgetConfirmed = false }
+    | "a worked lead from ColdOutreach with a score of 100 qualifies at 100" :
+        (workingViaCold, Date("2026-07-15"), 100, true)
+        -> QualifiedLead { ...workingViaCold, qualifiedOn = Date("2026-07-15"), score = LeadScore(100)
+                         , budgetConfirmed = true }
 
 // === disqualifyLead and the nurture plan ===
 // Disqualifying takes a WorkingLead, not an OpenLead: a lead nobody has looked at has not been
@@ -680,6 +841,37 @@ behavior disqualifyLead : (lead: WorkingLead, on: Date, reason: DisqualifyReason
 
 let disqualifyLead (lead, on, reason) =
     DisqualifiedLead { ...lead, disqualifiedOn = on, reason = reason }
+
+example disqualifyLead
+    | "a bant failure is recorded with the day it was found" :
+        (acmeWorking, Date("2026-07-20"), NoNeed)
+        -> DisqualifiedLead { ...acmeWorking, disqualifiedOn = Date("2026-07-20"), reason = NoNeed }
+    | "a duplicate says which lead it duplicates" :
+        (workingViaPhone, Date("2026-07-21"), DuplicateOf { existing = LeadId("00Q000000000009") })
+        -> DisqualifiedLead { ...workingViaPhone, disqualifiedOn = Date("2026-07-21")
+                            , reason = DuplicateOf { existing = LeadId("00Q000000000009") } }
+    | "a partner referral with no budget" :
+        (workingViaPartner, Date("2026-07-23"), NoBudget)
+        -> DisqualifiedLead { ...workingViaPartner, disqualifiedOn = Date("2026-07-23"), reason = NoBudget }
+    | "an employee referral with nobody who can sign" :
+        (workingViaEmployee, Date("2026-07-24"), NoAuthority)
+        -> DisqualifiedLead { ...workingViaEmployee, disqualifiedOn = Date("2026-07-24"), reason = NoAuthority }
+    | "a purchased list lead that said to come back in the autumn" :
+        (workingViaList, Date("2026-07-25"), BadTiming { revisitAfter = Date("2026-10-01") })
+        -> DisqualifiedLead { ...workingViaList, disqualifiedOn = Date("2026-07-25")
+                            , reason = BadTiming { revisitAfter = Date("2026-10-01") } }
+    | "a trade show lead that was a duplicate of another" :
+        (workingViaTradeShow, Date("2026-07-26"), DuplicateOf { existing = LeadId("00Q000000000008") })
+        -> DisqualifiedLead { ...workingViaTradeShow, disqualifiedOn = Date("2026-07-26")
+                            , reason = DuplicateOf { existing = LeadId("00Q000000000008") } }
+    | "a cold outreach lead tried seven times" :
+        (workingViaCold, Date("2026-07-27"), Unreachable { attempts = 7 })
+        -> DisqualifiedLead { ...workingViaCold, disqualifiedOn = Date("2026-07-27")
+                            , reason = Unreachable { attempts = 7 } }
+    | "a lead that could not be reached says how many times it was tried" :
+        (workingViaChat, Date("2026-07-22"), Unreachable { attempts = 1 })
+        -> DisqualifiedLead { ...workingViaChat, disqualifiedOn = Date("2026-07-22")
+                            , reason = Unreachable { attempts = 1 } }
 
 data RevisitOn = { on: Date }
 
@@ -709,6 +901,27 @@ example nurturePlan
     | "a duplicate never comes back" :
         (DisqualifiedLead { ...acmeDisqualified, reason = DuplicateOf { existing = LeadId("00Q000000000009") } })
         -> NoRevisit
+    | "a lead from a phone inquiry that lacked authority comes back in a quarter" :
+        (DisqualifiedLead { ...workingViaPhone, disqualifiedOn = Date("2026-07-20"), reason = NoAuthority })
+        -> RevisitOn { on = Date("2026-10-20") }
+    | "a lead from a chat request that lacked need does not come back" :
+        (DisqualifiedLead { ...workingViaChat, disqualifiedOn = Date("2026-07-20"), reason = NoNeed })
+        -> NoRevisit
+    | "a partner referral that could not be reached in its one attempt does not come back" :
+        (DisqualifiedLead { ...workingViaPartner, disqualifiedOn = Date("2026-07-20"), reason = Unreachable { attempts = 1 } })
+        -> NoRevisit
+    | "an employee referral tried four times does not come back" :
+        (DisqualifiedLead { ...workingViaEmployee, disqualifiedOn = Date("2026-07-20"), reason = Unreachable { attempts = 4 } })
+        -> NoRevisit
+    | "a purchased list lead with no budget comes back in half a year" :
+        (DisqualifiedLead { ...workingViaList, disqualifiedOn = Date("2026-07-20"), reason = NoBudget })
+        -> RevisitOn { on = Date("2027-01-20") }
+    | "a trade show lead with bad timing comes back when it said" :
+        (DisqualifiedLead { ...workingViaTradeShow, disqualifiedOn = Date("2026-07-20"), reason = BadTiming { revisitAfter = Date("2026-12-01") } })
+        -> RevisitOn { on = Date("2026-12-01") }
+    | "a cold outreach duplicate does not come back" :
+        (DisqualifiedLead { ...workingViaCold, disqualifiedOn = Date("2026-07-20"), reason = DuplicateOf { existing = LeadId("00Q000000000009") } })
+        -> NoRevisit
 
 // One business operation in two behaviors: disqualify, then decide whether this lead is worth coming
 // back to. The routing is by type, so nothing here names an intermediate variable. An exposed
@@ -719,6 +932,21 @@ example disqualifyAndNurture
     | "no budget disqualifies and comes back in half a year" :
         (acmeWorking, Date("2026-07-20"), NoBudget)
         -> RevisitOn { on = Date("2027-01-20") }
+    | "lacking authority comes back in a quarter" :
+        (acmeWorking, Date("2026-07-20"), NoAuthority)
+        -> RevisitOn { on = Date("2026-10-20") }
+    | "lacking need does not come back" :
+        (acmeWorking, Date("2026-07-20"), NoNeed)
+        -> NoRevisit
+    | "bad timing comes back on the date it names" :
+        (acmeWorking, Date("2026-07-20"), BadTiming { revisitAfter = Date("2026-12-01") })
+        -> RevisitOn { on = Date("2026-12-01") }
+    | "a duplicate does not come back" :
+        (acmeWorking, Date("2026-07-20"), DuplicateOf { existing = LeadId("00Q000000000009") })
+        -> NoRevisit
+    | "a lead that could not be reached does not come back" :
+        (acmeWorking, Date("2026-07-20"), Unreachable { attempts = 3 })
+        -> NoRevisit
 
 // === Duplicate screening: two rules, two match keys ===
 // Salesforce's standard duplicate rules match Lead-to-Account on the email *domain* and Lead-to-Contact
@@ -735,13 +963,13 @@ let emailOf (reach: ContactPoint): List<EmailAddress> =
         | PhoneOnly               -> []
 
 // The domain part of an address, lowercased. The construction is attempted, so what decides whether
-// this is a domain name is DomainName's own invariant rather than a copy of it written here. A local
-// part with no dot in it — a@b — leaves nothing to work with, and dropping it is the answer: an
-// address whose domain is not one matches no account.
+// this is a domain name is DomainName's own invariant rather than a copy of it written here. An address
+// has exactly one `@`, so what follows the first part is the domain and there is nothing to look up. One
+// whose domain is not a domain name — a label that starts with a dash — leaves nothing to work with, and
+// dropping it is the answer: it matches no account.
 let domainOf (email: EmailAddress): List<DomainName> =
-    match List.get(1, String.split("@", String.lowercase(email.value))) with
-        | Some d -> if DomainName(d) as name then [ name ] else []
-        | None   -> []
+    List.flatMap(d -> if DomainName(d) as name then [ name ] else [],
+                 List.drop(1, String.split("@", String.lowercase(email.value))))
 
 let domainsOf (reach: ContactPoint): List<DomainName> =
     List.flatMap(e -> domainOf(e), emailOf(reach))
@@ -782,10 +1010,10 @@ behavior screenForDuplicates : (lead: NewLead, accounts: AccountBook, contacts: 
 let screenForDuplicates (lead, accounts, contacts) = {
     guard List.length(emailOf(lead.reach)) >= 1 else NoEmailOnLead
 
-    // Two accounts can sit on one domain, so the ids are made distinct: the rule is "which accounts",
-    // not "how many rows matched".
-    let matchedAccounts = List.distinct(List.map(a -> a.id, domainMatches(lead.reach, accounts)))
-    let matchedContacts = List.distinct(List.map(c -> c.id, emailMatches(lead.reach, contacts)))
+    // Two accounts can sit on one domain, and both are named. A book holds one row per id, so no account
+    // is named twice.
+    let matchedAccounts = List.map(a -> a.id, domainMatches(lead.reach, accounts))
+    let matchedContacts = List.map(c -> c.id, emailMatches(lead.reach, contacts))
 
     guard List.length(matchedAccounts) + List.length(matchedContacts) >= 1 else NoDuplicate
     PossibleDuplicate { accounts = matchedAccounts, contacts = matchedContacts }
@@ -838,6 +1066,28 @@ example linkLeadToAccount
     | "a lead reachable only by phone has no key to match on" :
         (NewLead { ...acmeNew, reach = PhoneOnly { phone = PhoneNumber("+81-3-9999-0000") } })
         -> NoEmailOnLead
+    | "a phone-only lead has no key to match on, whatever it asked for" :
+        (newViaPhone)
+        -> NoEmailOnLead
+    | "a chat request reachable both ways is looked up by its address, and nobody has that domain" :
+        (newViaChat)
+        -> UnmatchedLead
+    | "a partner referral on a domain the lookup knows is linked to that account" :
+        (NewLead { ...newViaPartner, reach = EmailOnly { email = EmailAddress("h@beta.example.com") } })
+        -> MatchedAccount { leadId = LeadId("00Q000000000001"), accountId = AccountId("001000000000002") }
+    | "an address whose domain is not one has nothing to look up" :
+        (NewLead { ...newViaEmployee, reach = EmailOnly { email = EmailAddress("x@-bad.example.com") } })
+        -> NoEmailOnLead
+    | "a purchased list lead nobody has on file is unmatched" :
+        (newViaList)
+        -> UnmatchedLead
+    | "a trade show lead reachable both ways on a known domain is linked" :
+        (NewLead { ...newViaTradeShow
+                 , reach = EmailAndPhone { email = EmailAddress("h@beta.example.com"), phone = PhoneNumber("+81-3-1234-5678") } })
+        -> MatchedAccount { leadId = LeadId("00Q000000000001"), accountId = AccountId("001000000000002") }
+    | "a cold outreach lead on an unknown domain is unmatched" :
+        (newViaCold)
+        -> UnmatchedLead
 
 // === Conversion ===
 // Salesforce's conversion screen is an opportunity name and an amount plus a "do not create an
