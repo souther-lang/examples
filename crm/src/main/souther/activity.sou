@@ -69,7 +69,8 @@ import example.crm ( AccountId, ContactId, LeadId, UserId )
 import example.pipeline ( OpportunityId, OpenOpportunity
                         , Prospecting, Qualification, NeedsAnalysis, ValueProposition
                         , IdDecisionMakers, PerceptionAnalysis, ProposalPriceQuote, NegotiationReview
-                        , acmeInNegotiation )
+                        , acme, acmeQualified, acmeDiscovered, acmeValued, acmeIdentified
+                        , acmeChampioned, acmeQuoted, acmeInNegotiation )
 
 // === Values ===
 
@@ -220,6 +221,40 @@ let followUpMeeting = Meeting
     , minutes = DurationMinutes(30)
     }
 
+// The same account's other ways of being the subject: through one of its opportunities, and through a lead
+// that has no account at all. Each of the three kinds has one of each, and the calls cover the three ways a
+// call can fail to be a touch.
+let viaOpportunity = RelatedToOpportunity { opportunityId = OpportunityId("006000000000001")
+                                          , accountId = AccountId("001000000000101") }
+let viaLead        = RelatedToLead { leadId = LeadId("00Q000000000001") }
+
+let voicemail = CallTask
+    { ...introCall, id = ActivityId("00T000000000011"), subject = Subject("Voicemail")
+    , related = viaOpportunity, dueOn = Date("2026-07-10"), outcome = LeftVoicemail }
+let noAnswerCall = CallTask
+    { ...introCall, id = ActivityId("00T000000000012"), subject = Subject("No answer")
+    , related = viaLead, dueOn = Date("2026-07-12"), outcome = NoAnswer }
+let wrongNumberCall = CallTask
+    { ...introCall, id = ActivityId("00T000000000013"), subject = Subject("Wrong number")
+    , dueOn = Date("2026-07-28"), outcome = WrongNumber }
+
+let openedDeck = EmailTask
+    { ...unopenedDeck, id = ActivityId("00T000000000014"), subject = Subject("Opened deck")
+    , related = RelatedToOpportunity { opportunityId = OpportunityId("006000000000001")
+                                     , accountId = AccountId("001000000000102") }
+    , sentOn = Date("2026-07-30"), opened = true }
+let leadEmail = EmailTask
+    { ...unopenedDeck, id = ActivityId("00T000000000015"), subject = Subject("Lead email")
+    , related = viaLead, sentOn = Date("2026-07-15") }
+
+let opportunityWorkshop = Meeting
+    { ...workshop, id = ActivityId("00T000000000016"), subject = Subject("Deal review")
+    , related = viaOpportunity, startAt = DateTime("2026-07-24T09:30:00") }
+let leadWorkshop = Meeting
+    { ...workshop, id = ActivityId("00T000000000017"), subject = Subject("Lead demo")
+    , related = viaLead, startAt = DateTime("2026-07-14T16:00:00")
+    , attendees = Attendees(Set.fromList([ ContactId("003000000000300") ])) }
+
 // === scheduleMeeting ===
 // Two attempted constructions in one behavior, over two different kinds of newtype: a range on an Int
 // and a non-empty on a Set. Both rules are things a booking form gets wrong every day, so both are
@@ -261,6 +296,23 @@ example scheduleMeeting
     | "a meeting with nobody in it is not a meeting" :
         (MeetingDraft { ...discoveryDraft, attendees = [ ] }, 60)
         -> NoAttendees
+    | "a full working day is the longest a meeting can be" :
+        (MeetingDraft { ...discoveryDraft, related = viaOpportunity
+                      , attendees = [ ContactId("003000000000100"), ContactId("003000000000200") ] }, 480)
+        -> Meeting { id = ActivityId("00T000000000001"), subject = Subject("Discovery call")
+                   , owner = UserId("u-001"), related = viaOpportunity
+                   , startAt = DateTime("2026-07-28T10:00:00"), minutes = DurationMinutes(480)
+                   , attendees = Attendees(Set.fromList([ ContactId("003000000000100")
+                                                        , ContactId("003000000000200") ])) }
+    | "a minute past it is not" :
+        (discoveryDraft, 481)
+        -> DurationOutOfRange
+    | "a meeting about a lead books like any other" :
+        (MeetingDraft { ...discoveryDraft, related = viaLead }, 45)
+        -> Meeting { id = ActivityId("00T000000000001"), subject = Subject("Discovery call")
+                   , owner = UserId("u-001"), related = viaLead
+                   , startAt = DateTime("2026-07-28T10:00:00"), minutes = DurationMinutes(45)
+                   , attendees = Attendees(Set.fromList([ ContactId("003000000000100") ])) }
 
 // === touchCount: what counts as having reached somebody ===
 // A dialled number that rang out is not a touch, and an email nobody opened is not one either. The rule is
@@ -469,6 +521,13 @@ example touchCount
          , unopenedDeck
          , workshop ])
         -> TouchSummary { connectedCalls = 1, openedEmails = 0, meetings = 1, touches = 2 }
+    | "whatever an activity is about, it is a touch by what it is: five touches out of the ten" :
+        ([ introCall, voicemail, noAnswerCall, wrongNumberCall, unopenedDeck, openedDeck, leadEmail
+         , workshop, opportunityWorkshop, leadWorkshop ])
+        -> TouchSummary { connectedCalls = 1, openedEmails = 1, meetings = 3, touches = 5 }
+    | "nothing logged is no touches" :
+        ([ ])
+        -> TouchSummary { connectedCalls = 0, openedEmails = 0, meetings = 0, touches = 0 }
 
 example lastActivityOn
     | "recency is measured from the latest of the three kinds, whichever kind that is" :
@@ -477,6 +536,16 @@ example lastActivityOn
     | "an account nobody has touched has no recency, which is not a recency of zero" :
         ([ ], Date("2026-07-30"))
         -> NeverTouched
+    | "a single activity today is a recency of nought days" :
+        ([ introCall ], Date("2026-07-20"))
+        -> Recency { lastOn = Date("2026-07-20"), daysSince = 0 }
+    | "an email sent after every call and meeting is the latest touch, opened or not" :
+        ([ introCall, voicemail, noAnswerCall, wrongNumberCall, unopenedDeck, openedDeck, leadEmail
+         , workshop, opportunityWorkshop, leadWorkshop ], Date("2026-08-05"))
+        -> Recency { lastOn = Date("2026-07-30"), daysSince = 6 }
+    | "an unopened email is still the last thing that happened" :
+        ([ introCall, unopenedDeck ], Date("2026-07-30"))
+        -> Recency { lastOn = Date("2026-07-22"), daysSince = 8 }
 
 example multiThreaded
     | "the same person in two rooms is one person" :
@@ -485,6 +554,35 @@ example multiThreaded
     | "two people across two rooms is a deal with more than one thread" :
         ([ workshop
          , Meeting { ...followUpMeeting, attendees = Attendees([ ContactId("003000000000200") ]) } ])
+        -> Coverage { contacts = [ ContactId("003000000000100"), ContactId("003000000000200") ]
+                    , count = 2, singleThreaded = false }
+    | "rooms about the deal and about a lead count the same, by who was in them" :
+        ([ workshop, opportunityWorkshop, leadWorkshop ])
+        -> Coverage { contacts = [ ContactId("003000000000100"), ContactId("003000000000300") ]
+                    , count = 2, singleThreaded = false }
+    | "no meetings is no threads at all" :
+        ([ ])
+        -> Coverage { contacts = [ ], count = 0, singleThreaded = true }
+
+example sharedAttendees
+    | "the person in both rooms is who they have in common, and one is a single thread" :
+        (workshop, followUpMeeting)
+        -> Coverage { contacts = [ ContactId("003000000000100") ], count = 1, singleThreaded = true }
+    | "a room about a deal and another about the same deal share who was in both" :
+        (opportunityWorkshop, Meeting { ...followUpMeeting, related = viaOpportunity })
+        -> Coverage { contacts = [ ContactId("003000000000100") ], count = 1, singleThreaded = true }
+    | "a room about a lead shares nothing with one about an account's deal" :
+        (leadWorkshop, workshop)
+        -> Coverage { contacts = [ ], count = 0, singleThreaded = true }
+    | "two rooms with nobody in common share nothing" :
+        (workshop, leadWorkshop)
+        -> Coverage { contacts = [ ], count = 0, singleThreaded = true }
+    | "two people in both rooms is a deal with a second thread" :
+        (Meeting { ...workshop, attendees = Attendees(Set.fromList([ ContactId("003000000000100")
+                                                                   , ContactId("003000000000200") ])) },
+         Meeting { ...followUpMeeting, attendees = Attendees(Set.fromList([ ContactId("003000000000100")
+                                                                          , ContactId("003000000000200")
+                                                                          , ContactId("003000000000300") ])) })
         -> Coverage { contacts = [ ContactId("003000000000100"), ContactId("003000000000200") ]
                     , count = 2, singleThreaded = false }
 
@@ -499,7 +597,35 @@ example staleAccounts
                     , dueOn = Date("2026-07-02") } ],
          Date("2026-07-30"), CadenceDays(14))
         -> StaleReport { daysSince = [ (AccountId("001000000000100"), 5) ], stale = [ ] }
+    // Three accounts: one reached directly and by its opportunity's calls, one only through an opportunity,
+    // and one only by an email that was opened. The freshest touch of the first is a wrong number, written
+    // before the older call it beats and after the older one it does not.
+    | "each account is as stale as its freshest touch, and only the ones past the cadence are reported" :
+        ([ wrongNumberCall, introCall, voicemail, noAnswerCall, unopenedDeck, openedDeck, leadEmail
+         , workshop, opportunityWorkshop, leadWorkshop ],
+         Date("2026-08-01"), CadenceDays(14))
+        -> StaleReport { daysSince = [ (AccountId("001000000000100"), 4)
+                                     , (AccountId("001000000000101"), 8)
+                                     , (AccountId("001000000000102"), 2) ]
+                       , stale = [ ] }
+    | "an account whose freshest touch is as old as the cadence is stale" :
+        ([ introCall, voicemail, openedDeck ], Date("2026-08-01"), CadenceDays(22))
+        -> StaleReport { daysSince = [ (AccountId("001000000000100"), 12)
+                                     , (AccountId("001000000000101"), 22)
+                                     , (AccountId("001000000000102"), 2) ]
+                       , stale = [ AccountId("001000000000101") ] }
+    | "a cadence of a day makes anything a day old stale" :
+        ([ introCall ], Date("2026-07-21"), CadenceDays(1))
+        -> StaleReport { daysSince = [ (AccountId("001000000000100"), 1) ]
+                       , stale = [ AccountId("001000000000100") ] }
+    | "a cadence of ninety days is the longest there is" :
+        ([ introCall ], Date("2026-10-18"), CadenceDays(90))
+        -> StaleReport { daysSince = [ (AccountId("001000000000100"), 90) ]
+                       , stale = [ AccountId("001000000000100") ] }
 
+// A step for each open stage, at the cadence that stage is worked at. The days since the last touch are
+// chosen to sit at the cadence itself for some stages, which is still on time, and one past it for others,
+// which is not.
 example nextStepFor
     | "a deal in negotiation is worked every other day, and the step says what to do" :
         (acmeInNegotiation,
@@ -510,3 +636,70 @@ example nextStepFor
         (acmeInNegotiation,
          Recency { lastOn = Date("2026-09-03"), daysSince = 7 }, Date("2026-09-10"))
         -> Overdue
+    | "a prospect is worked every two weeks" :
+        (acme, Recency { lastOn = Date("2026-09-07"), daysSince = 3 }, Date("2026-09-10"))
+        -> NextStep { description = Subject("Call to confirm there is a project and a budget holder")
+                    , dueOn = Date("2026-09-21") }
+    | "a qualified deal touched a week ago is due today" :
+        (acmeQualified, Recency { lastOn = Date("2026-09-03"), daysSince = 7 }, Date("2026-09-10"))
+        -> NextStep { description = Subject("Book a discovery call and write down what hurts")
+                    , dueOn = Date("2026-09-10") }
+    | "a deal in discovery touched today has a week" :
+        (acmeDiscovered, Recency { lastOn = Date("2026-09-10"), daysSince = 0 }, Date("2026-09-10"))
+        -> NextStep { description = Subject("Send the business case against the recorded needs")
+                    , dueOn = Date("2026-09-17") }
+    | "a deal with a business case touched a week ago is due today" :
+        (acmeValued, Recency { lastOn = Date("2026-09-03"), daysSince = 7 }, Date("2026-09-10"))
+        -> NextStep { description = Subject("Ask who else has to agree, by name")
+                    , dueOn = Date("2026-09-10") }
+    | "a deal with a business case untouched for eight days is overdue" :
+        (acmeValued, Recency { lastOn = Date("2026-09-02"), daysSince = 8 }, Date("2026-09-10"))
+        -> Overdue
+    | "once the decision makers are identified the cadence is five days" :
+        (acmeIdentified, Recency { lastOn = Date("2026-09-08"), daysSince = 2 }, Date("2026-09-10"))
+        -> NextStep { description = Subject("Meet the sponsor and ask what would stop this")
+                    , dueOn = Date("2026-09-13") }
+    | "a deal with a champion touched five days ago is due today" :
+        (acmeChampioned, Recency { lastOn = Date("2026-09-05"), daysSince = 5 }, Date("2026-09-10"))
+        -> NextStep { description = Subject("Send the quote with the risks answered in it")
+                    , dueOn = Date("2026-09-10") }
+    | "a quoted deal is chased every three days" :
+        (acmeQuoted, Recency { lastOn = Date("2026-09-09"), daysSince = 1 }, Date("2026-09-10"))
+        -> NextStep { description = Subject("Chase the quote and ask what is missing from it")
+                    , dueOn = Date("2026-09-12") }
+    | "a quoted deal left for four days is overdue" :
+        (acmeQuoted, Recency { lastOn = Date("2026-09-06"), daysSince = 4 }, Date("2026-09-10"))
+        -> Overdue
+    | "a prospect left for fifteen days is overdue" :
+        (acme, Recency { lastOn = Date("2026-08-26"), daysSince = 15 }, Date("2026-09-10"))
+        -> Overdue
+    | "a negotiation touched two days ago is due today" :
+        (acmeInNegotiation, Recency { lastOn = Date("2026-09-08"), daysSince = 2 }, Date("2026-09-10"))
+        -> NextStep { description = Subject("Agree the last point and put a signature date on it")
+                    , dueOn = Date("2026-09-10") }
+
+// The meetings of one owner, summed by day: the other owner's meeting on the same day and the calls and
+// emails are not part of the load.
+example dayLoadOf
+    | "the owner's meetings on one day add up, and another owner's are not theirs" :
+        ([ workshop
+         , Meeting { ...workshop, id = ActivityId("00T000000000021"), startAt = DateTime("2026-07-23T15:00:00")
+                   , minutes = DurationMinutes(45) }
+         , followUpMeeting
+         , Meeting { ...workshop, id = ActivityId("00T000000000022"), owner = UserId("u-002")
+                   , minutes = DurationMinutes(120) }
+         , introCall, unopenedDeck ],
+         UserId("u-001"))
+        -> DayLoad { minutesPerDay = [ (Date("2026-07-23"), 135), (Date("2026-07-25"), 30) ]
+                   , busiestMinutes = 135 }
+    | "calls and emails of every kind are no load" :
+        ([ introCall, voicemail, noAnswerCall, wrongNumberCall, unopenedDeck, openedDeck, leadEmail ],
+         UserId("u-001"))
+        -> DayLoad { minutesPerDay = [ ], busiestMinutes = 0 }
+    | "a meeting about a lead is load on its day like any other" :
+        ([ Meeting { ...workshop, id = ActivityId("00T000000000023"), related = viaLead } ],
+         UserId("u-001"))
+        -> DayLoad { minutesPerDay = [ (Date("2026-07-23"), 90) ], busiestMinutes = 90 }
+    | "an owner with no meetings has a load of nought" :
+        ([ introCall, unopenedDeck ], UserId("u-001"))
+        -> DayLoad { minutesPerDay = [ ], busiestMinutes = 0 }
