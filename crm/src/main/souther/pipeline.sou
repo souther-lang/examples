@@ -135,7 +135,14 @@ module example.pipeline exposing (
 import example.crm ( AccountId, ContactId, UserId, CompanyName, Amount, CurrencyCode
                    , LeadConverted, NoOpportunity, OpportunityRequested
                    , QualifiedLead, ConversionRequest, AccountBook, ContactBook
-                   , ConversionBlocked, BlockReason, convertLead )
+                   , ConversionBlocked, BlockReason, BudgetNotConfirmed, convertLead
+                   , ConvertedLead, Account, Contact, DomainName, PersonName, JobTitle
+                   , EmployeeCount, Technology, Prospect, Manufacturing, Financial, Retail, Healthcare
+                   , Education, PublicSector, Customer, Partner, Competitor
+                   , EmailOnly, EmailAndPhone, PhoneOnly, EmailAddress, PhoneNumber
+                   , PhoneInquiry, ChatRequest, PartnerReferral, EmployeeReferral, PurchasedList
+                   , TradeShow, ColdOutreach, CampaignName
+                   , acmeQualifiedLead, conversionRequest, noAccounts, noContacts )
 
 // === Values ===
 
@@ -502,10 +509,106 @@ let acmeLost = ClosedLost
     , stageAtLoss = StageName("Negotiation/Review")
     }
 
-// Two rows, not ten. A state is the type here, so a fixture is the whole state — and the ten mappings are
-// held together by the matches being exhaustive rather than by ten rows repeating what the match already
-// says. What the rows pin is the shape of the answer at both ends of the pipeline: the earliest open stage
-// and the closed one that weighs nothing.
+// The two stages the chain above leaves out. `acmeIdentified` is `acmeValued` once the people who can say
+// yes are named, and `acmeWon` is the quote closed at less than it asked.
+let acmeIdentified = IdDecisionMakers
+    { ...acmeValued, decisionMakers = DecisionMakers(Set.fromList([ ContactId("003000000000200") ])) }
+
+let acmeWon = ClosedWon
+    { ...acmeQuoted, closedOn = Date("2026-09-20"), wonAmount = Amount(4500000.00m) }
+
+// The converted lead `openFromLead` reads: the account, contact and request of `crm`'s conversion row, as
+// the conversion answers them.
+let acmeConverted = LeadConverted
+    { lead = ConvertedLead { ...acmeQualifiedLead
+                           , convertedOn = Date("2026-07-20")
+                           , accountId = AccountId("001000000000100")
+                           , contactId = ContactId("003000000000100")
+                           }
+    , account = Account { id = AccountId("001000000000100")
+                        , name = CompanyName("Acme Corp")
+                        , domain = DomainName("acme.example.com")
+                        , industry = Technology
+                        , employees = EmployeeCount(420)
+                        , accountType = Prospect
+                        , owner = UserId("u-001")
+                        , currency = CurrencyCode("JPY")
+                        }
+    , contact = Contact { id = ContactId("003000000000100")
+                        , accountId = AccountId("001000000000100")
+                        , name = PersonName("Aoyagi")
+                        , title = JobTitle("CTO")
+                        , reach = acmeQualifiedLead.reach
+                        }
+    , intent = OpportunityRequested { amount = Amount(4800000.00m), closeDate = Date("2026-09-30") }
+    }
+
+// The books conversion is checked against, with one account for every industry and every kind of account,
+// and one contact for every way of being reached. None of them is on the lead's domain or address, so none
+// blocks the conversion: they are there to be read and passed over.
+let otherAccounts = AccountBook(
+    [ Account { ...acmeConverted.account, id = AccountId("001000000000201"), domain = DomainName("beta.example.com")
+              , industry = Manufacturing, accountType = Customer { since = Date("2024-04-01") } }
+    , Account { ...acmeConverted.account, id = AccountId("001000000000202"), domain = DomainName("gamma.example.com")
+              , industry = Financial, accountType = Partner }
+    , Account { ...acmeConverted.account, id = AccountId("001000000000203"), domain = None
+              , industry = Retail, accountType = Competitor }
+    , Account { ...acmeConverted.account, id = AccountId("001000000000204"), domain = DomainName("delta.example.com")
+              , industry = Healthcare }
+    , Account { ...acmeConverted.account, id = AccountId("001000000000205"), domain = DomainName("epsilon.example.com")
+              , industry = Education }
+    , Account { ...acmeConverted.account, id = AccountId("001000000000206"), domain = DomainName("zeta.example.com")
+              , industry = PublicSector }
+    , Account { ...acmeConverted.account, id = AccountId("001000000000207"), domain = DomainName("eta.example.com") } ])
+
+let otherContacts = ContactBook(
+    [ Contact { ...acmeConverted.contact, id = ContactId("003000000000301"), title = None
+              , reach = PhoneOnly { phone = PhoneNumber("+81-3-0000-0001") } }
+    , Contact { ...acmeConverted.contact, id = ContactId("003000000000302")
+              , reach = EmailOnly { email = EmailAddress("cfo@beta.example.com") } }
+    , Contact { ...acmeConverted.contact, id = ContactId("003000000000303")
+              , reach = EmailAndPhone { email = EmailAddress("coo@gamma.example.com")
+                                      , phone = PhoneNumber("+81-3-0000-0003") } } ])
+
+// One row per stage for each of the two readings of a stage that other contexts ask for, because each is
+// a ten-arm match and a row is what shows an arm answers what Salesforce ships.
+example probabilityOf
+    | "a deal nobody has qualified is at ten" : (acme) -> Probability(10)
+    | "qualifying does not move it" : (acmeQualified) -> Probability(10)
+    | "a recorded need is twenty" : (acmeDiscovered) -> Probability(20)
+    | "a business case is fifty" : (acmeValued) -> Probability(50)
+    | "the people who can say yes are sixty" : (acmeIdentified) -> Probability(60)
+    | "a champion among them is seventy" : (acmeChampioned) -> Probability(70)
+    | "a quote on the table is seventy-five" : (acmeQuoted) -> Probability(75)
+    | "a walk-away price is ninety" : (acmeInNegotiation) -> Probability(90)
+    | "a won deal is a hundred" : (acmeWon) -> Probability(100)
+    | "a lost deal is zero" : (acmeLost) -> Probability(0)
+    | "a deal lost on competitor is still zero" : (ClosedLost { ...acmeLost, reason = CompetitorLoss { competitor = CompanyName("Rival KK") } }) -> Probability(0)
+    | "a deal lost on incumbent is still zero" : (ClosedLost { ...acmeLost, reason = IncumbentRetained { incumbent = CompanyName("Legacy Systems Co") } }) -> Probability(0)
+    | "a deal lost on no budget is still zero" : (ClosedLost { ...acmeLost, reason = NoBudget }) -> Probability(0)
+    | "a deal lost on no decision is still zero" : (ClosedLost { ...acmeLost, reason = NoDecision { lastContactOn = Date("2026-08-01") } }) -> Probability(0)
+    | "a deal lost on price is still zero" : (ClosedLost { ...acmeLost, reason = PriceLoss { gapToBudget = Amount(200000.00m) } }) -> Probability(0)
+
+example categoryOf
+    | "a deal nobody has qualified is pipeline" : (acme) -> Pipeline
+    | "a qualified deal is still pipeline" : (acmeQualified) -> Pipeline
+    | "a recorded need is pipeline" : (acmeDiscovered) -> Pipeline
+    | "a business case is pipeline" : (acmeValued) -> Pipeline
+    | "the people who can say yes make it best case" : (acmeIdentified) -> BestCase
+    | "a champion among them is best case" : (acmeChampioned) -> BestCase
+    | "a quote on the table is best case" : (acmeQuoted) -> BestCase
+    | "a walk-away price makes it commit" : (acmeInNegotiation) -> Commit
+    | "a won deal is closed" : (acmeWon) -> Closed
+    | "a lost deal is omitted" : (acmeLost) -> Omitted
+    | "a deal lost on competitor is still omitted" : (ClosedLost { ...acmeLost, reason = CompetitorLoss { competitor = CompanyName("Rival KK") } }) -> Omitted
+    | "a deal lost on incumbent is still omitted" : (ClosedLost { ...acmeLost, reason = IncumbentRetained { incumbent = CompanyName("Legacy Systems Co") } }) -> Omitted
+    | "a deal lost on no budget is still omitted" : (ClosedLost { ...acmeLost, reason = NoBudget }) -> Omitted
+    | "a deal lost on no decision is still omitted" : (ClosedLost { ...acmeLost, reason = NoDecision { lastContactOn = Date("2026-08-01") } }) -> Omitted
+    | "a deal lost on price is still omitted" : (ClosedLost { ...acmeLost, reason = PriceLoss { gapToBudget = Amount(200000.00m) } }) -> Omitted
+
+// Ten rows, one per stage, because the picklist spellings are written twice in this file and only a row
+// compares them with what Salesforce ships. A state is the type here, so a fixture is the whole state — and
+// the ten mappings are otherwise held together by the matches being exhaustive.
 example profileOf
     | "the first stage is pipeline at ten, and it is not closed" :
         (acme)
@@ -513,6 +616,58 @@ example profileOf
                         , category = Pipeline, isClosed = false }
     | "a lost deal is omitted from the forecast at zero, and it is closed" :
         (acmeLost)
+        -> StageProfile { stage = StageName("Closed Lost"), probability = Probability(0)
+                        , category = Omitted, isClosed = true }
+    | "a qualified deal is still ten percent" :
+        (acmeQualified)
+        -> StageProfile { stage = StageName("Qualification"), probability = Probability(10)
+                        , category = Pipeline, isClosed = false }
+    | "a recorded need is twenty percent" :
+        (acmeDiscovered)
+        -> StageProfile { stage = StageName("Needs Analysis"), probability = Probability(20)
+                        , category = Pipeline, isClosed = false }
+    | "a business case is fifty percent" :
+        (acmeValued)
+        -> StageProfile { stage = StageName("Value Proposition"), probability = Probability(50)
+                        , category = Pipeline, isClosed = false }
+    | "identified decision makers move a deal to best case" :
+        (acmeIdentified)
+        -> StageProfile { stage = StageName("Id. Decision Makers"), probability = Probability(60)
+                        , category = BestCase, isClosed = false }
+    | "a champion is seventy percent" :
+        (acmeChampioned)
+        -> StageProfile { stage = StageName("Perception Analysis"), probability = Probability(70)
+                        , category = BestCase, isClosed = false }
+    | "a quote is seventy-five percent" :
+        (acmeQuoted)
+        -> StageProfile { stage = StageName("Proposal/Price Quote"), probability = Probability(75)
+                        , category = BestCase, isClosed = false }
+    | "a negotiation is a commit at ninety" :
+        (acmeInNegotiation)
+        -> StageProfile { stage = StageName("Negotiation/Review"), probability = Probability(90)
+                        , category = Commit, isClosed = false }
+    | "a won deal is closed at a hundred" :
+        (acmeWon)
+        -> StageProfile { stage = StageName("Closed Won"), probability = Probability(100)
+                        , category = Closed, isClosed = true }
+    | "a deal lost on competitor is closed at zero, whatever the reason" :
+        (ClosedLost { ...acmeLost, reason = CompetitorLoss { competitor = CompanyName("Rival KK") } })
+        -> StageProfile { stage = StageName("Closed Lost"), probability = Probability(0)
+                        , category = Omitted, isClosed = true }
+    | "a deal lost on incumbent is closed at zero, whatever the reason" :
+        (ClosedLost { ...acmeLost, reason = IncumbentRetained { incumbent = CompanyName("Legacy Systems Co") } })
+        -> StageProfile { stage = StageName("Closed Lost"), probability = Probability(0)
+                        , category = Omitted, isClosed = true }
+    | "a deal lost on no budget is closed at zero, whatever the reason" :
+        (ClosedLost { ...acmeLost, reason = NoBudget })
+        -> StageProfile { stage = StageName("Closed Lost"), probability = Probability(0)
+                        , category = Omitted, isClosed = true }
+    | "a deal lost on no decision is closed at zero, whatever the reason" :
+        (ClosedLost { ...acmeLost, reason = NoDecision { lastContactOn = Date("2026-08-01") } })
+        -> StageProfile { stage = StageName("Closed Lost"), probability = Probability(0)
+                        , category = Omitted, isClosed = true }
+    | "a deal lost on price is closed at zero, whatever the reason" :
+        (ClosedLost { ...acmeLost, reason = PriceLoss { gapToBudget = Amount(200000.00m) } })
         -> StageProfile { stage = StageName("Closed Lost"), probability = Probability(0)
                         , category = Omitted, isClosed = true }
 
@@ -546,6 +701,86 @@ let openFromLead (converted, nextOpportunityId) =
                 , openedOn = converted.lead.convertedOn
                 }
 
+// The id comes from outside, so the rows are given the one a sequence would hand out first.
+fake nextOpportunityId
+    | () -> OpportunityId("006000000000001")
+
+example openFromLead
+    | "a conversion that asked for an opportunity opens a prospecting deal on the new account" :
+        (acmeConverted)
+        -> acme
+    | "a conversion that asked for none opens nothing" :
+        (LeadConverted { ...acmeConverted, intent = NoOpportunity })
+        -> NoOpportunityRequested
+    // What the deal is opened from is the account, the date and the request. The lead's own source, the
+    // account's industry and type, and how either of them can be reached are carried by the conversion and
+    // are not read here, so the rows below change them while the answer follows the fields that are read.
+    | "a phone-only lead of a customer with no website opens the deal for that account's owner" :
+        (LeadConverted
+            { ...acmeConverted
+            , lead = ConvertedLead { ...acmeConverted.lead, title = None, source = PhoneInquiry
+                                   , reach = PhoneOnly { phone = PhoneNumber("+81-3-1234-5678") } }
+            , account = Account { ...acmeConverted.account, domain = None, industry = Manufacturing
+                                , accountType = Customer { since = Date("2024-04-01") }
+                                , owner = UserId("u-002") }
+            , contact = Contact { ...acmeConverted.contact, title = None
+                                , reach = PhoneOnly { phone = PhoneNumber("+81-3-1234-5678") } }
+            })
+        -> Prospecting { ...acme, owner = UserId("u-002") }
+    | "a chat request from a partner's account opens the deal in the account's currency" :
+        (LeadConverted
+            { ...acmeConverted
+            , lead = ConvertedLead { ...acmeConverted.lead, source = ChatRequest
+                                   , reach = EmailAndPhone { email = EmailAddress("cto@acme.example.com")
+                                                           , phone = PhoneNumber("+81-3-1234-5678") } }
+            , account = Account { ...acmeConverted.account, industry = Financial, accountType = Partner
+                                , currency = CurrencyCode("USD") }
+            , contact = Contact { ...acmeConverted.contact
+                                , reach = EmailAndPhone { email = EmailAddress("cto@acme.example.com")
+                                                        , phone = PhoneNumber("+81-3-1234-5678") } }
+            })
+        -> Prospecting { ...acme, currency = CurrencyCode("USD") }
+    | "the deal is named for the account, whoever referred the lead" :
+        (LeadConverted
+            { ...acmeConverted
+            , lead = ConvertedLead { ...acmeConverted.lead
+                                   , source = PartnerReferral { partner = AccountId("001000000000009") } }
+            , account = Account { ...acmeConverted.account, name = CompanyName("Beta KK")
+                                , industry = Retail, accountType = Competitor }
+            })
+        -> Prospecting { ...acme, name = OpportunityName("Beta KK — New Business") }
+    | "an employee referral opens the deal for the amount asked" :
+        (LeadConverted
+            { ...acmeConverted
+            , lead = ConvertedLead { ...acmeConverted.lead
+                                   , source = EmployeeReferral { employee = UserId("u-007") } }
+            , account = Account { ...acmeConverted.account, industry = Healthcare }
+            , intent = OpportunityRequested { amount = Amount(100000.00m), closeDate = Date("2026-12-31") }
+            })
+        -> Prospecting { ...acme, amount = Amount(100000.00m), closeDate = Date("2026-12-31") }
+    | "a purchased list lead is opened on the day it was converted" :
+        (LeadConverted
+            { ...acmeConverted
+            , lead = ConvertedLead { ...acmeConverted.lead, convertedOn = Date("2026-08-03")
+                                   , source = PurchasedList { vendor = CompanyName("ListCo") } }
+            , account = Account { ...acmeConverted.account, industry = Education }
+            })
+        -> Prospecting { ...acme, openedOn = Date("2026-08-03") }
+    | "a trade show lead opens the deal like any other" :
+        (LeadConverted
+            { ...acmeConverted
+            , lead = ConvertedLead { ...acmeConverted.lead
+                                   , source = TradeShow { campaign = CampaignName("Q3 Expo") } }
+            , account = Account { ...acmeConverted.account, industry = PublicSector }
+            })
+        -> acme
+    | "a cold outreach lead opens the deal like any other" :
+        (LeadConverted
+            { ...acmeConverted
+            , lead = ConvertedLead { ...acmeConverted.lead, source = ColdOutreach }
+            })
+        -> acme
+
 // === convertAndOpen: conversion, across the seam, as one operation ===
 // A conversion makes an account, a contact AND an opportunity. Making two of the three is a
 // data-integrity bug, so the rule has to be stated somewhere that can refuse all three at once — and
@@ -572,6 +807,71 @@ let convertAndOpen (lead, request, accounts, contacts, openFromLead) =
     match convertLead(lead, request, accounts, contacts) with
         | LeadConverted as converted -> openFromLead(converted)
         | ConversionBlocked as blocked -> ConversionRefused { reasons = blocked.reasons }
+
+example convertAndOpen
+    | "a clean conversion that asked for an opportunity opens one, from the account it just made" :
+        (acmeQualifiedLead, conversionRequest, noAccounts, noContacts)
+        with openFromLead = acme
+        -> acme
+    | "a conversion that asked for none files the account and the contact and opens nothing" :
+        (acmeQualifiedLead, ConversionRequest { ...conversionRequest, intent = NoOpportunity },
+         noAccounts, noContacts)
+        with openFromLead = NoOpportunityRequested
+        -> NoOpportunityRequested
+    | "a conversion crm blocks is refused here with crm's reasons, and nothing is opened" :
+        (QualifiedLead { ...acmeQualifiedLead, budgetConfirmed = false },
+         conversionRequest, noAccounts, noContacts)
+        with openFromLead = NoOpportunityRequested
+        -> ConversionRefused { reasons = [ BudgetNotConfirmed ] }
+    // Whoever the lead is, and whatever the request says the account is, a conversion that is not blocked
+    // goes on to openFromLead. What its answer is built from is openFromLead's own business, pinned by its
+    // rows, so these rows hold the stand-in's answer and show that none of the lead's or the books' fields
+    // diverts the conversion on the way.
+    | "a phone inquiry with no title, from a customer already on file, is converted" :
+        (QualifiedLead { ...acmeQualifiedLead, title = None, source = PhoneInquiry
+                       , reach = PhoneOnly { phone = PhoneNumber("+81-3-1234-5678") } },
+         ConversionRequest { ...conversionRequest, accountType = Customer { since = Date("2024-04-01") }
+                           , industry = Manufacturing },
+         otherAccounts, otherContacts)
+        with openFromLead = Prospecting { ...acme, owner = UserId("u-002") }
+        -> Prospecting { ...acme, owner = UserId("u-002") }
+    | "a chat request reachable both ways, from a partner, is converted" :
+        (QualifiedLead { ...acmeQualifiedLead, source = ChatRequest
+                       , reach = EmailAndPhone { email = EmailAddress("cto@acme.example.com"), phone = PhoneNumber("+81-3-1234-5678") } },
+         ConversionRequest { ...conversionRequest, accountType = Partner, industry = Financial },
+         noAccounts, noContacts)
+        with openFromLead = acme
+        -> acme
+    | "a partner referral from a competitor's account is converted" :
+        (QualifiedLead { ...acmeQualifiedLead, source = PartnerReferral { partner = AccountId("001000000000009") } },
+         ConversionRequest { ...conversionRequest, accountType = Competitor, industry = Retail },
+         noAccounts, noContacts)
+        with openFromLead = Prospecting { ...acme, amount = Amount(100000.00m) }
+        -> Prospecting { ...acme, amount = Amount(100000.00m) }
+    | "an employee referral from a healthcare prospect is converted" :
+        (QualifiedLead { ...acmeQualifiedLead, source = EmployeeReferral { employee = UserId("u-007") } },
+         ConversionRequest { ...conversionRequest, industry = Healthcare },
+         noAccounts, noContacts)
+        with openFromLead = acme
+        -> acme
+    | "a purchased list lead from an education prospect is converted" :
+        (QualifiedLead { ...acmeQualifiedLead, source = PurchasedList { vendor = CompanyName("ListCo") } },
+         ConversionRequest { ...conversionRequest, industry = Education },
+         noAccounts, noContacts)
+        with openFromLead = Prospecting { ...acme, currency = CurrencyCode("USD") }
+        -> Prospecting { ...acme, currency = CurrencyCode("USD") }
+    | "a trade show lead from a public sector prospect is converted" :
+        (QualifiedLead { ...acmeQualifiedLead, source = TradeShow { campaign = CampaignName("Q3 Expo") } },
+         ConversionRequest { ...conversionRequest, industry = PublicSector },
+         noAccounts, noContacts)
+        with openFromLead = acme
+        -> acme
+    | "a cold outreach lead is converted, and nothing asked for is nothing opened" :
+        (QualifiedLead { ...acmeQualifiedLead, source = ColdOutreach },
+         ConversionRequest { ...conversionRequest, intent = NoOpportunity, industry = Technology },
+         noAccounts, noContacts)
+        with openFromLead = NoOpportunityRequested
+        -> NoOpportunityRequested
 
 // === The transitions ===
 // Each one takes the exact stage it advances from. There is no stage argument, no stage check, and no way
@@ -617,6 +917,9 @@ example recordNeeds
     | "a form full of whitespace records nothing, and discovery is not over" :
         (acmeQualified, [ "  ", "" ])
         -> NoNeedsRecorded
+    | "a single one-character need is enough to be discovered" :
+        (acmeQualified, [ "x" ])
+        -> NeedsAnalysis { ...acmeQualified, needs = Needs([ PainPoint("x") ]) }
 
 // A business case that answers none of the recorded needs is a pitch, not a business case. The rule is
 // the one a sales methodology actually states, and it is checkable because the needs are in the state.
@@ -639,6 +942,28 @@ let proposeValue (opp, businessCase, criteria) = {
         }
 }
 
+example proposeValue
+    | "a business case that restates a need is a business case, and the criteria are trimmed" :
+        (acmeDiscovered, "  Invoicing takes three days today; automation removes them  ",
+         [ "total cost", "   ", " support " ])
+        -> ValueProposition { ...acmeDiscovered
+                            , businessCase = BusinessCase("Invoicing takes three days today; automation removes them")
+                            , criteria = [ DecisionCriterion("total cost"), DecisionCriterion("support") ]
+                            }
+    | "a business case that answers none of the needs is a pitch" :
+        (acmeDiscovered, "We are the market leader", [ "total cost" ])
+        -> BusinessCaseMissesNeeds
+    | "a blank business case answers nothing" :
+        (acmeDiscovered, "   ", [ "total cost" ])
+        -> BusinessCaseMissesNeeds
+    | "the shortest need and the shortest case that answers it make the shortest deal" :
+        (NeedsAnalysis { ...acmeDiscovered, needs = Needs([ PainPoint("x") ]) }, "x", [ "y" ])
+        -> ValueProposition { ...acmeDiscovered
+                            , needs = Needs([ PainPoint("x") ])
+                            , businessCase = BusinessCase("x")
+                            , criteria = [ DecisionCriterion("y") ]
+                            }
+
 // A deal nobody can say yes to cannot advance. The set is attempted, so what answers "nobody" is
 // DecisionMakers' own non-empty invariant, asked of the set the ids actually make.
 behavior identifyDecisionMakers : (opp: ValueProposition, ids: List<ContactId>)
@@ -650,6 +975,20 @@ let identifyDecisionMakers (opp, ids) = {
 
     IdDecisionMakers { ...opp, decisionMakers = makers }
 }
+
+example identifyDecisionMakers
+    | "one person who can say yes is enough" :
+        (acmeValued, [ ContactId("003000000000200") ])
+        -> acmeIdentified
+    | "naming the same person twice is still one decision maker, and a second person makes two" :
+        (acmeValued, [ ContactId("003000000000200"), ContactId("003000000000201"), ContactId("003000000000200") ])
+        -> IdDecisionMakers { ...acmeValued
+                            , decisionMakers = DecisionMakers(Set.fromList([ ContactId("003000000000200")
+                                                                           , ContactId("003000000000201") ]))
+                            }
+    | "nobody named is nobody who can say yes" :
+        (acmeValued, [ ])
+        -> NoDecisionMakers
 
 // The champion has to be one of the people who can say yes. A champion outside that set is the classic
 // single-threaded deal, and naming it as a case is the cheapest thing this model does for a sales team.
@@ -667,6 +1006,17 @@ let assessPerception (opp, champion, risks) = {
         }
 }
 
+example assessPerception
+    | "a champion among the decision makers moves the deal on, with the risks trimmed and blanks dropped" :
+        (acmeIdentified, ContactId("003000000000200"), [ "  security review  ", "   " ])
+        -> acmeChampioned
+    | "a champion nobody has identified as a decision maker is a single-threaded deal" :
+        (acmeIdentified, ContactId("003000000000999"), [ "security review" ])
+        -> ChampionNotADecisionMaker
+    | "the shortest risk is still a risk" :
+        (acmeIdentified, ContactId("003000000000200"), [ "x" ])
+        -> PerceptionAnalysis { ...acmeChampioned, risks = [ PerceivedRisk("x") ] }
+
 // A proposal dated after the close date is a deal that has already missed. The amount the quote states
 // arrives as an Amount and is carried from there: this behavior originates no figure, so it names none in
 // its `constructs`.
@@ -679,6 +1029,24 @@ let sendProposal (opp, number, on, proposed) = {
     ProposalPriceQuote { ...opp, quoteNumber = number, proposedOn = on, proposedAmount = proposed }
 }
 
+example sendProposal
+    | "a proposal sent before the close date is a quote" :
+        (acmeChampioned, QuoteNumber("0Q0000000000001"), Date("2026-08-01"), Amount(4800000.00m))
+        -> acmeQuoted
+    | "a proposal sent on the close date itself is still in time" :
+        (acmeChampioned, QuoteNumber("0Q0000000000002ABC"), Date("2026-09-30"), Amount(4500000.00m))
+        -> ProposalPriceQuote { ...acmeQuoted
+                              , quoteNumber = QuoteNumber("0Q0000000000002ABC")
+                              , proposedOn = Date("2026-09-30")
+                              , proposedAmount = Amount(4500000.00m)
+                              }
+    | "a proposal sent the day after the close date has already missed" :
+        (acmeChampioned, QuoteNumber("0Q0000000000001"), Date("2026-10-01"), Amount(4800000.00m))
+        -> ProposalAfterCloseDate
+    | "a proposal sent a fortnight after the close date has missed it by more" :
+        (acmeChampioned, QuoteNumber("0Q0000000000001"), Date("2026-10-15"), Amount(4800000.00m))
+        -> ProposalAfterCloseDate
+
 // The one transition that goes backwards. Pulling a quote is a real operation, and the type is what makes
 // it honest: PerceptionAnalysis has no quote number and no proposed amount, so the fields the withdrawal
 // invalidates are gone rather than left behind holding stale values. The spread narrows — the extra fields
@@ -687,6 +1055,16 @@ behavior withdrawProposal : (opp: ProposalPriceQuote) -> PerceptionAnalysis
     constructs PerceptionAnalysis
 
 let withdrawProposal (opp) = PerceptionAnalysis { ...opp }
+
+example withdrawProposal
+    | "pulling a quote leaves the deal where it stood before the proposal went out" :
+        (acmeQuoted)
+        -> acmeChampioned
+    | "what is withdrawn is the quote of whichever deal it was" :
+        (ProposalPriceQuote { ...acmeQuoted, id = OpportunityId("006000000000007")
+                            , quoteNumber = QuoteNumber("0Q0000000000007")
+                            , proposedOn = Date("2026-08-10"), proposedAmount = Amount(4700000.00m) })
+        -> PerceptionAnalysis { ...acmeChampioned, id = OpportunityId("006000000000007") }
 
 // Opening a negotiation is stating a walk-away price. The guard discharges NegotiationReview's
 // cross-field invariant, so the state cannot exist with a floor above the ask.
@@ -698,6 +1076,17 @@ let openNegotiation (opp, on, floor) = {
     guard Decimal.compare(floor.value, opp.amount.value) <= 0 else FloorAboveAsk
     NegotiationReview { ...opp, openedNegotiationOn = on, floorAmount = floor }
 }
+
+example openNegotiation
+    | "a walk-away price below the ask opens the negotiation" :
+        (acmeQuoted, Date("2026-09-01"), Amount(4200000.00m))
+        -> acmeInNegotiation
+    | "a walk-away price equal to the ask is allowed, and leaves no room to move" :
+        (acmeQuoted, Date("2026-09-01"), Amount(4800000.00m))
+        -> NegotiationReview { ...acmeInNegotiation, floorAmount = Amount(4800000.00m) }
+    | "a walk-away price above the ask is not a price anybody would walk away from" :
+        (acmeQuoted, Date("2026-09-01"), Amount(4800000.01m))
+        -> FloorAboveAsk
 
 // A deal is won out of a proposal or out of a negotiation, and the difference is exactly what the two
 // states carry: a NegotiationReview has a walk-away price, a ProposalPriceQuote does not. So the discount
@@ -717,6 +1106,20 @@ let closeWon (opp, on, finalAmount) =
             ClosedWon { ...n, closedOn = on, wonAmount = finalAmount }
         }
 
+example closeWon
+    | "a quote has no floor, so it closes at whatever was agreed" :
+        (acmeQuoted, Date("2026-09-20"), Amount(4500000.00m))
+        -> acmeWon
+    | "a negotiation closes above its floor" :
+        (acmeInNegotiation, Date("2026-09-20"), Amount(4500000.00m))
+        -> ClosedWon { ...acmeInNegotiation, closedOn = Date("2026-09-20"), wonAmount = Amount(4500000.00m) }
+    | "a negotiation may close exactly at its floor" :
+        (acmeInNegotiation, Date("2026-09-20"), Amount(4200000.00m))
+        -> ClosedWon { ...acmeInNegotiation, closedOn = Date("2026-09-20"), wonAmount = Amount(4200000.00m) }
+    | "a cent below the floor is refused, with both figures" :
+        (acmeInNegotiation, Date("2026-09-20"), Amount(4199999.99m))
+        -> BelowFloor { floor = Amount(4200000.00m), offered = Amount(4199999.99m) }
+
 // Every open stage spreads OpportunityCommon, so the sum carries that part and the loss is written once
 // rather than per stage. What a win/loss review reads first is the stage the deal was lost at, and it is
 // why ClosedLost carries a StageName rather than the state it came from: the state is gone, the fact of
@@ -726,6 +1129,48 @@ behavior closeLost : (opp: OpenOpportunity, on: Date, reason: LossReason) -> Clo
 
 let closeLost (opp, on, reason) =
     ClosedLost { ...opp, closedOn = on, reason = reason, stageAtLoss = stageNameOf(opp) }
+
+// A row per open stage, because the stage the deal was lost at is the first thing a win/loss review reads
+// and it is the one field here that comes from a ten-arm match. The reasons differ from row to row so a
+// row that put the reason or the stage in the wrong field would not pass for its neighbour.
+example closeLost
+    | "lost before anybody qualified it" :
+        (acme, Date("2026-09-15"), CompetitorLoss { competitor = CompanyName("Rival KK") })
+        -> ClosedLost { ...acme, closedOn = Date("2026-09-15")
+                      , reason = CompetitorLoss { competitor = CompanyName("Rival KK") }
+                      , stageAtLoss = StageName("Prospecting") }
+    | "lost after qualifying, to the incumbent" :
+        (acmeQualified, Date("2026-09-15"), IncumbentRetained { incumbent = CompanyName("Legacy Systems Co") })
+        -> ClosedLost { ...acme, closedOn = Date("2026-09-15")
+                      , reason = IncumbentRetained { incumbent = CompanyName("Legacy Systems Co") }
+                      , stageAtLoss = StageName("Qualification") }
+    | "lost in discovery for want of budget" :
+        (acmeDiscovered, Date("2026-09-15"), NoBudget)
+        -> ClosedLost { ...acme, closedOn = Date("2026-09-15"), reason = NoBudget
+                      , stageAtLoss = StageName("Needs Analysis") }
+    | "lost on a value proposition nobody decided on" :
+        (acmeValued, Date("2026-09-15"), NoDecision { lastContactOn = Date("2026-08-01") })
+        -> ClosedLost { ...acme, closedOn = Date("2026-09-15")
+                      , reason = NoDecision { lastContactOn = Date("2026-08-01") }
+                      , stageAtLoss = StageName("Value Proposition") }
+    | "lost once the decision makers were identified, when the project was cancelled" :
+        (acmeIdentified, Date("2026-09-15"), ProjectCancelled)
+        -> ClosedLost { ...acme, closedOn = Date("2026-09-15"), reason = ProjectCancelled
+                      , stageAtLoss = StageName("Id. Decision Makers") }
+    | "lost on price with a champion on the inside" :
+        (acmeChampioned, Date("2026-09-15"), PriceLoss { gapToBudget = Amount(200000.00m) })
+        -> ClosedLost { ...acme, closedOn = Date("2026-09-15")
+                      , reason = PriceLoss { gapToBudget = Amount(200000.00m) }
+                      , stageAtLoss = StageName("Perception Analysis") }
+    | "lost after the quote went out" :
+        (acmeQuoted, Date("2026-09-15"), NoBudget)
+        -> ClosedLost { ...acme, closedOn = Date("2026-09-15"), reason = NoBudget
+                      , stageAtLoss = StageName("Proposal/Price Quote") }
+    | "lost in negotiation to a rival" :
+        (acmeInNegotiation, Date("2026-09-15"), CompetitorLoss { competitor = CompanyName("Rival KK") })
+        -> ClosedLost { ...acme, closedOn = Date("2026-09-15")
+                      , reason = CompetitorLoss { competitor = CompanyName("Rival KK") }
+                      , stageAtLoss = StageName("Negotiation/Review") }
 
 // === What a loss is followed up with ===
 // The nested sum earns its nesting here: the outer match asks whether somebody else won the deal, and only
@@ -805,6 +1250,36 @@ example slipCloseDate
     | "the same date is not a slip either" :
         (acme, Date("2026-09-30"))
         -> NotASlip
+    // Every open stage can be slipped, and the close date is read off all of them alike. Each row pushes the
+    // date a different distance so a row that read the wrong date would not pass for its neighbour.
+    | "a qualified deal slipped by a day is a slip of one day" :
+        (acmeQualified, Date("2026-10-01"))
+        -> SlipReport { id = OpportunityId("006000000000001"), from = Date("2026-09-30")
+                      , to = Date("2026-10-01"), slippedDays = 1 }
+    | "a deal in discovery slipped to mid-October" :
+        (acmeDiscovered, Date("2026-10-15"))
+        -> SlipReport { id = OpportunityId("006000000000001"), from = Date("2026-09-30")
+                      , to = Date("2026-10-15"), slippedDays = 15 }
+    | "a deal with a business case slipped to the end of November" :
+        (acmeValued, Date("2026-11-30"))
+        -> SlipReport { id = OpportunityId("006000000000001"), from = Date("2026-09-30")
+                      , to = Date("2026-11-30"), slippedDays = 61 }
+    | "a deal with decision makers identified slipped to the end of the year" :
+        (acmeIdentified, Date("2026-12-31"))
+        -> SlipReport { id = OpportunityId("006000000000001"), from = Date("2026-09-30")
+                      , to = Date("2026-12-31"), slippedDays = 92 }
+    | "a deal with a champion slipped into next year" :
+        (acmeChampioned, Date("2027-01-31"))
+        -> SlipReport { id = OpportunityId("006000000000001"), from = Date("2026-09-30")
+                      , to = Date("2027-01-31"), slippedDays = 123 }
+    | "a quoted deal slipped by two days" :
+        (acmeQuoted, Date("2026-10-02"))
+        -> SlipReport { id = OpportunityId("006000000000001"), from = Date("2026-09-30")
+                      , to = Date("2026-10-02"), slippedDays = 2 }
+    | "a deal in negotiation slipped by a month" :
+        (acmeInNegotiation, Date("2026-10-31"))
+        -> SlipReport { id = OpportunityId("006000000000001"), from = Date("2026-09-30")
+                      , to = Date("2026-10-31"), slippedDays = 31 }
 
 // === summarizeWin, and the one composition ===
 // Closing a deal and emitting the record commission and reporting read is one business operation, so the
@@ -821,12 +1296,37 @@ let summarizeWin (won) =
                , daysToClose = Date.daysBetween(won.openedOn, won.closedOn)
                }
 
+example summarizeWin
+    | "the summary carries the amount the deal was won at, not the one it was asked at" :
+        (acmeWon)
+        -> WinSummary { id = OpportunityId("006000000000001")
+                      , owner = UserId("u-001")
+                      , wonAmount = Amount(4500000.00m)
+                      , daysToClose = 62
+                      }
+    | "another deal is summarised with its own owner, amount and days" :
+        (ClosedWon { ...acmeWon, id = OpportunityId("006000000000008"), owner = UserId("u-002")
+                   , openedOn = Date("2026-07-20"), closedOn = Date("2026-08-20")
+                   , wonAmount = Amount(4000000.00m) })
+        -> WinSummary { id = OpportunityId("006000000000008")
+                      , owner = UserId("u-002")
+                      , wonAmount = Amount(4000000.00m)
+                      , daysToClose = 31
+                      }
+
 behavior closeAndSummarize = closeWon >-> summarizeWin
     -> WinSummary | BelowFloor
 
 example closeAndSummarize
     | "a deal closed at or above the floor is summarised" :
         (acmeInNegotiation, Date("2026-09-20"), Amount(4500000.00m))
+        -> WinSummary { id = OpportunityId("006000000000001")
+                      , owner = UserId("u-001")
+                      , wonAmount = Amount(4500000.00m)
+                      , daysToClose = 62
+                      }
+    | "a quote has no floor, so it is summarised at whatever it closed at" :
+        (acmeQuoted, Date("2026-09-20"), Amount(4500000.00m))
         -> WinSummary { id = OpportunityId("006000000000001")
                       , owner = UserId("u-001")
                       , wonAmount = Amount(4500000.00m)
@@ -874,6 +1374,52 @@ let pipelineByStage (opps) = {
         }
 }
 
+// Two deals in one stage, so the second one is added to the first rather than replacing it, and a won deal
+// next to a lost one, so each is weighed by its own amount: what the won deal was won at, what the lost
+// deal was worth.
+example pipelineByStage
+    | "deals are counted and totalled by stage, and the closed ones are not open" :
+        ([ acme, acmeQualified, Qualification { ...acmeQualified, amount = Amount(1000000.00m) }, acmeWon, acmeLost ])
+        -> StageBreakdown
+            { stages = [ StageName("Closed Lost"), StageName("Closed Won"), StageName("Prospecting")
+                       , StageName("Qualification") ]
+            , count = Map.fromList([ (StageName("Closed Lost"), 1), (StageName("Closed Won"), 1)
+                                   , (StageName("Prospecting"), 1), (StageName("Qualification"), 2) ])
+            , total = Map.fromList([ (StageName("Closed Lost"), Amount(1200000.00m))
+                                   , (StageName("Closed Won"), Amount(4500000.00m))
+                                   , (StageName("Prospecting"), Amount(4800000.00m))
+                                   , (StageName("Qualification"), Amount(5800000.00m)) ])
+            , openCount = 3
+            }
+    | "every other stage has its own name, and every kind of loss lands in the one closed-lost stage" :
+        ([ acmeDiscovered, acmeValued, acmeIdentified, acmeChampioned, acmeQuoted, acmeInNegotiation,
+         ClosedLost { ...acmeLost, reason = CompetitorLoss { competitor = CompanyName("Rival KK") } },
+         ClosedLost { ...acmeLost, reason = IncumbentRetained { incumbent = CompanyName("Legacy Systems Co") } },
+         ClosedLost { ...acmeLost, reason = NoBudget },
+         ClosedLost { ...acmeLost, reason = NoDecision { lastContactOn = Date("2026-08-01") } },
+         ClosedLost { ...acmeLost, reason = PriceLoss { gapToBudget = Amount(200000.00m) } } ])
+        -> StageBreakdown
+            { stages = [ StageName("Closed Lost"), StageName("Id. Decision Makers"), StageName("Needs Analysis")
+                       , StageName("Negotiation/Review"), StageName("Perception Analysis")
+                       , StageName("Proposal/Price Quote"), StageName("Value Proposition") ]
+            , count = Map.fromList([ (StageName("Closed Lost"), 5), (StageName("Id. Decision Makers"), 1)
+                                   , (StageName("Needs Analysis"), 1), (StageName("Negotiation/Review"), 1)
+                                   , (StageName("Perception Analysis"), 1)
+                                   , (StageName("Proposal/Price Quote"), 1)
+                                   , (StageName("Value Proposition"), 1) ])
+            , total = Map.fromList([ (StageName("Closed Lost"), Amount(6000000.00m))
+                                   , (StageName("Id. Decision Makers"), Amount(4800000.00m))
+                                   , (StageName("Needs Analysis"), Amount(4800000.00m))
+                                   , (StageName("Negotiation/Review"), Amount(4800000.00m))
+                                   , (StageName("Perception Analysis"), Amount(4800000.00m))
+                                   , (StageName("Proposal/Price Quote"), Amount(4800000.00m))
+                                   , (StageName("Value Proposition"), Amount(4800000.00m)) ])
+            , openCount = 6
+            }
+    | "a pipeline with nothing in it has no stages" :
+        ([ ])
+        -> StageBreakdown { stages = [ ], count = Map.empty, total = Map.empty, openCount = 0 }
+
 // === topDeals ===
 // Rank the open deals by what they are worth and keep the top n. The amounts have done their work once the
 // list is in order, so what comes back is the ids: a ranking is an order, not a table.
@@ -883,8 +1429,53 @@ behavior topDeals : (opps: List<Opportunity>, n: Int) -> DealRanking
 let topDeals (opps, n) =
     DealRanking
         { deals = List.map(opp -> opp.id,
-                           List.take(n, List.reverse(List.sortBy(opp -> amountOf(opp), opps))))
+                           List.take(n, List.reverse(List.sortBy(opp -> opp.amount,
+                                                                 List.filter(opp -> Bool.not(isClosedOf(opp)), opps)))))
         }
+
+// Five deals with distinct ids and distinct amounts, so the order is the amounts' and not the input's. The
+// lost deal and the won deal are closed, and a ranking of what is still open leaves them out.
+example topDeals
+    | "the biggest open deals come first, and a closed deal is not one of them, however big" :
+        ([ Qualification { ...acmeQualified, id = OpportunityId("006000000000003"), amount = Amount(900000.00m) }
+         , acmeLost
+         , ClosedWon { ...acmeWon, id = OpportunityId("006000000000005") }
+         , acme
+         , Prospecting { ...acme, id = OpportunityId("006000000000004"), amount = Amount(2500000.00m) } ],
+         2)
+        -> DealRanking { deals = [ OpportunityId("006000000000001"), OpportunityId("006000000000004") ] }
+    | "asking for more than there are open deals ranks all of them" :
+        ([ Qualification { ...acmeQualified, id = OpportunityId("006000000000003"), amount = Amount(900000.00m) }
+         , acmeLost
+         , acme
+         , Prospecting { ...acme, id = OpportunityId("006000000000004"), amount = Amount(2500000.00m) } ],
+         10)
+        -> DealRanking { deals = [ OpportunityId("006000000000001"), OpportunityId("006000000000004")
+                                 , OpportunityId("006000000000003") ] }
+    | "every open stage is ranked by its ask, and every kind of lost deal is left out" :
+        ([ Qualification { ...acmeQualified, id = OpportunityId("006000000000011"), amount = Amount(1100000.00m) }
+         , NeedsAnalysis { ...acmeDiscovered, id = OpportunityId("006000000000012"), amount = Amount(1300000.00m) }
+         , ValueProposition { ...acmeValued, id = OpportunityId("006000000000013"), amount = Amount(1500000.00m) }
+         , IdDecisionMakers { ...acmeIdentified, id = OpportunityId("006000000000014"), amount = Amount(1700000.00m) }
+         , PerceptionAnalysis { ...acmeChampioned, id = OpportunityId("006000000000015"), amount = Amount(1900000.00m) }
+         , ProposalPriceQuote { ...acmeQuoted, id = OpportunityId("006000000000016"), amount = Amount(2100000.00m) }
+         , NegotiationReview { ...acmeInNegotiation, id = OpportunityId("006000000000017"), amount = Amount(2300000.00m)
+                             , floorAmount = Amount(2000000.00m) }
+         , ClosedWon { ...acmeWon, id = OpportunityId("006000000000018") }
+         , acme,
+         ClosedLost { ...acmeLost, id = OpportunityId("006000000000021"), reason = CompetitorLoss { competitor = CompanyName("Rival KK") } },
+         ClosedLost { ...acmeLost, id = OpportunityId("006000000000022"), reason = IncumbentRetained { incumbent = CompanyName("Legacy Systems Co") } },
+         ClosedLost { ...acmeLost, id = OpportunityId("006000000000023"), reason = NoBudget },
+         ClosedLost { ...acmeLost, id = OpportunityId("006000000000024"), reason = NoDecision { lastContactOn = Date("2026-08-01") } },
+         ClosedLost { ...acmeLost, id = OpportunityId("006000000000025"), reason = PriceLoss { gapToBudget = Amount(200000.00m) } } ],
+         20)
+        -> DealRanking { deals = [ OpportunityId("006000000000001"), OpportunityId("006000000000017")
+                                 , OpportunityId("006000000000016"), OpportunityId("006000000000015")
+                                 , OpportunityId("006000000000014"), OpportunityId("006000000000013")
+                                 , OpportunityId("006000000000012"), OpportunityId("006000000000011") ] }
+    | "asking for none ranks none" :
+        ([ acme ], 0)
+        -> DealRanking { deals = [ ] }
 
 // === winRate ===
 // Wins over closed deals. The guard makes the division by zero unreachable rather than reporting it: a
@@ -907,3 +1498,22 @@ let winRateOf (closed) = {
             , lost = List.length(lost)
             }
 }
+
+// The rate is whole percent, rounded toward zero: one win in three is 33, not 34. Wins only and losses only
+// are the two ends of the Probability range, and a period with nothing closed is neither of them.
+example winRateOf
+    | "no closed deals has no win rate, which is not a rate of zero" :
+        ([ ])
+        -> NoClosedDeals
+    | "one win in three closed deals is thirty-three percent" :
+        ([ acmeWon, acmeLost, ClosedLost { ...acmeLost, reason = NoBudget } ])
+        -> WinRate { rate = Probability(33), won = 1, lost = 2 }
+    | "only wins is a hundred percent" :
+        ([ acmeWon ])
+        -> WinRate { rate = Probability(100), won = 1, lost = 0 }
+    | "only losses is zero percent, whatever the reasons" :
+        ([ acmeLost, ClosedLost { ...acmeLost, reason = CompetitorLoss { competitor = CompanyName("Rival KK") } }
+         , ClosedLost { ...acmeLost, reason = IncumbentRetained { incumbent = CompanyName("Legacy Systems Co") } }
+         , ClosedLost { ...acmeLost, reason = NoDecision { lastContactOn = Date("2026-08-01") } }
+         , ClosedLost { ...acmeLost, reason = PriceLoss { gapToBudget = Amount(200000.00m) } } ])
+        -> WinRate { rate = Probability(0), won = 0, lost = 5 }

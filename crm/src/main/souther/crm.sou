@@ -114,6 +114,10 @@ module example.crm exposing (
     DuplicateContact,
     tierOf,
     convertLead,
+    acmeQualifiedLead,
+    conversionRequest,
+    noAccounts,
+    noContacts,
     screenForDuplicates,
     NoDuplicate,
     PossibleDuplicate,
@@ -422,9 +426,9 @@ data OpenLead = NewLead | WorkingLead
 // Corp walked through its states, and about three accounts whose employee counts are the tier
 // boundaries — so each is a value, and a row that varies one field spreads it.
 //
-// `acmeQualified`, the conversion request and the account/contact books live in `crm.examples.sou`
-// instead, beside the only rows that use them: an `examples for` file declares the values its own rows
-// name, so a fixture only those rows use belongs there rather than here.
+// The books a duplicate rule reads live in `crm.examples.sou` instead, beside the only rows that use
+// them: an `examples for` file declares the values its own rows name, so a fixture only those rows use
+// belongs there rather than here.
 //
 // `acmeNew` and `acmeWorking` stay here because this module's own examples (`recordTouch`, `scoreLead`,
 // `linkLeadToAccount`) use them too. `acmeNew` has no earlier state to spread; `acmeWorking` spreads it,
@@ -492,6 +496,27 @@ let acmeContact = Contact
     , reach = EmailAndPhone { email = EmailAddress("cto@acme.example.com")
                             , phone = PhoneNumber("+81-3-1234-5678") }
     }
+
+// The lead, the request and the empty books conversion is asked against. They are published because
+// example.pipeline's `convertAndOpen` is the same operation seen from the other side of the seam, and its
+// rows start from the same lead. An `examples for` file cannot hold a value another module names, so they
+// live here and `crm.examples.sou` keeps the books and the duplicates only its own rows use.
+let acmeQualifiedLead = QualifiedLead
+    { ...acmeWorking, qualifiedOn = Date("2026-07-15"), score = LeadScore(72), budgetConfirmed = true }
+
+let conversionRequest = ConversionRequest
+    { accountId = AccountId("001000000000100")
+    , contactId = ContactId("003000000000100")
+    , convertedOn = Date("2026-07-20")
+    , intent = OpportunityRequested { amount = Amount(4800000.00m), closeDate = Date("2026-09-30") }
+    , accountType = Prospect
+    , industry = Technology
+    , employees = EmployeeCount(420)
+    , currency = CurrencyCode("JPY")
+    }
+
+let noAccounts = AccountBook([ ])
+let noContacts = ContactBook([ ])
 
 // === Reading a field off the sum ===
 // A field both cases of OpenLead spread is read directly off it. `touches` is not one of them — NewLead
@@ -639,7 +664,7 @@ let qualifyLead (lead, on, rawScore, budgetConfirmed) = {
 example qualifyLead
     | "sixty qualifies" :
         (acmeWorking, Date("2026-07-15"), 60, true)
-        -> QualifiedLead { ...acmeQualified, score = LeadScore(60) }
+        -> QualifiedLead { ...acmeQualifiedLead, score = LeadScore(60) }
     | "fifty-nine does not, and says which side of the bar it fell" :
         (acmeWorking, Date("2026-07-15"), 59, true)
         -> ScoreBelowThreshold

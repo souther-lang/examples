@@ -5,48 +5,30 @@
 // would be a helper, which this file may not hold.
 //
 // Conversion is what earns the companion: every row states a lead, a request and the two books the
-// duplicate rules are checked against, and what each row is about is one field of one of them. The four
-// are named values, declared here beside the only rows that use them, and a row spreads the one it varies.
+// duplicate rules are checked against, and what each row is about is one field of one of them. The lead,
+// the request and the empty books are declared in crm.sou, because example.pipeline starts from them too;
+// the books with accounts on file are declared here, beside the only rows that use them.
 //
 // crm.sou keeps the examples for the small transitions, because there the row is shorter than the
 // behavior and belongs next to it.
 examples for example.crm
 
-// The lead. `acmeQualified` spreads `acmeWorking`, declared in crm.sou and used by that module's own
-// examples too — a value published or not is in scope bare within its own module either way.
-let acmeQualified = QualifiedLead
-    { ...acmeWorking, qualifiedOn = Date("2026-07-15"), score = LeadScore(72), budgetConfirmed = true }
-
 // The books a duplicate rule reads. A rule reads a set, so a row has to show the set — which is why the
 // books are values too rather than four accounts written per row.
-let noAccounts   = AccountBook([ ])
-let noContacts   = ContactBook([ ])
 let betaOnFile   = AccountBook([ betaAccount ])
 let bothOnFile   = AccountBook([ betaAccount, gammaAccount ])
 let aoyagiOnFile = ContactBook([ acmeContact ])
 
-// What conversion is asked for. Every row varies one field of it, so the request is a value as well.
-let conversionRequest = ConversionRequest
-    { accountId = AccountId("001000000000100")
-    , contactId = ContactId("003000000000100")
-    , convertedOn = Date("2026-07-20")
-    , intent = OpportunityRequested { amount = Amount(4800000.00m), closeDate = Date("2026-09-30") }
-    , accountType = Prospect
-    , industry = Technology
-    , employees = EmployeeCount(420)
-    , currency = CurrencyCode("JPY")
-    }
-
 example convertLead
     | "a clean conversion carries the lead's address to the contact and derives the account's domain" :
-        (QualifiedLead { ...acmeQualified
+        (QualifiedLead { ...acmeQualifiedLead
                        , reach = EmailAndPhone { email = EmailAddress("cto@acme.example.com")
                                                , phone = PhoneNumber("+81-3-1234-5678") }
                        , source = PartnerReferral { partner = AccountId("001000000000009") }
                        },
          conversionRequest, betaOnFile, noContacts)
         -> LeadConverted
-            { lead = ConvertedLead { ...acmeQualified
+            { lead = ConvertedLead { ...acmeQualifiedLead
                                    , reach = EmailAndPhone { email = EmailAddress("cto@acme.example.com")
                                                            , phone = PhoneNumber("+81-3-1234-5678") }
                                    , source = PartnerReferral { partner = AccountId("001000000000009") }
@@ -67,16 +49,16 @@ example convertLead
             , intent = OpportunityRequested { amount = Amount(4800000.00m), closeDate = Date("2026-09-30") }
             }
     | "filing a lead with no opportunity asked for needs no budget and no close date" :
-        (QualifiedLead { ...acmeQualified, budgetConfirmed = false },
+        (QualifiedLead { ...acmeQualifiedLead, budgetConfirmed = false },
          ConversionRequest { ...conversionRequest, intent = NoOpportunity },
          noAccounts, noContacts)
         -> LeadConverted
     | "an opportunity asked for on an unconfirmed budget is blocked" :
-        (QualifiedLead { ...acmeQualified, budgetConfirmed = false },
+        (QualifiedLead { ...acmeQualifiedLead, budgetConfirmed = false },
          conversionRequest, noAccounts, noContacts)
         -> ConversionBlocked { reasons = [ BudgetNotConfirmed ] }
     | "a close date before the conversion is blocked, and the date it objects to is in the reason" :
-        (acmeQualified,
+        (acmeQualifiedLead,
          ConversionRequest { ...conversionRequest
                            , intent = OpportunityRequested { amount = Amount(500000.00m)
                                                            , closeDate = Date("2026-06-01") }
@@ -84,7 +66,7 @@ example convertLead
          noAccounts, noContacts)
         -> ConversionBlocked { reasons = [ CloseDateInPast { requested = Date("2026-06-01") } ] }
     | "both reasons are reported at once, which is the whole point of collecting them" :
-        (QualifiedLead { ...acmeQualified, budgetConfirmed = false },
+        (QualifiedLead { ...acmeQualifiedLead, budgetConfirmed = false },
          ConversionRequest { ...conversionRequest
                            , intent = OpportunityRequested { amount = Amount(500000.00m)
                                                            , closeDate = Date("2026-06-01") }
@@ -94,7 +76,7 @@ example convertLead
             { reasons = [ BudgetNotConfirmed
                         , CloseDateInPast { requested = Date("2026-06-01") } ] }
     | "an account already on this domain blocks the conversion and names the account" :
-        (QualifiedLead { ...acmeQualified
+        (QualifiedLead { ...acmeQualifiedLead
                        , reach = EmailOnly { email = EmailAddress("h@beta.example.com") } },
          ConversionRequest { ...conversionRequest, intent = NoOpportunity },
          bothOnFile, noContacts)
