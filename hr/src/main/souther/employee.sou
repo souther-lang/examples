@@ -379,10 +379,13 @@ let separate (employee, on, reason) = {
 // digits is what it catches, which is the mistake a person typing a number from a card actually makes.
 
 // A digit's value is its code point less that of "0", read from the string rather than written as 48.
-let zeroCode = List.get(0, String.codePoints("0")) |> Option.withDefault(0)
+let digitValue (c: Int): Int =
+    match List.get(0, String.codePoints("0")) with
+        | Some zero -> c - zero
+        | None -> unreachable "a one-character string has a first code point"
 
 let weightedSum (body: List<Int>): Int =
-    List.sum(List.mapIndexed((i, c) -> (if i <= 5 then i + 2 else i - 4) * (c - zeroCode),
+    List.sum(List.mapIndexed((i, c) -> (if i <= 5 then i + 2 else i - 4) * digitValue(c),
                              List.reverse(body)))
 
 let expectedCheckDigit (body: List<Int>): Int = {
@@ -399,10 +402,10 @@ let verifyMyNumber (number) = {
     // The invariant proved there are twelve digits, so the twelfth is there; List.get still answers an
     // optional, and the absent arm is the one the type has already ruled out.
     match List.get(0, check) with
-        | Some c -> if (c - zeroCode) == expectedCheckDigit(body)
+        | Some c -> if digitValue(c) == expectedCheckDigit(body)
                     then MyNumberVerified
                     else CheckDigitMismatch
-        | None   -> CheckDigitMismatch
+        | None   -> unreachable "the invariant proved twelve digits, so the twelfth is there"
 }
 
 example verifyMyNumber

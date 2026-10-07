@@ -259,8 +259,8 @@ example hourlyRateFor
         (pay300k, Hours(1.0m)) -> HourlyRate(280000.0m)
     | "half an hour is under the hour the rate needs" :
         (pay300k, Hours(0.5m)) -> NoScheduledHours
-    | "280,000 over 150 hours is carried to six places, and rounded only when an uplift is settled" :
-        (pay300k, Hours(150.0m)) -> HourlyRate(1866.666667m)
+    | "280,000 over 150 hours is carried to ten places, and rounded only when an uplift is settled" :
+        (pay300k, Hours(150.0m)) -> HourlyRate(1866.6666666667m)
     | "no scheduled wage is a rate of nothing" :
         (MonthlyRemuneration { ...pay300k, baseSalary = Yen(0), scheduledAllowances = Yen(0) }, monthlyScheduled)
         -> HourlyRate(0.0m)
