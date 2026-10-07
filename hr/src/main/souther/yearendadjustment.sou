@@ -74,7 +74,11 @@ import example.employee (
     Residence, Address, PostalCode, PrefectureCode,
     EmploymentTerms, OfficeId, FullTime,
     WeeklyScheduledHours, ContractTerm, Indefinite, NotDaytimeStudent,
-    MonthlyRemuneration, SeparationReason, VoluntaryResignation
+    MonthlyRemuneration, SeparationReason, VoluntaryResignation,
+    EmploymentCommon, Male, ContractEmployee, PartTime, Executive, TermUntil, DaytimeStudent,
+    SickLeave, MaternityLeave, ChildcareLeave, CaregiverLeave,
+    ContractExpiry, MandatoryRetirement, Dismissal, BusinessClosure, EncouragedResignation,
+    DismissalForMisconduct, Death, RenewalSought, RenewalNotSought
 )
 import example.dependents (
     TotalIncome, DependantCategory,
@@ -339,14 +343,65 @@ example employmentAtYearEnd
     | "somebody who left files their own return instead" :
         (Separated { ...hanakoEmployed, separatedOn = Date("2026-09-30"), reason = VoluntaryResignation })
         -> LeftDuringYear
+    | "an offer not yet taken up is nobody's employee at year end" :
+        (Prospective { ...hanakoCommon, hireOn = Date("2027-01-04") }) -> LeftDuringYear
+    | "a prospective hire who is a man on a fixed term, still a student" :
+        (Prospective { ...taroCommon, hireOn = Date("2027-04-01") }) -> LeftDuringYear
+    | "a prospective part-timer" :
+        (Prospective { ...partTimeCommon, hireOn = Date("2027-01-04") }) -> LeftDuringYear
+    | "a prospective executive" :
+        (Prospective { ...executiveCommon, hireOn = Date("2027-01-04") }) -> LeftDuringYear
+    | "a man on a fixed-term contract, still a student, is on the books" :
+        (taroEmployed) -> EmployedAtYearEnd
+    | "a part-timer is on the books" :
+        (partTimeEmployed) -> EmployedAtYearEnd
+    | "an executive is on the books" :
+        (executiveEmployed) -> EmployedAtYearEnd
+    | "somebody on sickness leave is still employed" :
+        (OnLeave { ...hanakoEmployed, leave = SickLeave, leaveFrom = Date("2026-10-01") }) -> EmployedAtYearEnd
+    | "somebody on maternity leave is still employed" :
+        (OnLeave { ...taroEmployed, leave = MaternityLeave, leaveFrom = Date("2026-10-01") }) -> EmployedAtYearEnd
+    | "somebody on childcare leave is still employed" :
+        (OnLeave { ...partTimeEmployed, leave = ChildcareLeave, leaveFrom = Date("2026-10-01") }) -> EmployedAtYearEnd
+    | "somebody on caregiver leave is still employed" :
+        (OnLeave { ...executiveEmployed, leave = CaregiverLeave, leaveFrom = Date("2026-10-01") }) -> EmployedAtYearEnd
+    | "somebody whose fixed term ended with renewal sought has left" :
+        (Separated { ...taroEmployed, separatedOn = Date("2027-03-31"), reason = ContractExpiry { renewal = RenewalSought } }) -> LeftDuringYear
+    | "and one whose term ended with no renewal sought" :
+        (Separated { ...taroEmployed, separatedOn = Date("2027-03-31"), reason = ContractExpiry { renewal = RenewalNotSought } }) -> LeftDuringYear
+    | "somebody who reached the mandatory retirement age has left" :
+        (Separated { ...executiveEmployed, separatedOn = Date("2026-06-30"), reason = MandatoryRetirement }) -> LeftDuringYear
+    | "somebody dismissed has left" :
+        (Separated { ...partTimeEmployed, separatedOn = Date("2026-06-30"), reason = Dismissal }) -> LeftDuringYear
+    | "somebody whose employer closed has left" :
+        (Separated { ...partTimeEmployed, separatedOn = Date("2026-06-30"), reason = BusinessClosure }) -> LeftDuringYear
+    | "somebody pressed to resign has left" :
+        (Separated { ...executiveEmployed, separatedOn = Date("2026-06-30"), reason = EncouragedResignation }) -> LeftDuringYear
+    | "somebody dismissed for misconduct has left" :
+        (Separated { ...taroEmployed, separatedOn = Date("2026-06-30"), reason = DismissalForMisconduct }) -> LeftDuringYear
+    | "somebody who died has left" :
+        (Separated { ...hanakoEmployed, separatedOn = Date("2026-06-30"), reason = Death }) -> LeftDuringYear
 
 example judgeYearEndEligibility
     | "an employee on the books at the end of the year who filed the declaration" :
         (EmployedAtYearEnd, Yen(4200000), DeclarationFiled) -> YearEndEligible
     | "over twenty million yen of salary is a return and not an adjustment" :
-        (EmployedAtYearEnd, Yen(21000000), DeclarationFiled) -> YearEndNotApplicable
+        (EmployedAtYearEnd, Yen(21000000), DeclarationFiled)
+        -> YearEndNotApplicable { reasons = [ SalaryOverTwentyMillion { ceiling = Yen(20000000), salary = Yen(21000000) } ] }
     | "no declaration filed, so there is nothing to adjust against" :
-        (EmployedAtYearEnd, Yen(4200000), NoDeclarationFiled) -> YearEndNotApplicable
+        (EmployedAtYearEnd, Yen(4200000), NoDeclarationFiled)
+        -> YearEndNotApplicable { reasons = [ NoDependantDeclaration ] }
+    | "exactly twenty million is not over twenty million" :
+        (EmployedAtYearEnd, Yen(20000000), DeclarationFiled) -> YearEndEligible
+    | "one yen over it is a return and not an adjustment" :
+        (EmployedAtYearEnd, Yen(20000001), DeclarationFiled)
+        -> YearEndNotApplicable { reasons = [ SalaryOverTwentyMillion { ceiling = Yen(20000000), salary = Yen(20000001) } ] }
+    | "somebody who left in the year is not adjusted by the employer" :
+        (LeftDuringYear, Yen(4200000), DeclarationFiled)
+        -> YearEndNotApplicable { reasons = [ NotEmployedAtYearEnd ] }
+    | "every reason that applies is given, in the order of the rule" :
+        (LeftDuringYear, Yen(21000000), NoDeclarationFiled)
+        -> YearEndNotApplicable { reasons = [ NotEmployedAtYearEnd, SalaryOverTwentyMillion { ceiling = Yen(20000000), salary = Yen(21000000) }, NoDependantDeclaration ] }
 
 example employmentIncomeDeductionFor
     | "at the top of the minimum-guarantee band both formulas give 650,000, which is what makes it one table" :
@@ -357,6 +412,28 @@ example employmentIncomeDeductionFor
         (Yen(4200000)) -> Yen(1280000)
     | "above 8.5 million the deduction stops moving" :
         (Yen(12000000)) -> Yen(1950000)
+    | "no salary still has the minimum guarantee" :
+        (Yen(0)) -> Yen(650000)
+    | "a million is under the band and takes the minimum" :
+        (Yen(1000000)) -> Yen(650000)
+    | "in the thirty-per-cent band, 30 per cent and 80,000" :
+        (Yen(2500000)) -> Yen(830000)
+    | "at the top of the thirty-per-cent band" :
+        (Yen(3600000)) -> Yen(1160000)
+    | "one yen above it the twenty-per-cent band takes over and gives the same figure" :
+        (Yen(3600001)) -> Yen(1160000)
+    | "in the twenty-per-cent band, 20 per cent and 440,000" :
+        (Yen(5000000)) -> Yen(1440000)
+    | "at the top of the twenty-per-cent band" :
+        (Yen(6600000)) -> Yen(1760000)
+    | "one yen above it the ten-per-cent band takes over and gives the same figure" :
+        (Yen(6600001)) -> Yen(1760000)
+    | "in the ten-per-cent band, 10 per cent and 1,100,000" :
+        (Yen(7500000)) -> Yen(1850000)
+    | "at the top of the ten-per-cent band the deduction reaches its ceiling" :
+        (Yen(8500000)) -> Yen(1950000)
+    | "one yen above it the ceiling holds" :
+        (Yen(8500001)) -> Yen(1950000)
 
 example employmentIncomeFor
     | "4.2 million of salary is 2.92 million of income" :
@@ -369,10 +446,60 @@ example basicDeductionFor
         (TotalIncome(23600000)) -> Yen(480000)
     | "above 25 million there is no basic deduction at all" :
         (TotalIncome(25100000)) -> Yen(0)
+    | "total income of 0 yen" :
+        (TotalIncome(0)) -> Yen(950000)
+    | "total income of 1,000,000 yen" :
+        (TotalIncome(1000000)) -> Yen(950000)
+    | "total income of 1,320,000 yen" :
+        (TotalIncome(1320000)) -> Yen(950000)
+    | "total income of 1,320,001 yen" :
+        (TotalIncome(1320001)) -> Yen(880000)
+    | "total income of 2,000,000 yen" :
+        (TotalIncome(2000000)) -> Yen(880000)
+    | "total income of 3,360,000 yen" :
+        (TotalIncome(3360000)) -> Yen(880000)
+    | "total income of 3,360,001 yen" :
+        (TotalIncome(3360001)) -> Yen(680000)
+    | "total income of 4,000,000 yen" :
+        (TotalIncome(4000000)) -> Yen(680000)
+    | "total income of 4,890,000 yen" :
+        (TotalIncome(4890000)) -> Yen(680000)
+    | "total income of 4,890,001 yen" :
+        (TotalIncome(4890001)) -> Yen(630000)
+    | "total income of 5,500,000 yen" :
+        (TotalIncome(5500000)) -> Yen(630000)
+    | "total income of 6,550,000 yen" :
+        (TotalIncome(6550000)) -> Yen(630000)
+    | "total income of 6,550,001 yen" :
+        (TotalIncome(6550001)) -> Yen(580000)
+    | "total income of 10,000,000 yen" :
+        (TotalIncome(10000000)) -> Yen(580000)
+    | "total income of 23,500,000 yen" :
+        (TotalIncome(23500000)) -> Yen(580000)
+    | "total income of 23,500,001 yen" :
+        (TotalIncome(23500001)) -> Yen(480000)
+    | "total income of 24,000,000 yen" :
+        (TotalIncome(24000000)) -> Yen(480000)
+    | "total income of 24,000,001 yen" :
+        (TotalIncome(24000001)) -> Yen(320000)
+    | "total income of 24,250,000 yen" :
+        (TotalIncome(24250000)) -> Yen(320000)
+    | "total income of 24,500,000 yen" :
+        (TotalIncome(24500000)) -> Yen(320000)
+    | "total income of 24,500,001 yen" :
+        (TotalIncome(24500001)) -> Yen(160000)
+    | "total income of 24,750,000 yen" :
+        (TotalIncome(24750000)) -> Yen(160000)
+    | "total income of 25,000,000 yen" :
+        (TotalIncome(25000000)) -> Yen(160000)
+    | "total income of 25,000,001 yen" :
+        (TotalIncome(25000001)) -> Yen(0)
 
 example dependantDeductionFor
     | "a dependant at university is worth 630,000" : (SpecifiedDependant) -> Yen(630000)
     | "an elderly parent under the same roof is worth 580,000" : (CoresidentElderlyParent) -> Yen(580000)
+    | "an ordinary dependant is worth 380,000" : (GeneralDependant) -> Yen(380000)
+    | "an elderly dependant is worth 480,000" : (ElderlyDependant) -> Yen(480000)
 
 fake specialSpouseDeductionOf
     | (TotalIncome(2920000), TotalIncome(700000)) -> Yen(380000)
@@ -393,24 +520,153 @@ example spouseDeductionFor
         -> Yen(0)
     | "no spouse, no deduction" :
         (TotalIncome(2920000), NoSpouse) -> Yen(0)
+    | "a younger spouse of a taxpayer on 9,000,000 yen" :
+        (TotalIncome(9000000), SpouseClaimed { income = TotalIncome(500000), age = SpouseUnderSeventy })
+        -> Yen(380000)
+    | "a younger spouse of a taxpayer on 9,000,001 yen" :
+        (TotalIncome(9000001), SpouseClaimed { income = TotalIncome(500000), age = SpouseUnderSeventy })
+        -> Yen(260000)
+    | "a younger spouse of a taxpayer on 9,250,000 yen" :
+        (TotalIncome(9250000), SpouseClaimed { income = TotalIncome(500000), age = SpouseUnderSeventy })
+        -> Yen(260000)
+    | "a younger spouse of a taxpayer on 9,500,000 yen" :
+        (TotalIncome(9500000), SpouseClaimed { income = TotalIncome(500000), age = SpouseUnderSeventy })
+        -> Yen(260000)
+    | "a younger spouse of a taxpayer on 9,500,001 yen" :
+        (TotalIncome(9500001), SpouseClaimed { income = TotalIncome(500000), age = SpouseUnderSeventy })
+        -> Yen(130000)
+    | "a younger spouse of a taxpayer on 9,750,000 yen" :
+        (TotalIncome(9750000), SpouseClaimed { income = TotalIncome(500000), age = SpouseUnderSeventy })
+        -> Yen(130000)
+    | "a younger spouse of a taxpayer on 10,000,000 yen" :
+        (TotalIncome(10000000), SpouseClaimed { income = TotalIncome(500000), age = SpouseUnderSeventy })
+        -> Yen(130000)
+    | "a younger spouse of a taxpayer on 10,000,001 yen" :
+        (TotalIncome(10000001), SpouseClaimed { income = TotalIncome(500000), age = SpouseUnderSeventy })
+        -> Yen(0)
+    | "a elderly spouse of a taxpayer on 9,000,000 yen" :
+        (TotalIncome(9000000), SpouseClaimed { income = TotalIncome(500000), age = SpouseSeventyOrOver })
+        -> Yen(480000)
+    | "a elderly spouse of a taxpayer on 9,000,001 yen" :
+        (TotalIncome(9000001), SpouseClaimed { income = TotalIncome(500000), age = SpouseSeventyOrOver })
+        -> Yen(320000)
+    | "a elderly spouse of a taxpayer on 9,250,000 yen" :
+        (TotalIncome(9250000), SpouseClaimed { income = TotalIncome(500000), age = SpouseSeventyOrOver })
+        -> Yen(320000)
+    | "a elderly spouse of a taxpayer on 9,500,000 yen" :
+        (TotalIncome(9500000), SpouseClaimed { income = TotalIncome(500000), age = SpouseSeventyOrOver })
+        -> Yen(320000)
+    | "a elderly spouse of a taxpayer on 9,500,001 yen" :
+        (TotalIncome(9500001), SpouseClaimed { income = TotalIncome(500000), age = SpouseSeventyOrOver })
+        -> Yen(160000)
+    | "a elderly spouse of a taxpayer on 9,750,000 yen" :
+        (TotalIncome(9750000), SpouseClaimed { income = TotalIncome(500000), age = SpouseSeventyOrOver })
+        -> Yen(160000)
+    | "a elderly spouse of a taxpayer on 10,000,000 yen" :
+        (TotalIncome(10000000), SpouseClaimed { income = TotalIncome(500000), age = SpouseSeventyOrOver })
+        -> Yen(160000)
+    | "a elderly spouse of a taxpayer on 10,000,001 yen" :
+        (TotalIncome(10000001), SpouseClaimed { income = TotalIncome(500000), age = SpouseSeventyOrOver })
+        -> Yen(0)
+    | "a spouse on exactly the dependant ceiling is still the deduction proper" :
+        (TotalIncome(2920000), SpouseClaimed { income = TotalIncome(580000), age = SpouseUnderSeventy })
+        -> Yen(380000)
+    | "one yen over it the special deduction takes over, and this year's table is read" :
+        (TotalIncome(2920000), SpouseClaimed { income = TotalIncome(580001), age = SpouseUnderSeventy })
+        -> Yen(0)
+    | "far over it, the special deduction is the table's too" :
+        (TotalIncome(2920000), SpouseClaimed { income = TotalIncome(1330000), age = SpouseUnderSeventy })
+        -> Yen(0)
+    | "no spouse is nothing for a taxpayer over nine million" :
+        (TotalIncome(9000001), NoSpouse) -> Yen(0)
+    | "no spouse is nothing for a taxpayer over 9.5 million" :
+        (TotalIncome(9500001), NoSpouse) -> Yen(0)
+    | "no spouse is nothing for a taxpayer over ten million" :
+        (TotalIncome(10000001), NoSpouse) -> Yen(0)
+    | "a spouse over the ceiling reads the special table for a taxpayer over nine million" :
+        (TotalIncome(9000001), SpouseClaimed { income = TotalIncome(580001), age = SpouseUnderSeventy }) -> Yen(0)
+    | "and for a taxpayer over 9.5 million" :
+        (TotalIncome(9500001), SpouseClaimed { income = TotalIncome(580001), age = SpouseUnderSeventy }) -> Yen(0)
+    | "and for a taxpayer over ten million" :
+        (TotalIncome(10000001), SpouseClaimed { income = TotalIncome(580001), age = SpouseUnderSeventy }) -> Yen(0)
+    | "an elderly spouse over the ceiling reads the special table as well" :
+        (TotalIncome(2920000), SpouseClaimed { income = TotalIncome(580001), age = SpouseSeventyOrOver }) -> Yen(0)
+    | "a taxpayer far over ten million with an elderly spouse earning nothing gets nothing" :
+        (TotalIncome(10000002), SpouseClaimed { income = TotalIncome(0), age = SpouseSeventyOrOver }) -> Yen(0)
 
 example taxableIncomeFrom
     | "the remainder is floored to the thousand, and 999 yen of it is not tax anybody pays" :
         (TotalIncome(2920000), Yen(1500999)) -> TaxableIncome(1419000)
     | "deductions past the income leave nothing to tax rather than something to refund" :
         (TotalIncome(500000), Yen(950000)) -> TaxableIncome(0)
+    | "a remainder of 1,000,999 is floored to 1,000,000" :
+        (TotalIncome(1000999), Yen(0)) -> TaxableIncome(1000000)
+    | "a remainder under a thousand is nothing to tax" :
+        (TotalIncome(999), Yen(0)) -> TaxableIncome(0)
+    | "deductions equal to the income leave nothing" :
+        (TotalIncome(1500000), Yen(1500000)) -> TaxableIncome(0)
+    | "a round remainder is kept whole" :
+        (TotalIncome(3000000), Yen(1000000)) -> TaxableIncome(2000000)
+    | "no deductions at all" :
+        (TotalIncome(5000000), Yen(0)) -> TaxableIncome(5000000)
 
 example incomeTaxOn
     | "under 1.95 million is five per cent flat" :
         (TaxableIncome(1419000)) -> Yen(70950)
     | "the second band is ten per cent less 97,500, which is what keeps the step flat" :
         (TaxableIncome(3000000)) -> Yen(202500)
+    | "taxable income of 0 yen" :
+        (TaxableIncome(0)) -> Yen(0)
+    | "taxable income of 1,950,000 yen" :
+        (TaxableIncome(1950000)) -> Yen(97500)
+    | "taxable income of 1,951,000 yen" :
+        (TaxableIncome(1951000)) -> Yen(97600)
+    | "taxable income of 3,300,000 yen" :
+        (TaxableIncome(3300000)) -> Yen(232500)
+    | "taxable income of 3,301,000 yen" :
+        (TaxableIncome(3301000)) -> Yen(232700)
+    | "taxable income of 5,000,000 yen" :
+        (TaxableIncome(5000000)) -> Yen(572500)
+    | "taxable income of 6,950,000 yen" :
+        (TaxableIncome(6950000)) -> Yen(962500)
+    | "taxable income of 6,951,000 yen" :
+        (TaxableIncome(6951000)) -> Yen(962730)
+    | "taxable income of 8,000,000 yen" :
+        (TaxableIncome(8000000)) -> Yen(1204000)
+    | "taxable income of 9,000,000 yen" :
+        (TaxableIncome(9000000)) -> Yen(1434000)
+    | "taxable income of 9,001,000 yen" :
+        (TaxableIncome(9001000)) -> Yen(1434330)
+    | "taxable income of 12,000,000 yen" :
+        (TaxableIncome(12000000)) -> Yen(2424000)
+    | "taxable income of 18,000,000 yen" :
+        (TaxableIncome(18000000)) -> Yen(4404000)
+    | "taxable income of 18,001,000 yen" :
+        (TaxableIncome(18001000)) -> Yen(4404400)
+    | "taxable income of 25,000,000 yen" :
+        (TaxableIncome(25000000)) -> Yen(7204000)
+    | "taxable income of 40,000,000 yen" :
+        (TaxableIncome(40000000)) -> Yen(13204000)
+    | "taxable income of 40,001,000 yen" :
+        (TaxableIncome(40001000)) -> Yen(13204450)
+    | "taxable income of 50,000,000 yen" :
+        (TaxableIncome(50000000)) -> Yen(17704000)
 
 example yearEndTaxFor
     | "70,950 of tax carries 2.1 per cent of surtax and is then floored to the hundred" :
         (TaxableIncome(1419000), Yen(0)) -> Yen(72400)
     | "the housing-loan credit comes off before the surtax, not after" :
         (TaxableIncome(1419000), Yen(70950)) -> Yen(0)
+    | "a credit of 20,000 comes off 70,950 before the surtax" :
+        (TaxableIncome(1419000), Yen(20000)) -> Yen(52000)
+    | "a credit of a yen more than the tax leaves nothing, and does not go negative" :
+        (TaxableIncome(1419000), Yen(70951)) -> Yen(0)
+    | "202,500 of tax with surtax is 206,752.5, floored to 206,700" :
+        (TaxableIncome(3000000), Yen(0)) -> Yen(206700)
+    | "no taxable income is no tax" :
+        (TaxableIncome(0), Yen(0)) -> Yen(0)
+    | "a credit on a larger tax" :
+        (TaxableIncome(9000000), Yen(100000)) -> Yen(1362000)
 
 example settleYearEnd
     | "more was withheld than was owed, so December refunds the difference" :
@@ -419,3 +675,47 @@ example settleYearEnd
         (Yen(72400), Yen(60000)) -> AdditionalCollection { amount = Yen(12400) }
     | "withholding that landed exactly is neither" :
         (Yen(72400), Yen(72400)) -> Settled
+    | "a yen more withheld than owed is a refund of that yen" :
+        (Yen(72400), Yen(72401)) -> Refund { amount = Yen(1) }
+    | "a yen less withheld than owed is a collection of that yen" :
+        (Yen(72400), Yen(72399)) -> AdditionalCollection { amount = Yen(1) }
+    | "nothing owed and nothing withheld is settled" :
+        (Yen(0), Yen(0)) -> Settled
+    | "withholding a yen short of a tax of 72,404 collects that yen" :
+        (Yen(72404), Yen(72403)) -> AdditionalCollection { amount = Yen(1) }
+
+// Four people who differ in every field the employment states carry: sex, employment type, contract and
+// schooling. The first is hanakoEmployed's own terms.
+let hanakoCommon = EmploymentCommon
+    { identity = hanakoEmployed.identity
+    , personalName = hanakoEmployed.personalName
+    , residence = hanakoEmployed.residence
+    , terms = hanakoEmployed.terms
+    , remuneration = hanakoEmployed.remuneration
+    }
+
+let taroCommon = EmploymentCommon
+    { ...hanakoCommon
+    , identity = PersonalIdentity { ...hanakoEmployed.identity, id = EmployeeId("000002"), sex = Male }
+    , terms = EmploymentTerms
+        { ...hanakoEmployed.terms
+        , employmentType = ContractEmployee
+        , contract = TermUntil { endsOn = Date("2027-03-31") }
+        , student = DaytimeStudent
+        }
+    }
+
+let partTimeCommon = EmploymentCommon
+    { ...hanakoCommon
+    , terms = EmploymentTerms { ...hanakoEmployed.terms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(24.0m) }
+    }
+
+let executiveCommon = EmploymentCommon
+    { ...hanakoCommon
+    , identity = PersonalIdentity { ...hanakoEmployed.identity, id = EmployeeId("000003"), sex = Male }
+    , terms = EmploymentTerms { ...hanakoEmployed.terms, employmentType = Executive }
+    }
+
+let taroEmployed = Employed { ...taroCommon, hiredOn = Date("2025-04-01") }
+let partTimeEmployed = Employed { ...partTimeCommon, hiredOn = Date("2023-04-01") }
+let executiveEmployed = Employed { ...executiveCommon, hiredOn = Date("2010-04-01") }
