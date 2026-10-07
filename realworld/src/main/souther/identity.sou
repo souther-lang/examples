@@ -74,6 +74,11 @@ data Registration = { username: Username, email: Email, password: Password }
 // what a password must be (Password's invariant) and never learns how one is stored, so bcrypt is a
 // bean in the Java boundary rather than a rule here. UserNotFound, EmailTaken and UsernameTaken carry
 // no fields and have no `data` line — naming them in an output is what declares them (8.4 unit-data).
+//
+// hashPassword has no row. bcrypt draws a fresh salt on every call, so the same password hashes to a
+// different string each time and a row could only name one of them. What the output owes, that
+// verifyPassword accepts it for the password it came from, is a property of the pair, and the rows
+// for verifyPassword state it from the other side with hashes that are fixed.
 behavior hashPassword : (password: Password) -> PasswordHash
 
 behavior findUserByEmail : (email: Email) -> User | UserNotFound
@@ -107,31 +112,72 @@ let registerUser (registration, findUserByEmail, findUserByName, hashPassword, s
 let jake = User { username = Username("jake"), bio = None, image = None
                 , email = Email("jake@jake.jake") }
 
+// The users table the rows below are asked in: jake, who has said nothing about himself, and gerome,
+// who has said everything. The lookups are exact, so an address or a name is found only when it is
+// written the way it is stored.
+let gerome = User
+    { username = Username("gerome"), bio = Bio("Writes monads")
+    , image = ImageUrl("https://example.com/gerome.png"), email = Email("gerome@jake.jake") }
+
+let newcomer = User { username = Username("newcomer"), bio = None, image = None
+                    , email = Email("newcomer@example.com") }
+
 fake findUserByEmail
-    | (Email("taken@example.com")) -> jake
+    | (Email("jake@jake.jake")) -> jake
+    | (Email("gerome@jake.jake")) -> gerome
     | _ -> UserNotFound
 
 fake findUserByName
-    | (Username("taken")) -> jake
+    | (Username("jake")) -> jake
+    | (Username("gerome")) -> gerome
     | _ -> UserNotFound
+
+example findUserByEmail
+    | "an address the table holds finds its user" : (Email("jake@jake.jake")) -> jake
+    | "a user's bio and image come back with them" : (Email("gerome@jake.jake")) -> gerome
+    | "an address nobody holds is not found" : (Email("nobody@example.com")) -> UserNotFound
+
+example findUserByName
+    | "a name the table holds finds its user" : (Username("jake")) -> jake
+    | "a user's bio and image come back with them" : (Username("gerome")) -> gerome
+    | "a name nobody holds is not found" : (Username("nobody")) -> UserNotFound
 
 fake hashPassword
     | _ -> PasswordHash("$2a$10$fake")
 
+let newcomerInFull    = User { ...newcomer, bio = Bio("Trains dragons"), image = ImageUrl("https://example.com/n.png") }
+let newcomerWithBio   = User { ...newcomer, bio = Bio("Trains dragons") }
+let newcomerWithImage = User { ...newcomer, image = ImageUrl("https://example.com/n.png") }
+
+// The row is written as given, so the user asked for is the user answered.
 fake storeUser
+    | (newcomer, PasswordHash("$2a$10$fake")) -> newcomer
+    | (newcomerInFull, PasswordHash("$2a$10$fake")) -> newcomerInFull
+    | (newcomerWithBio, PasswordHash("$2a$10$fake")) -> newcomerWithBio
+    | (newcomerWithImage, PasswordHash("$2a$10$fake")) -> newcomerWithImage
     | _ -> jake
+
+example storeUser
+    | "the user is inserted and answered as stored" :
+        (newcomer, PasswordHash("$2a$10$fake")) -> newcomer
+    | "a bio and an image are stored with the user" :
+        (newcomerInFull, PasswordHash("$2a$10$fake")) -> newcomerInFull
+    | "a bio without an image is stored as that" :
+        (newcomerWithBio, PasswordHash("$2a$10$fake")) -> newcomerWithBio
+    | "an image without a bio is stored as that" :
+        (newcomerWithImage, PasswordHash("$2a$10$fake")) -> newcomerWithImage
 
 example registerUser
     | "a free email and a free username are registered" :
-        (Registration { username = Username("jake"), email = Email("jake@jake.jake")
+        (Registration { username = Username("newcomer"), email = Email("newcomer@example.com")
                       , password = Password("jakejake") })
-        -> jake
+        -> newcomer
     | "an email already in use is refused, and nothing is written" :
-        (Registration { username = Username("newcomer"), email = Email("taken@example.com")
+        (Registration { username = Username("newcomer"), email = Email("gerome@jake.jake")
                       , password = Password("jakejake") })
         -> EmailTaken
     | "a username already in use is refused, and nothing is written" :
-        (Registration { username = Username("taken"), email = Email("free@example.com")
+        (Registration { username = Username("gerome"), email = Email("free@example.com")
                       , password = Password("jakejake") })
         -> UsernameTaken
 
@@ -170,10 +216,21 @@ let updateUser (current, wanted, findUserByEmail, findUserByName, storeUserUpdat
 // is nothing left for a composed behavior to decide and the boundary calls this write directly.
 behavior storePassword : (username: Username, hash: PasswordHash) -> PasswordHash
 
+// The column holds whatever string it is given, so what is answered is what was written, down to the
+// shortest hash the invariant admits.
+example storePassword
+    | "the hash is written and answered as stored" :
+        (Username("jake"), PasswordHash("$2y$10$.oAGfwD2DpocAFWxu6lCU.5U0vvOkE9bbf9IbCstwzWgQhEhUY72a"))
+        -> PasswordHash("$2y$10$.oAGfwD2DpocAFWxu6lCU.5U0vvOkE9bbf9IbCstwzWgQhEhUY72a")
+    | "the shortest hash the invariant admits is stored all the same" :
+        (Username("jake"), PasswordHash("x")) -> PasswordHash("x")
+
 let jakeInFull = User
     { ...jake, bio = Bio("Trains dragons"), image = ImageUrl("https://example.com/jake.png") }
 let jakeAtANewAddress = User { ...jake, email = Email("jake@new.example") }
 let jacob = User { ...jake, username = Username("jacob") }
+let jakeWithBio   = User { ...jake, bio = Bio("Trains dragons") }
+let jakeWithImage = User { ...jake, image = ImageUrl("https://example.com/jake.png") }
 
 // What is stored is the user that was asked for, so the table answers each of the users these rows
 // ask for with itself, and everything else with jake.
@@ -181,17 +238,34 @@ fake storeUserUpdate
     | (Username("jake"), jakeInFull)        -> jakeInFull
     | (Username("jake"), jakeAtANewAddress) -> jakeAtANewAddress
     | (Username("jake"), jacob)             -> jacob
+    | (Username("jake"), jake)              -> jake
+    | (Username("jake"), jakeWithBio)       -> jakeWithBio
+    | (Username("jake"), jakeWithImage)     -> jakeWithImage
     | _                                     -> jake
+
+example storeUserUpdate
+    | "the row of the previous name is rewritten and the user asked for is answered" :
+        (Username("jake"), jakeAtANewAddress) -> jakeAtANewAddress
+    | "a new name moves the row, which is still found by the previous one" :
+        (Username("jake"), jacob) -> jacob
+    | "a bio and an image are written with the rest" :
+        (Username("jake"), jakeInFull) -> jakeInFull
+    | "a bio without an image is written as that" :
+        (Username("jake"), jakeWithBio) -> jakeWithBio
+    | "an image without a bio is written as that" :
+        (Username("jake"), jakeWithImage) -> jakeWithImage
+    | "a bio and an image dropped are written as absent" :
+        (Username("jake"), jake) -> jake
 
 example updateUser
     | "a user who moved neither name is written back with no lookup at all" :
         (jake, jake) -> jake
     | "moving to an address somebody else holds is refused" :
         (jake, User { username = Username("jake"), bio = None, image = None
-                    , email = Email("taken@example.com") })
+                    , email = Email("gerome@jake.jake") })
         -> EmailTaken
     | "moving to a username somebody else holds is refused" :
-        (jake, User { username = Username("taken"), bio = None, image = None
+        (jake, User { username = Username("gerome"), bio = None, image = None
                     , email = Email("jake@jake.jake") })
         -> UsernameTaken
     | "a bio and an image may be added, and the user asked for is what is stored" :
@@ -228,13 +302,36 @@ let loginUser (credentials, findLogin, verifyPassword) =
             then found.user
             else InvalidCredentials
 
+// The hashes the users table holds, made by bcrypt for the passwords `jakejake` and `geromepw1`. A
+// bcrypt hash can be checked deterministically but not made so, hence the rows fix the strings and
+// say what they verify.
+let jakeHash   = PasswordHash("$2y$10$.oAGfwD2DpocAFWxu6lCU.5U0vvOkE9bbf9IbCstwzWgQhEhUY72a")
+let geromeHash = PasswordHash("$2y$10$GHvKxs4s7OnR483c/3MUPOY7tgcTcmAK7cy1ohywDZAElSNseGxQW")
+
 fake findLogin
-    | (Email("jake@jake.jake")) -> Credentialed { user = jake, hash = PasswordHash("$2a$10$fake") }
+    | (Email("jake@jake.jake")) -> Credentialed { user = jake, hash = jakeHash }
+    | (Email("gerome@jake.jake")) -> Credentialed { user = gerome, hash = geromeHash }
     | _ -> UserNotFound
 
+example findLogin
+    | "the user and the hash stored beside it are read as one row" :
+        (Email("jake@jake.jake")) -> Credentialed { user = jake, hash = jakeHash }
+    | "a user's bio and image come back with the row" :
+        (Email("gerome@jake.jake")) -> Credentialed { user = gerome, hash = geromeHash }
+    | "an address nobody holds is not found" : (Email("nobody@example.com")) -> UserNotFound
+
+// bcrypt answers false for a hash it cannot read, as it does for a wrong password, rather than failing.
 fake verifyPassword
-    | (Password("jakejake"), PasswordHash("$2a$10$fake")) -> true
+    | (Password("jakejake"), jakeHash) -> true
+    | (Password("geromepw1"), geromeHash) -> true
     | _ -> false
+
+example verifyPassword
+    | "the password the hash was made from matches it" : (Password("jakejake"), jakeHash) -> true
+    | "another user's password matches the other hash" : (Password("geromepw1"), geromeHash) -> true
+    | "a wrong password does not match" : (Password("wrongpass"), jakeHash) -> false
+    | "a password does not match the hash of another" : (Password("jakejake"), geromeHash) -> false
+    | "a stored value that is no bcrypt hash matches nothing" : (Password("jakejake"), PasswordHash("x")) -> false
 
 example loginUser
     | "the right password logs the user in" :
@@ -266,9 +363,35 @@ let follow (follower, followee, storeFollow) =
     then CannotFollowSelf
     else storeFollow(follower, followee)
 
+// The follows table the rows below are asked in holds one row: jake follows gerome.
 fake storeFollow
     | (Username("jake"), Username("gerome")) -> Followees { usernames = [ Username("gerome") ] }
+    | (Username("gerome"), Username("jake")) -> Followees { usernames = [ Username("jake") ] }
+    | (Username("jake"), Username("newcomer")) -> Followees { usernames = [ Username("gerome"), Username("newcomer") ] }
     | _ -> Followees { usernames = [] }
+
+example readFollowees
+    | "everybody the viewer follows is read at once" :
+        (Username("jake")) -> Followees { usernames = [ Username("gerome") ] }
+    | "a viewer who follows nobody reads an empty set" :
+        (Username("gerome")) -> Followees { usernames = [] }
+
+example storeFollow
+    | "following somebody new adds a row beside the old" :
+        (Username("jake"), Username("newcomer"))
+        -> Followees { usernames = [ Username("gerome"), Username("newcomer") ] }
+    | "following somebody already followed is following once" :
+        (Username("jake"), Username("gerome")) -> Followees { usernames = [ Username("gerome") ] }
+    | "the first follow of a viewer makes the set of one" :
+        (Username("gerome"), Username("jake")) -> Followees { usernames = [ Username("jake") ] }
+
+example storeUnfollow
+    | "unfollowing removes the row and answers what is left" :
+        (Username("jake"), Username("gerome")) -> Followees { usernames = [] }
+    | "unfollowing somebody never followed removes nothing and is no error" :
+        (Username("jake"), Username("newcomer")) -> Followees { usernames = [ Username("gerome") ] }
+    | "a viewer with no follows unfollows into the empty set" :
+        (Username("gerome"), Username("jake")) -> Followees { usernames = [] }
 
 example follow
     | "following somebody else adds them to the set" :

@@ -95,3 +95,63 @@ example deleteComment
         (hisNameWasMyNameToo, Username("gerome")) -> NotTheAuthor
     | "an author with a bio and an image may delete a one-character comment" :
         (aSecondThought, Username("jake")) -> Removed
+
+// === the contract with the comments table ===
+// The world these rows are asked in has two comments on how-to-train-your-dragon: id 1 by jake, who
+// has said nothing about himself, and id 2 by gerome, who has said everything. The next id the table
+// hands out is 3. The store answers the profile it was given and does not read it back, so the rows
+// for writing vary the profile and the rows for reading vary who wrote the comment.
+let geromeInFull = Profile
+    { username = Username("gerome")
+    , bio = blog.identity.Bio("Writes monads")
+    , image = blog.identity.ImageUrl("https://example.com/gerome.png")
+    }
+
+let anotherThought = Comment
+    { id = CommentId(2)
+    , body = CommentBody("A monad is a burrito")
+    , author = geromeInFull
+    , createdAt = DateTime("2026-08-06T04:00:00")
+    , updatedAt = DateTime("2026-08-06T04:00:00")
+    }
+
+let dragon = Slug("how-to-train-your-dragon")
+let later  = DateTime("2026-08-06T05:00:00")
+let thirdThought = Comment
+    { id = CommentId(3), body = CommentBody("Me too"), author = jake, createdAt = later, updatedAt = later }
+
+example storeComment
+    | "the row is inserted with the next id, and both its times are when it was written" :
+        (dragon, CommentBody("Me too"), jake, later) -> thirdThought
+    | "an author's bio and image are answered with the comment" :
+        (dragon, CommentBody("Me too"), geromeInFull, later) -> Comment { ...thirdThought, author = geromeInFull }
+    | "a bio without an image is answered as that" :
+        (dragon, CommentBody("Me too"), Profile { ...jake, bio = blog.identity.Bio("Trains dragons") }, later)
+        -> Comment { ...thirdThought, author = Profile { ...jake, bio = blog.identity.Bio("Trains dragons") } }
+    | "an image without a bio is answered as that" :
+        (dragon, CommentBody("Me too"), Profile { ...jake, image = blog.identity.ImageUrl("https://example.com/jake.png") }, later)
+        -> Comment { ...thirdThought
+                   , author = Profile { ...jake, image = blog.identity.ImageUrl("https://example.com/jake.png") } }
+
+example readComments
+    | "the thread is every comment on the article, oldest first, each with its author's profile" :
+        (dragon) -> CommentThread { comments = [ hisNameWasMyNameToo, anotherThought ] }
+    | "an article nobody commented on has an empty thread" :
+        (Slug("dragons-are-real")) -> CommentThread { comments = [] }
+
+example findComment
+    | "an id the table holds finds its comment" : (CommentId(1)) -> hisNameWasMyNameToo
+    | "the author's bio and image come back with the comment" : (CommentId(2)) -> anotherThought
+    | "an id the table does not hold is not found" : (CommentId(99)) -> CommentNotFound
+
+example removeComment
+    | "the row goes" : (hisNameWasMyNameToo) -> Removed
+    | "an author's bio and image do not change that" : (anotherThought) -> Removed
+    | "a bio without an image removes it all the same" :
+        (Comment { ...thirdThought, author = Profile { ...jake, bio = blog.identity.Bio("Trains dragons") } })
+        -> Removed
+    | "an image without a bio removes it all the same" :
+        (Comment { ...thirdThought
+                 , author = Profile { ...jake, image = blog.identity.ImageUrl("https://example.com/jake.png") } })
+        -> Removed
+    | "a comment that is already gone is removed all the same, and is no error" : (thirdThought) -> Removed

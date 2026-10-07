@@ -393,6 +393,9 @@ fake storeArticle
     | (byTitleAndBody)        -> byTitleAndBody
     | (byTitleAndDescription) -> byTitleAndDescription
     | (byAllThree)            -> byAllThree
+    | (profiled)              -> profiled
+    | (withBio)               -> withBio
+    | (withImage)             -> withImage
     | _                       -> dragons
 
 example createArticle
@@ -601,3 +604,98 @@ example readArticles
         (GlobalQuery { ...firstPage, limit = Limit(100) })
         -> ArticlePage { articles = [dragonsAreReal, trainYourDragon, onFunctionalProgramming]
                        , total = 3 }
+
+
+// === the rest of the contract with the articles tables ===
+// Rows for the other injected behaviors, each asked in the world readArticles is asked in: jake wrote
+// dragons-are-real and how-to-train-your-dragon, gerome wrote on-functional-programming and favorited
+// the second of jake's, and the tags in use are dragons, fp and training. Here gerome has also said
+// everything a profile can say, and the body of how-to-train-your-dragon is the one `dragons` carries.
+let geromeInFull = Profile
+    { username = Username("gerome")
+    , bio = blog.identity.Bio("Writes monads")
+    , image = blog.identity.ImageUrl("https://example.com/gerome.png")
+    }
+
+let functional = Article
+    { slug = Slug("on-functional-programming")
+    , title = Title("On functional programming")
+    , description = Description("A monad is")
+    , tagList = [ Tag("fp") ]
+    , author = geromeInFull
+    , createdAt = DateTime("2026-08-06T02:00:00")
+    , updatedAt = DateTime("2026-08-06T02:00:00")
+    , body = Body("A burrito")
+    }
+
+let withBio   = Article { ...dragons, author = Profile { ...jake, bio = blog.identity.Bio("Trains dragons") } }
+let withImage = Article
+    { ...dragons, author = Profile { ...jake, image = blog.identity.ImageUrl("https://example.com/jake.png") } }
+
+example readArticle
+    | "a stored slug reads its article, with its tags and the whole of its author" :
+        (Slug("how-to-train-your-dragon")) -> dragons
+    | "an author's bio and image arrive with the article" :
+        (Slug("on-functional-programming")) -> functional
+    | "a slug no article is stored under is not found" :
+        (Slug("nobody-wrote-this")) -> ArticleNotFound
+
+// An update that matches a slug is an update and one that matches none is an insert, and either way
+// the article asked for is the article answered. The rows are the ones where the author differs only
+// in what the profile says, because that is what the store does not write: the author column holds a
+// name and the profile is read back from the users table.
+example storeArticle
+    | "a new article is inserted and answered as stored" : (everWonder) -> everWonder
+    | "an article already stored is updated and answered as stored" : (retitled) -> retitled
+    | "an author's bio and image are answered with the article" : (profiled) -> profiled
+    | "a bio without an image is answered as that" :
+        (withBio) -> withBio
+    | "an image without a bio is answered as that" :
+        (withImage) -> withImage
+
+example removeArticle
+    | "the article goes, with its tags and its favorites" : (dragons) -> Removed
+    | "an author's bio and image do not change that" : (profiled) -> Removed
+    | "a bio without an image removes it all the same" :
+        (withBio) -> Removed
+    | "an image without a bio removes it all the same" :
+        (withImage) -> Removed
+    | "an article that is already gone is removed all the same, and is no error" :
+        (everWonder) -> Removed
+
+example readFavorited
+    | "the slugs the viewer favorited are read at once" :
+        (Username("gerome")) -> FavoritedSlugs { slugs = [ Slug("how-to-train-your-dragon") ] }
+    | "a viewer who favorited nothing reads an empty set" :
+        (Username("jake")) -> FavoritedSlugs { slugs = [] }
+
+example readFavoriteCounts
+    | "each slug asked about is counted, and one nobody favorited is counted as zero" :
+        ([ Slug("how-to-train-your-dragon"), Slug("dragons-are-real") ])
+        -> FavoriteCounts { counts = Map.fromList([ (Slug("how-to-train-your-dragon"), 1)
+                                                  , (Slug("dragons-are-real"), 0) ]) }
+    | "no slugs asked about is no counts" : ([]) -> FavoriteCounts { counts = Map.empty }
+
+example storeFavorite
+    | "a new favorite joins the viewer's set" :
+        (Username("gerome"), Slug("dragons-are-real"))
+        -> FavoritedSlugs { slugs = [ Slug("how-to-train-your-dragon"), Slug("dragons-are-real") ] }
+    | "favoriting twice is favoriting once" :
+        (Username("gerome"), Slug("how-to-train-your-dragon"))
+        -> FavoritedSlugs { slugs = [ Slug("how-to-train-your-dragon") ] }
+    | "the first favorite of a viewer makes the set of one" :
+        (Username("jake"), Slug("dragons-are-real"))
+        -> FavoritedSlugs { slugs = [ Slug("dragons-are-real") ] }
+
+example storeUnfavorite
+    | "the favorite is removed and what is left is answered" :
+        (Username("gerome"), Slug("how-to-train-your-dragon")) -> FavoritedSlugs { slugs = [] }
+    | "unfavoriting what was never favorited removes nothing and is no error" :
+        (Username("gerome"), Slug("dragons-are-real"))
+        -> FavoritedSlugs { slugs = [ Slug("how-to-train-your-dragon") ] }
+    | "a viewer with no favorites unfavorites into the empty set" :
+        (Username("jake"), Slug("dragons-are-real")) -> FavoritedSlugs { slugs = [] }
+
+example readTags
+    | "every tag any article carries is read once, in order" :
+        () -> TagList { tags = [ Tag("dragons"), Tag("fp"), Tag("training") ] }
