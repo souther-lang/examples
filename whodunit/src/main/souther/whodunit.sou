@@ -111,3 +111,16 @@ example solve
     | "a scene with no witnesses fits too many stories" :
         ([ CulpritWasIn { room = Kitchen } ])
         -> StillAmbiguous
+
+// One clue alone never pins the evening down: every room and every suspect a single clue names still
+// leaves more than one world standing, so each of these answers StillAmbiguous. The rows are here to
+// put each room and each suspect in front of `solve` at least once.
+example solve
+    | "the deed was done in the Study" : ([ CulpritWasIn { room = Study } ]) -> StillAmbiguous
+    | "the deed was done in the Garden" : ([ CulpritWasIn { room = Garden } ]) -> StillAmbiguous
+    | "Alice was seen in the Garden" : ([ SawIn { who = Alice, room = Garden } ]) -> StillAmbiguous
+    | "Bob was seen in the Kitchen" : ([ SawIn { who = Bob, room = Kitchen } ]) -> StillAmbiguous
+    | "Carol was seen in the Kitchen" : ([ SawIn { who = Carol, room = Kitchen } ]) -> StillAmbiguous
+    | "Alice was not in the Study" : ([ WasElsewhere { who = Alice, room = Study } ]) -> StillAmbiguous
+    | "Alice was not in the Garden" : ([ WasElsewhere { who = Alice, room = Garden } ]) -> StillAmbiguous
+    | "Carol was not in the Kitchen" : ([ WasElsewhere { who = Carol, room = Kitchen } ]) -> StillAmbiguous
