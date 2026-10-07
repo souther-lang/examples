@@ -82,7 +82,7 @@ import example.employee (
     ContractTerm, Indefinite, TermUntil, StudentStatus, DaytimeStudent, NotDaytimeStudent,
     MonthlyRemuneration, WeeklyScheduledHours,
     SeparationReason, VoluntaryResignation, ContractExpiry, MandatoryRetirement,
-    EmployerCause, Dismissal, DismissalForMisconduct, Death,
+    EmployerCause, Dismissal, BusinessClosure, EncouragedResignation, DismissalForMisconduct, Death,
     RenewalSought, RenewalNotSought,
     attainedAgeOn, totalRemuneration
 )
@@ -426,13 +426,46 @@ example judgeInsuredStatus
         -> InsuredStatus { category = GeneralInsured }
     | "a daytime student on sixteen hours fails both conditions, and hears both" :
         (studentTerms, Date("1990-04-01"), Date("2026-07-01"))
-        -> NotInsured
+        -> NotInsured { reasons = [ WeeklyHoursUnderTwenty { hours = WeeklyScheduledHours(16.0m) }, DaytimeStudentExcluded ] }
     | "a contract with nineteen days left to run is not an expectation of thirty-one" :
         (shortContractTerms, Date("1990-04-01"), Date("2026-07-01"))
-        -> NotInsured
+        -> NotInsured { reasons = [ EmploymentUnderThirtyOneDays { endsOn = Date("2026-07-20") } ] }
     | "an officer is excluded on their own, and is not told their hours are short" :
         (officerTerms, Date("1990-04-01"), Date("2026-07-01"))
-        -> NotInsured
+        -> NotInsured { reasons = [ OfficerExcluded ] }
+    | "exactly twenty hours is not under twenty" :
+        (EmploymentTerms { ...fullTimeTerms, weeklyHours = WeeklyScheduledHours(20.0m) }, Date("1990-04-01"), Date("2026-07-01"))
+        -> InsuredStatus { category = GeneralInsured }
+    | "nineteen hours is under twenty, and the only reason given" :
+        (EmploymentTerms { ...fullTimeTerms, weeklyHours = WeeklyScheduledHours(19.0m) }, Date("1990-04-01"), Date("2026-07-01"))
+        -> NotInsured { reasons = [ WeeklyHoursUnderTwenty { hours = WeeklyScheduledHours(19.0m) } ] }
+    | "a contract ending on the thirty-first day, counting the first, is expected to run thirty-one days" :
+        (EmploymentTerms { ...fullTimeTerms, contract = TermUntil { endsOn = Date("2026-07-31") } }, Date("1990-04-01"), Date("2026-07-01"))
+        -> InsuredStatus { category = GeneralInsured }
+    | "one that ends the day before is expected to run thirty" :
+        (EmploymentTerms { ...fullTimeTerms, contract = TermUntil { endsOn = Date("2026-07-30") } }, Date("1990-04-01"), Date("2026-07-01"))
+        -> NotInsured { reasons = [ EmploymentUnderThirtyOneDays { endsOn = Date("2026-07-30") } ] }
+    | "a contract running a year ahead is no reason to exclude anybody" :
+        (EmploymentTerms { ...fullTimeTerms, contract = TermUntil { endsOn = Date("2027-07-01") } }, Date("1990-04-01"), Date("2026-07-01"))
+        -> InsuredStatus { category = GeneralInsured }
+    | "every reason that applies is reported, in the order of the rule" :
+        (EmploymentTerms { ...studentTerms, contract = TermUntil { endsOn = Date("2026-07-10") } }, Date("1990-04-01"), Date("2026-07-01"))
+        -> NotInsured { reasons = [ WeeklyHoursUnderTwenty { hours = WeeklyScheduledHours(16.0m) }
+                                  , EmploymentUnderThirtyOneDays { endsOn = Date("2026-07-10") }
+                                  , DaytimeStudentExcluded
+                                  ] }
+    | "a daytime student on forty hours is excluded for the schooling alone" :
+        (EmploymentTerms { ...fullTimeTerms, student = DaytimeStudent }, Date("1990-04-01"), Date("2026-07-01"))
+        -> NotInsured { reasons = [ DaytimeStudentExcluded ] }
+    | "somebody of seventy who is insured is an elderly insured person" :
+        (fullTimeTerms, Date("1956-01-15"), Date("2026-07-01"))
+        -> InsuredStatus { category = ElderlyInsured }
+    | "a contract employee on twenty-four hours is insured" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = ContractEmployee, weeklyHours = WeeklyScheduledHours(24.0m) }, Date("1990-04-01"), Date("2026-07-01"))
+        -> InsuredStatus { category = GeneralInsured }
+    | "a part-timer on twenty-four hours is insured" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(24.0m) }, Date("1990-04-01"), Date("2026-07-01"))
+        -> InsuredStatus { category = GeneralInsured }
 
 example classifySeparation
     | "a dismissal is an employer cause, and the benefit rules do not ask which kind" :
@@ -443,6 +476,16 @@ example classifySeparation
         (ContractExpiry { renewal = RenewalNotSought }) -> GeneralRecipient
     | "a death leaves nobody to claim" :
         (Death) -> NoClaimant
+    | "resigning is an ordinary separation" :
+        (VoluntaryResignation) -> GeneralRecipient
+    | "reaching the mandatory retirement age is an ordinary separation" :
+        (MandatoryRetirement) -> GeneralRecipient
+    | "a business closure is an employer cause like a dismissal" :
+        (BusinessClosure) -> SpecifiedEligibleRecipient
+    | "being pressed to resign is an employer cause" :
+        (EncouragedResignation) -> SpecifiedEligibleRecipient
+    | "a dismissal for misconduct is outside the employer causes, and is an ordinary separation" :
+        (DismissalForMisconduct) -> GeneralRecipient
 
 example judgeBenefitRestriction
     | "resigning is restricted for one month since the 2025 amendment" :
@@ -451,6 +494,18 @@ example judgeBenefitRestriction
         (DismissalForMisconduct) -> RestrictedThreeMonths
     | "reaching the mandatory retirement age is not a choice, so nothing is restricted" :
         (MandatoryRetirement) -> NoRestriction
+    | "a fixed term that ended with renewal sought carries no restriction" :
+        (ContractExpiry { renewal = RenewalSought }) -> NoRestriction
+    | "nor does one that ended with no renewal sought" :
+        (ContractExpiry { renewal = RenewalNotSought }) -> NoRestriction
+    | "a dismissal carries none" :
+        (Dismissal) -> NoRestriction
+    | "a business closure carries none" :
+        (BusinessClosure) -> NoRestriction
+    | "an encouraged resignation carries none" :
+        (EncouragedResignation) -> NoRestriction
+    | "a death carries none, there being nobody to restrict" :
+        (Death) -> NoRestriction
 
 example judgeBenefitEntitlement
     | "eleven months in two years is not enough for an ordinary recipient" :
@@ -461,6 +516,39 @@ example judgeBenefitEntitlement
         (SpecifiedEligibleRecipient, InsuredHistory { monthsInTwoYears = InsuredMonths(11)
                                                     , monthsInOneYear = InsuredMonths(11) })
         -> Entitled
+    | "GeneralRecipient with 12 months in two years and 6 in the last, against 12 months in two years" :
+        (GeneralRecipient, InsuredHistory { monthsInTwoYears = InsuredMonths(12), monthsInOneYear = InsuredMonths(6) })
+        -> Entitled
+    | "GeneralRecipient with 13 months in two years and 6 in the last, against 12 months in two years" :
+        (GeneralRecipient, InsuredHistory { monthsInTwoYears = InsuredMonths(13), monthsInOneYear = InsuredMonths(6) })
+        -> Entitled
+    | "GeneralRecipient with 24 months in two years and 12 in the last, against 12 months in two years" :
+        (GeneralRecipient, InsuredHistory { monthsInTwoYears = InsuredMonths(24), monthsInOneYear = InsuredMonths(12) })
+        -> Entitled
+    | "GeneralRecipient with 0 months in two years and 0 in the last, against 12 months in two years" :
+        (GeneralRecipient, InsuredHistory { monthsInTwoYears = InsuredMonths(0), monthsInOneYear = InsuredMonths(0) })
+        -> InsufficientInsuredPeriod { required = InsuredMonths(12), actual = InsuredMonths(0) }
+    | "GeneralRecipient with 5 months in two years and 3 in the last, against 12 months in two years" :
+        (GeneralRecipient, InsuredHistory { monthsInTwoYears = InsuredMonths(5), monthsInOneYear = InsuredMonths(3) })
+        -> InsufficientInsuredPeriod { required = InsuredMonths(12), actual = InsuredMonths(5) }
+    | "SpecifiedReasonRecipient with 11 months in two years and 6 in the last, against 6 months in the last year" :
+        (SpecifiedReasonRecipient, InsuredHistory { monthsInTwoYears = InsuredMonths(11), monthsInOneYear = InsuredMonths(6) })
+        -> Entitled
+    | "SpecifiedReasonRecipient with 12 months in two years and 5 in the last, against 6 months in the last year" :
+        (SpecifiedReasonRecipient, InsuredHistory { monthsInTwoYears = InsuredMonths(12), monthsInOneYear = InsuredMonths(5) })
+        -> InsufficientInsuredPeriod { required = InsuredMonths(6), actual = InsuredMonths(5) }
+    | "SpecifiedEligibleRecipient with 12 months in two years and 6 in the last, against 6 months in the last year" :
+        (SpecifiedEligibleRecipient, InsuredHistory { monthsInTwoYears = InsuredMonths(12), monthsInOneYear = InsuredMonths(6) })
+        -> Entitled
+    | "SpecifiedEligibleRecipient with 12 months in two years and 8 in the last, against 6 months in the last year" :
+        (SpecifiedEligibleRecipient, InsuredHistory { monthsInTwoYears = InsuredMonths(12), monthsInOneYear = InsuredMonths(8) })
+        -> Entitled
+    | "SpecifiedEligibleRecipient with 4 months in two years and 3 in the last, against 6 months in the last year" :
+        (SpecifiedEligibleRecipient, InsuredHistory { monthsInTwoYears = InsuredMonths(4), monthsInOneYear = InsuredMonths(3) })
+        -> InsufficientInsuredPeriod { required = InsuredMonths(6), actual = InsuredMonths(3) }
+    | "SpecifiedEligibleRecipient with 10 months in two years and 0 in the last, against 6 months in the last year" :
+        (SpecifiedEligibleRecipient, InsuredHistory { monthsInTwoYears = InsuredMonths(10), monthsInOneYear = InsuredMonths(0) })
+        -> InsufficientInsuredPeriod { required = InsuredMonths(6), actual = InsuredMonths(0) }
 
 example prescribedBenefitDays
     | "a fifty-year-old dismissed after twenty-two years draws the longest period there is" :
@@ -469,6 +557,74 @@ example prescribedBenefitDays
         (GeneralRecipient, FortyFiveToFiftyNine, TwentyYearsOrMore) -> BenefitDays(150)
     | "a specified-reason recipient reads the specified table, for now" :
         (SpecifiedReasonRecipient, ThirtyFiveToFortyFour, FiveToTenYears) -> BenefitDays(180)
+    | "UnderThirty with UnderOneYear draws 90 days when dismissed" :
+        (SpecifiedEligibleRecipient, UnderThirty, UnderOneYear) -> BenefitDays(90)
+    | "UnderThirty with OneToFiveYears draws 90 days when dismissed" :
+        (SpecifiedEligibleRecipient, UnderThirty, OneToFiveYears) -> BenefitDays(90)
+    | "UnderThirty with FiveToTenYears draws 120 days when dismissed" :
+        (SpecifiedEligibleRecipient, UnderThirty, FiveToTenYears) -> BenefitDays(120)
+    | "UnderThirty with TenToTwentyYears draws 180 days when dismissed" :
+        (SpecifiedEligibleRecipient, UnderThirty, TenToTwentyYears) -> BenefitDays(180)
+    | "ThirtyToThirtyFour with UnderOneYear draws 90 days when dismissed" :
+        (SpecifiedEligibleRecipient, ThirtyToThirtyFour, UnderOneYear) -> BenefitDays(90)
+    | "ThirtyToThirtyFour with OneToFiveYears draws 120 days when dismissed" :
+        (SpecifiedEligibleRecipient, ThirtyToThirtyFour, OneToFiveYears) -> BenefitDays(120)
+    | "ThirtyToThirtyFour with FiveToTenYears draws 180 days when dismissed" :
+        (SpecifiedEligibleRecipient, ThirtyToThirtyFour, FiveToTenYears) -> BenefitDays(180)
+    | "ThirtyToThirtyFour with TenToTwentyYears draws 210 days when dismissed" :
+        (SpecifiedEligibleRecipient, ThirtyToThirtyFour, TenToTwentyYears) -> BenefitDays(210)
+    | "ThirtyToThirtyFour with TwentyYearsOrMore draws 240 days when dismissed" :
+        (SpecifiedEligibleRecipient, ThirtyToThirtyFour, TwentyYearsOrMore) -> BenefitDays(240)
+    | "ThirtyFiveToFortyFour with UnderOneYear draws 90 days when dismissed" :
+        (SpecifiedEligibleRecipient, ThirtyFiveToFortyFour, UnderOneYear) -> BenefitDays(90)
+    | "ThirtyFiveToFortyFour with OneToFiveYears draws 150 days when dismissed" :
+        (SpecifiedEligibleRecipient, ThirtyFiveToFortyFour, OneToFiveYears) -> BenefitDays(150)
+    | "ThirtyFiveToFortyFour with FiveToTenYears draws 180 days when dismissed" :
+        (SpecifiedEligibleRecipient, ThirtyFiveToFortyFour, FiveToTenYears) -> BenefitDays(180)
+    | "ThirtyFiveToFortyFour with TenToTwentyYears draws 240 days when dismissed" :
+        (SpecifiedEligibleRecipient, ThirtyFiveToFortyFour, TenToTwentyYears) -> BenefitDays(240)
+    | "ThirtyFiveToFortyFour with TwentyYearsOrMore draws 270 days when dismissed" :
+        (SpecifiedEligibleRecipient, ThirtyFiveToFortyFour, TwentyYearsOrMore) -> BenefitDays(270)
+    | "FortyFiveToFiftyNine with UnderOneYear draws 90 days when dismissed" :
+        (SpecifiedEligibleRecipient, FortyFiveToFiftyNine, UnderOneYear) -> BenefitDays(90)
+    | "FortyFiveToFiftyNine with OneToFiveYears draws 180 days when dismissed" :
+        (SpecifiedEligibleRecipient, FortyFiveToFiftyNine, OneToFiveYears) -> BenefitDays(180)
+    | "FortyFiveToFiftyNine with FiveToTenYears draws 240 days when dismissed" :
+        (SpecifiedEligibleRecipient, FortyFiveToFiftyNine, FiveToTenYears) -> BenefitDays(240)
+    | "FortyFiveToFiftyNine with TenToTwentyYears draws 270 days when dismissed" :
+        (SpecifiedEligibleRecipient, FortyFiveToFiftyNine, TenToTwentyYears) -> BenefitDays(270)
+    | "FortyFiveToFiftyNine with TwentyYearsOrMore draws 330 days when dismissed" :
+        (SpecifiedEligibleRecipient, FortyFiveToFiftyNine, TwentyYearsOrMore) -> BenefitDays(330)
+    | "SixtyToSixtyFour with UnderOneYear draws 90 days when dismissed" :
+        (SpecifiedEligibleRecipient, SixtyToSixtyFour, UnderOneYear) -> BenefitDays(90)
+    | "SixtyToSixtyFour with OneToFiveYears draws 150 days when dismissed" :
+        (SpecifiedEligibleRecipient, SixtyToSixtyFour, OneToFiveYears) -> BenefitDays(150)
+    | "SixtyToSixtyFour with FiveToTenYears draws 180 days when dismissed" :
+        (SpecifiedEligibleRecipient, SixtyToSixtyFour, FiveToTenYears) -> BenefitDays(180)
+    | "SixtyToSixtyFour with TenToTwentyYears draws 210 days when dismissed" :
+        (SpecifiedEligibleRecipient, SixtyToSixtyFour, TenToTwentyYears) -> BenefitDays(210)
+    | "SixtyToSixtyFour with TwentyYearsOrMore draws 240 days when dismissed" :
+        (SpecifiedEligibleRecipient, SixtyToSixtyFour, TwentyYearsOrMore) -> BenefitDays(240)
+    | "an ordinary recipient with OneToFiveYears draws 90 days, whatever the age" :
+        (GeneralRecipient, UnderThirty, OneToFiveYears) -> BenefitDays(90)
+    | "an ordinary recipient with FiveToTenYears draws 90 days, whatever the age" :
+        (GeneralRecipient, ThirtyToThirtyFour, FiveToTenYears) -> BenefitDays(90)
+    | "an ordinary recipient with TenToTwentyYears draws 120 days, whatever the age" :
+        (GeneralRecipient, ThirtyFiveToFortyFour, TenToTwentyYears) -> BenefitDays(120)
+    | "an ordinary recipient with TwentyYearsOrMore draws 150 days, whatever the age" :
+        (GeneralRecipient, SixtyToSixtyFour, TwentyYearsOrMore) -> BenefitDays(150)
+    | "a specified-reason recipient under thirty with ten to twenty years reads the specified table" :
+        (SpecifiedReasonRecipient, UnderThirty, TenToTwentyYears) -> BenefitDays(180)
+    | "a specified-reason recipient of sixty to sixty-four with under a year draws the minimum" :
+        (SpecifiedReasonRecipient, SixtyToSixtyFour, UnderOneYear) -> BenefitDays(90)
+    | "a specified-reason recipient of thirty to thirty-four with under a year draws the minimum" :
+        (SpecifiedReasonRecipient, ThirtyToThirtyFour, UnderOneYear) -> BenefitDays(90)
+    | "a specified-reason recipient of forty-five to fifty-nine with under a year draws the minimum" :
+        (SpecifiedReasonRecipient, FortyFiveToFiftyNine, UnderOneYear) -> BenefitDays(90)
+    | "a specified-reason recipient under thirty with one to five years draws the minimum" :
+        (SpecifiedReasonRecipient, UnderThirty, OneToFiveYears) -> BenefitDays(90)
+    | "a specified-reason recipient of thirty to thirty-four with twenty years or more reads the specified table" :
+        (SpecifiedReasonRecipient, ThirtyToThirtyFour, TwentyYearsOrMore) -> BenefitDays(240)
 
 fake insuranceRatesOf
     | (GeneralBusiness, Date("2026-07-01"))
@@ -488,3 +644,81 @@ example employeePremiumFor
         (pay300k, GeneralBusiness, Date("2026-07-01")) -> Yen(1650)
     | "construction pays more, and it is the whole wage that is charged" :
         (pay300k, ConstructionBusiness, Date("2026-07-01")) -> Yen(1950)
+    | "the primary industries pay the higher rate as construction does" :
+        (pay300k, AgricultureForestryFisheryOrSake, Date("2026-07-01")) -> Yen(1950)
+    | "a half of a yen is dropped, not carried: 5.5 yen is 5" :
+        (MonthlyRemuneration { ...pay300k, baseSalary = Yen(1000), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0) }, GeneralBusiness, Date("2026-07-01"))
+        -> Yen(5)
+    | "and anything above a half is carried: 5.511 yen is 6" :
+        (MonthlyRemuneration { ...pay300k, baseSalary = Yen(1002), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0) }, GeneralBusiness, Date("2026-07-01"))
+        -> Yen(6)
+
+example judgeInsuredCategory
+    | "somebody of thirty-six is a general insured person" :
+        (Date("1990-04-01"), Date("2026-07-01")) -> GeneralInsured
+    | "born on 1 August 1961 she attains sixty-five on 31 July 2026, the day before her birthday" :
+        (Date("1961-08-01"), Date("2026-07-31")) -> ElderlyInsured
+    | "and one day earlier she is still a general insured person" :
+        (Date("1961-08-01"), Date("2026-07-30")) -> GeneralInsured
+    | "somebody of eighty is an elderly insured person" :
+        (Date("1946-01-15"), Date("2026-07-01")) -> ElderlyInsured
+
+example bandOfAge
+    | "at 29 the band is UnderThirty" :
+        (Date("1997-01-15"), Date("2026-07-01")) -> UnderThirty
+    | "at 30 the band is ThirtyToThirtyFour" :
+        (Date("1996-01-15"), Date("2026-07-01")) -> ThirtyToThirtyFour
+    | "at 34 the band is ThirtyToThirtyFour" :
+        (Date("1992-01-15"), Date("2026-07-01")) -> ThirtyToThirtyFour
+    | "at 35 the band is ThirtyFiveToFortyFour" :
+        (Date("1991-01-15"), Date("2026-07-01")) -> ThirtyFiveToFortyFour
+    | "at 44 the band is ThirtyFiveToFortyFour" :
+        (Date("1982-01-15"), Date("2026-07-01")) -> ThirtyFiveToFortyFour
+    | "at 45 the band is FortyFiveToFiftyNine" :
+        (Date("1981-01-15"), Date("2026-07-01")) -> FortyFiveToFiftyNine
+    | "at 59 the band is FortyFiveToFiftyNine" :
+        (Date("1967-01-15"), Date("2026-07-01")) -> FortyFiveToFiftyNine
+    | "at 60 the band is SixtyToSixtyFour" :
+        (Date("1966-01-15"), Date("2026-07-01")) -> SixtyToSixtyFour
+    | "at 64 the band is SixtyToSixtyFour" :
+        (Date("1962-01-15"), Date("2026-07-01")) -> SixtyToSixtyFour
+    | "at 65 the band is ElderlyJobSeeker" :
+        (Date("1961-01-15"), Date("2026-07-01")) -> ElderlyJobSeeker
+    | "at 80 the band is ElderlyJobSeeker" :
+        (Date("1946-01-15"), Date("2026-07-01")) -> ElderlyJobSeeker
+    | "at 20 the band is UnderThirty" :
+        (Date("2006-01-15"), Date("2026-07-01")) -> UnderThirty
+    | "born on 1 August 1996 he attains thirty on 31 July 2026, the day before his birthday" :
+        (Date("1996-08-01"), Date("2026-07-31")) -> ThirtyToThirtyFour
+    | "and a day earlier he is under thirty" :
+        (Date("1996-08-01"), Date("2026-07-30")) -> UnderThirty
+
+example bandOfInsuredPeriod
+    | "0 months is UnderOneYear" :
+        (InsuredMonths(0)) -> UnderOneYear
+    | "5 months is UnderOneYear" :
+        (InsuredMonths(5)) -> UnderOneYear
+    | "11 months is UnderOneYear" :
+        (InsuredMonths(11)) -> UnderOneYear
+    | "12 months is OneToFiveYears" :
+        (InsuredMonths(12)) -> OneToFiveYears
+    | "30 months is OneToFiveYears" :
+        (InsuredMonths(30)) -> OneToFiveYears
+    | "59 months is OneToFiveYears" :
+        (InsuredMonths(59)) -> OneToFiveYears
+    | "60 months is FiveToTenYears" :
+        (InsuredMonths(60)) -> FiveToTenYears
+    | "90 months is FiveToTenYears" :
+        (InsuredMonths(90)) -> FiveToTenYears
+    | "119 months is FiveToTenYears" :
+        (InsuredMonths(119)) -> FiveToTenYears
+    | "120 months is TenToTwentyYears" :
+        (InsuredMonths(120)) -> TenToTwentyYears
+    | "180 months is TenToTwentyYears" :
+        (InsuredMonths(180)) -> TenToTwentyYears
+    | "239 months is TenToTwentyYears" :
+        (InsuredMonths(239)) -> TenToTwentyYears
+    | "240 months is TwentyYearsOrMore" :
+        (InsuredMonths(240)) -> TwentyYearsOrMore
+    | "300 months is TwentyYearsOrMore" :
+        (InsuredMonths(300)) -> TwentyYearsOrMore

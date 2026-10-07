@@ -646,6 +646,147 @@ example judgeCoverage
     | "somebody who has attained seventy-five is insured elsewhere, whatever their hours" :
         (fullTimeTerms, pay300k, tokyoOffice, ordinaryWeek, Date("1951-01-01"), Date("2026-07-01"))
         -> CoverageNotRequired
+    | "a full-timer scheduled for 10 hours in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = FullTime, weeklyHours = WeeklyScheduledHours(10.0m), student = NotDaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ WeeklyHoursBelowTwenty { hours = WeeklyScheduledHours(10.0m) } ] }
+    | "a full-timer scheduled for 10 hours, who is a daytime student, in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = FullTime, weeklyHours = WeeklyScheduledHours(10.0m), student = DaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ WeeklyHoursBelowTwenty { hours = WeeklyScheduledHours(10.0m) }, EnrolledAsDaytimeStudent ] }
+    | "a full-timer scheduled for 24 hours in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = FullTime, weeklyHours = WeeklyScheduledHours(24.0m), student = NotDaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = ShortTimeRoute, scope = HealthAndPension }
+    | "a full-timer scheduled for 24 hours, who is a daytime student, in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = FullTime, weeklyHours = WeeklyScheduledHours(24.0m), student = DaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ EnrolledAsDaytimeStudent ] }
+    | "a full-timer scheduled for 40 hours in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = FullTime, weeklyHours = WeeklyScheduledHours(40.0m), student = NotDaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "a full-timer scheduled for 40 hours, who is a daytime student, in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = FullTime, weeklyHours = WeeklyScheduledHours(40.0m), student = DaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "a contract employee scheduled for 10 hours in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = ContractEmployee, weeklyHours = WeeklyScheduledHours(10.0m), student = NotDaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ WeeklyHoursBelowTwenty { hours = WeeklyScheduledHours(10.0m) } ] }
+    | "a contract employee scheduled for 10 hours, who is a daytime student, in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = ContractEmployee, weeklyHours = WeeklyScheduledHours(10.0m), student = DaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ WeeklyHoursBelowTwenty { hours = WeeklyScheduledHours(10.0m) }, EnrolledAsDaytimeStudent ] }
+    | "a contract employee scheduled for 24 hours in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = ContractEmployee, weeklyHours = WeeklyScheduledHours(24.0m), student = NotDaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = ShortTimeRoute, scope = HealthAndPension }
+    | "a contract employee scheduled for 24 hours, who is a daytime student, in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = ContractEmployee, weeklyHours = WeeklyScheduledHours(24.0m), student = DaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ EnrolledAsDaytimeStudent ] }
+    | "a contract employee scheduled for 40 hours in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = ContractEmployee, weeklyHours = WeeklyScheduledHours(40.0m), student = NotDaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "a contract employee scheduled for 40 hours, who is a daytime student, in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = ContractEmployee, weeklyHours = WeeklyScheduledHours(40.0m), student = DaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "a part-timer scheduled for 10 hours in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(10.0m), student = NotDaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ WeeklyHoursBelowTwenty { hours = WeeklyScheduledHours(10.0m) } ] }
+    | "a part-timer scheduled for 10 hours, who is a daytime student, in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(10.0m), student = DaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ WeeklyHoursBelowTwenty { hours = WeeklyScheduledHours(10.0m) }, EnrolledAsDaytimeStudent ] }
+    | "a part-timer scheduled for 24 hours in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(24.0m), student = NotDaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = ShortTimeRoute, scope = HealthAndPension }
+    | "a part-timer scheduled for 24 hours, who is a daytime student, in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(24.0m), student = DaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ EnrolledAsDaytimeStudent ] }
+    | "a part-timer scheduled for 40 hours in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(40.0m), student = NotDaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "a part-timer scheduled for 40 hours, who is a daytime student, in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(40.0m), student = DaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "an executive scheduled for 10 hours in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = Executive, weeklyHours = WeeklyScheduledHours(10.0m), student = NotDaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "an executive scheduled for 10 hours, who is a daytime student, in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = Executive, weeklyHours = WeeklyScheduledHours(10.0m), student = DaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "an executive scheduled for 24 hours in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = Executive, weeklyHours = WeeklyScheduledHours(24.0m), student = NotDaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "an executive scheduled for 24 hours, who is a daytime student, in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = Executive, weeklyHours = WeeklyScheduledHours(24.0m), student = DaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "an executive scheduled for 40 hours in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = Executive, weeklyHours = WeeklyScheduledHours(40.0m), student = NotDaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "an executive scheduled for 40 hours, who is a daytime student, in an office of 120" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = Executive, weeklyHours = WeeklyScheduledHours(40.0m), student = DaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "a full-timer scheduled for 24 hours in an office of 30" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = FullTime, weeklyHours = WeeklyScheduledHours(24.0m), student = NotDaytimeStudent }, pay110k, smallOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ OfficeBelowSpecifiedSize { insuredCount = 30, floor = 51 } ] }
+    | "a full-timer scheduled for 10 hours in an office of 30, on 100,000 yen" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = FullTime, weeklyHours = WeeklyScheduledHours(10.0m), student = NotDaytimeStudent }, pay110k, smallOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ WeeklyHoursBelowTwenty { hours = WeeklyScheduledHours(10.0m) }, OfficeBelowSpecifiedSize { insuredCount = 30, floor = 51 } ] }
+    | "a contract employee scheduled for 24 hours in an office of 30" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = ContractEmployee, weeklyHours = WeeklyScheduledHours(24.0m), student = NotDaytimeStudent }, pay110k, smallOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ OfficeBelowSpecifiedSize { insuredCount = 30, floor = 51 } ] }
+    | "a contract employee scheduled for 10 hours in an office of 30, on 100,000 yen" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = ContractEmployee, weeklyHours = WeeklyScheduledHours(10.0m), student = NotDaytimeStudent }, pay110k, smallOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ WeeklyHoursBelowTwenty { hours = WeeklyScheduledHours(10.0m) }, OfficeBelowSpecifiedSize { insuredCount = 30, floor = 51 } ] }
+    | "a part-timer scheduled for 24 hours in an office of 30" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(24.0m), student = NotDaytimeStudent }, pay110k, smallOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ OfficeBelowSpecifiedSize { insuredCount = 30, floor = 51 } ] }
+    | "a part-timer scheduled for 10 hours in an office of 30, on 100,000 yen" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(10.0m), student = NotDaytimeStudent }, pay110k, smallOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ WeeklyHoursBelowTwenty { hours = WeeklyScheduledHours(10.0m) }, OfficeBelowSpecifiedSize { insuredCount = 30, floor = 51 } ] }
+    | "an executive scheduled for 24 hours in an office of 30" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = Executive, weeklyHours = WeeklyScheduledHours(24.0m), student = NotDaytimeStudent }, pay110k, smallOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "an executive scheduled for 10 hours in an office of 30, on 100,000 yen" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = Executive, weeklyHours = WeeklyScheduledHours(10.0m), student = NotDaytimeStudent }, pay110k, smallOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "20 hours is not below 20, so the hours condition holds" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(20.0m), student = NotDaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = ShortTimeRoute, scope = HealthAndPension }
+    | "19 hours is below 20 and the only reason given" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(19.0m), student = NotDaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ WeeklyHoursBelowTwenty { hours = WeeklyScheduledHours(19.0m) } ] }
+    | "exactly three quarters of the ordinary 40 hours is covered on the regular route" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(30.0m), student = NotDaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "29 hours is a little short of three quarters and goes to the short-time test" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(29.0m), student = NotDaytimeStudent }, pay110k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = ShortTimeRoute, scope = HealthAndPension }
+    | "87,999 yen of scheduled wage is under the 88,000 floor" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(24.0m), student = NotDaytimeStudent }, lowWagePay, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ ScheduledWageBelowFloor { wage = Yen(87999), floor = Yen(88000) } ] }
+    | "88,000 yen of scheduled wage reaches the floor" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(24.0m), student = NotDaytimeStudent }, floorWagePay, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = ShortTimeRoute, scope = HealthAndPension }
+    | "an office of 50 is under the 51 the short-time rule asks for" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(24.0m), student = NotDaytimeStudent }, pay110k, fiftyOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ OfficeBelowSpecifiedSize { insuredCount = 50, floor = 51 } ] }
+    | "an office of 51 is enough" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(24.0m), student = NotDaytimeStudent }, pay110k, fiftyOneOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = ShortTimeRoute, scope = HealthAndPension }
+    | "every short-time condition failing is reported together, in the order of the rule" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(10.0m), student = DaytimeStudent }, lowWagePay, smallOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ WeeklyHoursBelowTwenty { hours = WeeklyScheduledHours(10.0m) }, ScheduledWageBelowFloor { wage = Yen(87999), floor = Yen(88000) }, EnrolledAsDaytimeStudent, OfficeBelowSpecifiedSize { insuredCount = 30, floor = 51 } ] }
+    | "born on 3 July 1956 she has not yet attained seventy on 1 July 2026" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = FullTime, weeklyHours = WeeklyScheduledHours(40.0m), student = NotDaytimeStudent }, pay300k, tokyoOffice, ordinaryWeek, Date("1956-07-03"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "born on 2 July 1956 she attains seventy on 1 July 2026, the day before her birthday" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = FullTime, weeklyHours = WeeklyScheduledHours(40.0m), student = NotDaytimeStudent }, pay300k, tokyoOffice, ordinaryWeek, Date("1956-07-02"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthOnly }
+    | "born on 3 July 1951 she has not yet attained seventy-five" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = FullTime, weeklyHours = WeeklyScheduledHours(40.0m), student = NotDaytimeStudent }, pay300k, tokyoOffice, ordinaryWeek, Date("1951-07-03"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthOnly }
+    | "born on 2 July 1951 she attains seventy-five on 1 July 2026 and leaves the scheme" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = FullTime, weeklyHours = WeeklyScheduledHours(40.0m), student = NotDaytimeStudent }, pay300k, tokyoOffice, ordinaryWeek, Date("1951-07-02"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ AttainedSeventyFive ] }
+    | "a full-timer on a fixed-term contract is covered like any other" :
+        (EmploymentTerms { ...fullTimeTerms, contract = example.employee.TermUntil { endsOn = Date("2027-03-31") } }, pay300k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "50,000 yen of scheduled wage is far under the floor" :
+        (shortTimeTerms, MonthlyRemuneration { ...pay110k, baseSalary = Yen(45000), scheduledAllowances = Yen(5000) }, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ ScheduledWageBelowFloor { wage = Yen(50000), floor = Yen(88000) } ] }
 
 // The pair a day apart. Both people worked the same March; one of them pays for it.
 example finalContributionMonth
@@ -655,6 +796,12 @@ example finalContributionMonth
     | "leaving on the thirty-first loses coverage on 1 April, so March is" :
         (CoverageLost { acquiredOn = Date("2020-04-01"), lostOn = Date("2026-04-01") })
         -> ContributionMonth(Date("2026-03-01"))
+    | "coverage lost on the day it was acquired is lost before the month began, so the month is the one before" :
+        (CoverageLost { acquiredOn = Date("2026-04-01"), lostOn = Date("2026-04-01") })
+        -> ContributionMonth(Date("2026-03-01"))
+    | "coverage lost on 1 January ends the premiums with December of the year before" :
+        (CoverageLost { acquiredOn = Date("2020-04-01"), lostOn = Date("2027-01-01") })
+        -> ContributionMonth(Date("2026-12-01"))
 
 let aprilRecord = MonthlyPayRecord
     { month = ContributionMonth(Date("2026-04-01"))
@@ -683,6 +830,18 @@ example decideRegularly
                           , third = MonthlyPayRecord { ...aprilRecord, paidBaseDays = PaidBaseDays(0) }
                           })
         -> NoPayableMonth
+    | "a pay under the lowest bound is grade 1, and pension grade 1 as well" :
+        (ThreeMonthWindow { first = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-04-01")), paidBaseDays = PaidBaseDays(31), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(10000) } }, second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01")), paidBaseDays = PaidBaseDays(31), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(10000) } }, third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")), paidBaseDays = PaidBaseDays(31), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(10000) } } })
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(58000), health = HealthGrade(1), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "the highest pay is grade 50, which is pension grade 32" :
+        (ThreeMonthWindow { first = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-04-01")), paidBaseDays = PaidBaseDays(31), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(1360000) } }, second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01")), paidBaseDays = PaidBaseDays(31), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(1360000) } }, third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")), paidBaseDays = PaidBaseDays(31), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(1360000) } } })
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(1390000), health = HealthGrade(50), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a month of 16 paid base days is left out of the average, and one of 17 is counted" :
+        (ThreeMonthWindow { first = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-04-01")), paidBaseDays = PaidBaseDays(31), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(260000) } }, second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01")), paidBaseDays = PaidBaseDays(16), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(960000) } }, third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")), paidBaseDays = PaidBaseDays(17), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(260000) } } })
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(300000), health = HealthGrade(22), pension = PensionGrade(19), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "the average is truncated to the yen, so 289,999 and two thirds stays under the 290,000 bound" :
+        (ThreeMonthWindow { first = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-04-01")), paidBaseDays = PaidBaseDays(30), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(249999) } }, second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01")), paidBaseDays = PaidBaseDays(31), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(250000) } }, third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")), paidBaseDays = PaidBaseDays(30), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(250000) } } })
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(280000), health = HealthGrade(21), pension = PensionGrade(18), appliesFrom = ContributionMonth(Date("2026-09-01")) }
 
 let currentGrade22 = GradeDecision
     { basis = RegularDetermination
@@ -721,6 +880,33 @@ example judgeOccasionalRevision
     | "three months of the same overtime move the average and revise nothing, because the fixed wage did not change" :
         (currentGrade22, Yen(300000), overtimeWindow)
         -> RevisionNotRequired
+    | "a grade decided on acquisition is revised like any other" :
+        (GradeDecision { ...currentGrade22, basis = OnAcquisition }, Yen(300000), raisedWindow)
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(360000), health = HealthGrade(25), pension = PensionGrade(22), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a grade already revised once is revised again by the same rule" :
+        (GradeDecision { ...currentGrade22, basis = OccasionalRevision }, Yen(300000), raisedWindow)
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(360000), health = HealthGrade(25), pension = PensionGrade(22), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a month of 16 paid base days blocks the revision and is named with its days" :
+        (currentGrade22, Yen(300000), ThreeMonthWindow { ...raisedWindow, second = MonthlyPayRecord { ...raisedWindow.second, paidBaseDays = PaidBaseDays(16) } })
+        -> RevisionNotRequired { reasons = [ PaidDaysBelowSeventeen { month = ContributionMonth(Date("2026-05-01")), days = PaidBaseDays(16) } ] }
+    | "a cut in pay moves the grade down by three and the revision follows" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...pay300k, baseSalary = Yen(200000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(240000), health = HealthGrade(19), pension = PensionGrade(16), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "one grade of difference is not enough" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...pay300k, baseSalary = Yen(270000) }))
+        -> RevisionNotRequired { reasons = [ GradeDifferenceBelowTwo { current = HealthGrade(22), computed = HealthGrade(23) } ] }
+    | "two grades of difference is enough" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...pay300k, baseSalary = Yen(290000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(340000), health = HealthGrade(24), pension = PensionGrade(21), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an unchanged fixed wage, a short month and a grade that did not move are all reported, in that order" :
+        (currentGrade22, Yen(300000), ThreeMonthWindow { first = aprilRecord, second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01")), paidBaseDays = PaidBaseDays(10) }, third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")) } })
+        -> RevisionNotRequired { reasons = [ FixedWageUnchanged, PaidDaysBelowSeventeen { month = ContributionMonth(Date("2026-05-01")), days = PaidBaseDays(10) }, GradeDifferenceBelowTwo { current = HealthGrade(22), computed = HealthGrade(22) } ] }
+    | "a revision to the lowest grade carries pension grade 1" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...pay300k, baseSalary = Yen(10000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(58000), health = HealthGrade(1), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a revision to the highest grade carries pension grade 32" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...pay300k, baseSalary = Yen(1360000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(1390000), health = HealthGrade(50), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
 
 fake contributionRatesOf
     | (PrefectureCode("13"), Date("2026-07-01"))
@@ -743,6 +929,218 @@ example premiumFor
     | "under forty there is no long-term care, and over seventy no pension" :
         (Yen(110000), HealthOnly, OutsideLongTermCare, PrefectureCode("13"), Date("2026-07-01"))
         -> Premium { health = PremiumShare { employee = Yen(5450), employer = Yen(5451) }
+                   , longTermCare = PremiumShare { employee = Yen(0), employer = Yen(0) }
+                   , pension = PremiumShare { employee = Yen(0), employer = Yen(0) }
+                   }
+
+let lowWagePay = MonthlyRemuneration { ...pay110k, baseSalary = Yen(82999), scheduledAllowances = Yen(5000) }
+let floorWagePay = MonthlyRemuneration { ...pay110k, baseSalary = Yen(83000), scheduledAllowances = Yen(5000) }
+let fiftyOffice = Office { ...smallOffice, insuredCount = 50 }
+let fiftyOneOffice = Office { ...smallOffice, insuredCount = 51 }
+
+// A window of three months on one pay, from April.
+let evenWindow (pay: MonthlyRemuneration): ThreeMonthWindow = ThreeMonthWindow
+    { first = MonthlyPayRecord { ...aprilRecord, remuneration = pay }
+    , second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01")), remuneration = pay }
+    , third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")), remuneration = pay }
+    }
+
+let insuredFullTime = Insured
+    { acquiredOn = Date("2020-04-01")
+    , scope = HealthAndPension
+    , route = RegularRoute
+    , decision = currentGrade22
+    }
+
+let insuredShortTime = Insured { ...insuredFullTime, route = ShortTimeRoute }
+let insuredHealthOnly = Insured { ...insuredFullTime, scope = HealthOnly }
+let insuredOnAcquisition = Insured { ...insuredFullTime, decision = GradeDecision { ...currentGrade22, basis = OnAcquisition } }
+let insuredRevised = Insured { ...insuredFullTime, decision = GradeDecision { ...currentGrade22, basis = OccasionalRevision } }
+
+let ratesTokyo = ContributionRates
+    { health = ContributionRate(0.0991m)
+    , longTermCare = ContributionRate(0.0159m)
+    , pension = ContributionRate(0.183m)
+    }
+
+let hanakoIdentity = example.employee.PersonalIdentity
+    { id = example.employee.EmployeeId("000123")
+    , birthday = Date("1990-04-01")
+    , sex = example.employee.Female
+    , myNumber = example.employee.MyNumber("123456789018")
+    }
+
+let hanakoCommon = example.employee.EmploymentCommon
+    { identity = hanakoIdentity
+    , personalName = example.employee.PersonalName
+        { name = example.employee.PersonName("Sato Hanako"), kana = example.employee.KanaName("ｻﾄｳ ﾊﾅｺ") }
+    , residence = example.employee.Residence
+        { address = example.employee.Address
+            { postalCode = example.employee.PostalCode("100-0001"), prefecture = PrefectureCode("13"), line = "Chiyoda 1-1" }
+        }
+    , terms = fullTimeTerms
+    , remuneration = pay300k
+    }
+
+// The four employment types, one person each, with the sex, contract and schooling that differ between them.
+let employedFullTime = Employed { ...hanakoCommon, hiredOn = Date("2020-04-01") }
+
+let employedContract = Employed
+    { ...hanakoCommon
+    , identity = example.employee.PersonalIdentity { ...hanakoIdentity, sex = example.employee.Male }
+    , terms = EmploymentTerms
+        { ...fullTimeTerms
+        , employmentType = ContractEmployee
+        , contract = example.employee.TermUntil { endsOn = Date("2027-03-31") }
+        , student = DaytimeStudent
+        }
+    , hiredOn = Date("2025-04-01")
+    }
+
+let employedPartTime = Employed { ...hanakoCommon, terms = shortTimeTerms, hiredOn = Date("2023-04-01") }
+
+let employedExecutive = Employed
+    { ...hanakoCommon
+    , terms = EmploymentTerms { ...fullTimeTerms, employmentType = Executive }
+    , hiredOn = Date("2015-04-01")
+    }
+
+example acquireCoverage
+    | "an ordinary full-timer on 300,000 is in grade 22, which holds from the month of acquisition" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, pay300k, Date("2026-04-01"))
+        -> Insured { acquiredOn = Date("2026-04-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(300000), health = HealthGrade(22), pension = PensionGrade(19), appliesFrom = ContributionMonth(Date("2026-04-01")) } }
+    | "a short-time worker acquired in mid-month has the grade from that month's first day" :
+        (Covered { route = ShortTimeRoute, scope = HealthAndPension }, pay110k, Date("2026-07-15"))
+        -> Insured { acquiredOn = Date("2026-07-15"), scope = HealthAndPension, route = ShortTimeRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(110000), health = HealthGrade(7), pension = PensionGrade(4), appliesFrom = ContributionMonth(Date("2026-07-01")) } }
+    | "somebody between seventy and seventy-five is insured for health only" :
+        (Covered { route = RegularRoute, scope = HealthOnly }, pay300k, Date("2026-10-01"))
+        -> Insured { acquiredOn = Date("2026-10-01"), scope = HealthOnly, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(300000), health = HealthGrade(22), pension = PensionGrade(19), appliesFrom = ContributionMonth(Date("2026-10-01")) } }
+    | "a pay below the lowest bound is still grade 1, and pension grade 1 as well" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { ...pay300k, baseSalary = Yen(10000) }, Date("2026-04-01"))
+        -> Insured { acquiredOn = Date("2026-04-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(58000), health = HealthGrade(1), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2026-04-01")) } }
+    | "the highest grade is 50 for health and 32 for pension" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { ...pay300k, baseSalary = Yen(1360000) }, Date("2026-04-01"))
+        -> Insured { acquiredOn = Date("2026-04-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(1390000), health = HealthGrade(50), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-04-01")) } }
+
+example loseCoverage
+    | "a grade decided on regular determination loses coverage the day after the separation" :
+        (insuredFullTime, Date("2026-03-31"))
+        -> CoverageLost { acquiredOn = Date("2020-04-01"), lostOn = Date("2026-04-01") }
+    | "a grade decided on acquisition loses coverage the day after the separation" :
+        (Insured { ...insuredFullTime, decision = GradeDecision { ...currentGrade22, basis = OnAcquisition } }, Date("2026-06-30"))
+        -> CoverageLost { acquiredOn = Date("2020-04-01"), lostOn = Date("2026-07-01") }
+    | "a grade decided on an occasional revision loses coverage the day after the separation" :
+        (Insured { ...insuredFullTime, decision = GradeDecision { ...currentGrade22, basis = OccasionalRevision } }, Date("2026-12-31"))
+        -> CoverageLost { acquiredOn = Date("2020-04-01"), lostOn = Date("2027-01-01") }
+    | "a short-time worker loses coverage the day after the separation" :
+        (Insured { ...insuredFullTime, route = ShortTimeRoute }, Date("2026-09-30"))
+        -> CoverageLost { acquiredOn = Date("2020-04-01"), lostOn = Date("2026-10-01") }
+    | "somebody insured for health only loses coverage the day after the separation" :
+        (Insured { ...insuredFullTime, scope = HealthOnly }, Date("2026-05-31"))
+        -> CoverageLost { acquiredOn = Date("2020-04-01"), lostOn = Date("2026-06-01") }
+    | "separating on the day of acquisition is not before it, and coverage is lost the next day" :
+        (insuredFullTime, Date("2020-04-01"))
+        -> CoverageLost { acquiredOn = Date("2020-04-01"), lostOn = Date("2020-04-02") }
+    | "a separation the day before the acquisition is reported rather than stored" :
+        (insuredFullTime, Date("2020-03-31")) -> LossBeforeAcquisition
+    | "a separation years before the acquisition is reported as well" :
+        (insuredFullTime, Date("2010-01-01")) -> LossBeforeAcquisition
+    | "the health grade at either end of the table does not change when coverage is lost" :
+        (Insured { ...insuredFullTime, decision = GradeDecision { ...currentGrade22, standard = Yen(58000), health = HealthGrade(1), pension = PensionGrade(1) } }, Date("2026-08-31"))
+        -> CoverageLost { acquiredOn = Date("2020-04-01"), lostOn = Date("2026-09-01") }
+    | "nor does the highest grade" :
+        (Insured { ...insuredFullTime, decision = GradeDecision { ...currentGrade22, standard = Yen(1390000), health = HealthGrade(50), pension = PensionGrade(32) } }, Date("2026-08-30"))
+        -> CoverageLost { acquiredOn = Date("2020-04-01"), lostOn = Date("2026-08-31") }
+
+example applyDecision
+    | "a decision from the regular determination replaces the grade and keeps the rest of the record" :
+        (insuredFullTime, currentGrade22)
+        -> Insured { ...insuredFullTime, decision = currentGrade22 }
+    | "an acquisition decision replaces it as well" :
+        (insuredFullTime, GradeDecision { ...currentGrade22, basis = OnAcquisition })
+        -> Insured { ...insuredFullTime, decision = GradeDecision { ...currentGrade22, basis = OnAcquisition } }
+    | "and an occasional revision" :
+        (insuredFullTime, GradeDecision { ...currentGrade22, basis = OccasionalRevision, standard = Yen(360000), health = HealthGrade(25), pension = PensionGrade(22) })
+        -> Insured { ...insuredFullTime, decision = GradeDecision { ...currentGrade22, basis = OccasionalRevision, standard = Yen(360000), health = HealthGrade(25), pension = PensionGrade(22) } }
+    | "the lowest grade replaces a higher one" :
+        (insuredFullTime, GradeDecision { ...currentGrade22, standard = Yen(58000), health = HealthGrade(1), pension = PensionGrade(1) })
+        -> Insured { ...insuredFullTime, decision = GradeDecision { ...currentGrade22, standard = Yen(58000), health = HealthGrade(1), pension = PensionGrade(1) } }
+    | "the highest grade replaces a lower one" :
+        (insuredFullTime, GradeDecision { ...currentGrade22, standard = Yen(1390000), health = HealthGrade(50), pension = PensionGrade(32) })
+        -> Insured { ...insuredFullTime, decision = GradeDecision { ...currentGrade22, standard = Yen(1390000), health = HealthGrade(50), pension = PensionGrade(32) } }
+    | "a short-time worker keeps the route when the grade changes" :
+        (Insured { ...insuredFullTime, route = ShortTimeRoute }, currentGrade22)
+        -> Insured { ...insuredShortTime, decision = currentGrade22 }
+    | "somebody insured for health only keeps the scope when the grade changes" :
+        (Insured { ...insuredFullTime, scope = HealthOnly }, currentGrade22)
+        -> Insured { ...insuredHealthOnly, decision = currentGrade22 }
+    | "a record whose own grade was decided on acquisition is replaced by a regular one" :
+        (Insured { ...insuredFullTime, decision = GradeDecision { ...currentGrade22, basis = OnAcquisition } }, currentGrade22)
+        -> Insured { ...insuredOnAcquisition, decision = currentGrade22 }
+    | "and one decided by revision is replaced by a regular one" :
+        (Insured { ...insuredFullTime, decision = GradeDecision { ...currentGrade22, basis = OccasionalRevision } }, currentGrade22)
+        -> Insured { ...insuredRevised, decision = currentGrade22 }
+
+example judgeLongTermCareCategory
+    | "somebody of thirty-six is outside long-term care" :
+        (Date("1990-04-01"), Date("2026-07-01")) -> OutsideLongTermCare
+    | "somebody of fifty-one is insured" :
+        (Date("1975-05-20"), Date("2026-07-01")) -> LongTermCareInsured
+    | "born on 1 August 1986 he attains forty on 31 July 2026, the day before his birthday" :
+        (Date("1986-08-01"), Date("2026-07-31")) -> LongTermCareInsured
+    | "and one day earlier he has not" :
+        (Date("1986-08-01"), Date("2026-07-30")) -> OutsideLongTermCare
+    | "born on 1 August 1961 she attains sixty-five on 31 July 2026 and leaves" :
+        (Date("1961-08-01"), Date("2026-07-31")) -> OutsideLongTermCare
+    | "and one day earlier she is still insured" :
+        (Date("1961-08-01"), Date("2026-07-30")) -> LongTermCareInsured
+
+example judgePremiumExemption
+    | "a full-timer at work owes the premium" :
+        (employedFullTime) -> PremiumDue
+    | "a contract employee at work owes it" :
+        (employedContract) -> PremiumDue
+    | "a part-timer at work owes it" :
+        (employedPartTime) -> PremiumDue
+    | "an executive at work owes it" :
+        (employedExecutive) -> PremiumDue
+    | "maternity leave exempts both halves" :
+        (OnLeave { ...employedFullTime, leave = MaternityLeave, leaveFrom = Date("2026-01-01") }) -> PremiumExempt
+    | "childcare leave exempts both halves" :
+        (OnLeave { ...employedContract, leave = ChildcareLeave, leaveFrom = Date("2026-01-01") }) -> PremiumExempt
+    | "sick leave exempts nothing" :
+        (OnLeave { ...employedPartTime, leave = SickLeave, leaveFrom = Date("2026-01-01") }) -> PremiumDue
+    | "caregiver leave exempts nothing" :
+        (OnLeave { ...employedExecutive, leave = CaregiverLeave, leaveFrom = Date("2026-01-01") }) -> PremiumDue
+
+example computePremium
+    | "on 300,000 all three premiums are split evenly" :
+        (Yen(300000), HealthAndPension, LongTermCareInsured, ratesTokyo)
+        -> Premium { health = PremiumShare { employee = Yen(14865), employer = Yen(14865) }, longTermCare = PremiumShare { employee = Yen(2385), employer = Yen(2385) }, pension = PremiumShare { employee = Yen(27450), employer = Yen(27450) } }
+    | "under forty there is no long-term care" :
+        (Yen(300000), HealthAndPension, OutsideLongTermCare, ratesTokyo)
+        -> Premium { health = PremiumShare { employee = Yen(14865), employer = Yen(14865) }, longTermCare = PremiumShare { employee = Yen(0), employer = Yen(0) }, pension = PremiumShare { employee = Yen(27450), employer = Yen(27450) } }
+    | "over seventy there is no pension" :
+        (Yen(300000), HealthOnly, LongTermCareInsured, ratesTokyo)
+        -> Premium { health = PremiumShare { employee = Yen(14865), employer = Yen(14865) }, longTermCare = PremiumShare { employee = Yen(2385), employer = Yen(2385) }, pension = PremiumShare { employee = Yen(0), employer = Yen(0) } }
+    | "health insurance alone" :
+        (Yen(300000), HealthOnly, OutsideLongTermCare, ratesTokyo)
+        -> Premium { health = PremiumShare { employee = Yen(14865), employer = Yen(14865) }, longTermCare = PremiumShare { employee = Yen(0), employer = Yen(0) }, pension = PremiumShare { employee = Yen(0), employer = Yen(0) } }
+    | "a half of 10,901 yen is 5,450.5, which is dropped to 5,450 and the employer pays 5,451" :
+        (Yen(110000), HealthAndPension, LongTermCareInsured, ratesTokyo)
+        -> Premium { health = PremiumShare { employee = Yen(5450), employer = Yen(5451) }, longTermCare = PremiumShare { employee = Yen(874), employer = Yen(875) }, pension = PremiumShare { employee = Yen(10065), employer = Yen(10065) } }
+    | "on 58,000 the lowest standard remuneration" :
+        (Yen(58000), HealthAndPension, LongTermCareInsured, ratesTokyo)
+        -> Premium { health = PremiumShare { employee = Yen(2874), employer = Yen(2873) }, longTermCare = PremiumShare { employee = Yen(461), employer = Yen(461) }, pension = PremiumShare { employee = Yen(5307), employer = Yen(5307) } }
+    | "a rate of nothing is a premium of nothing, whatever the standard remuneration" :
+        (Yen(300000), HealthAndPension, LongTermCareInsured, ContributionRates { health = ContributionRate(0.0m), longTermCare = ContributionRate(0.0m), pension = ContributionRate(0.0m) })
+        -> Premium { health = PremiumShare { employee = Yen(0), employer = Yen(0) }
+                   , longTermCare = PremiumShare { employee = Yen(0), employer = Yen(0) }
+                   , pension = PremiumShare { employee = Yen(0), employer = Yen(0) }
+                   }
+    | "a rate of one is the whole standard remuneration, halved" :
+        (Yen(58000), HealthAndPension, LongTermCareInsured, ContributionRates { health = ContributionRate(1.0m), longTermCare = ContributionRate(0.0m), pension = ContributionRate(0.0m) })
+        -> Premium { health = PremiumShare { employee = Yen(29000), employer = Yen(29000) }
                    , longTermCare = PremiumShare { employee = Yen(0), employer = Yen(0) }
                    , pension = PremiumShare { employee = Yen(0), employer = Yen(0) }
                    }

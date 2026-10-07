@@ -402,6 +402,50 @@ example tallyMonth
                         , lateNight = Hours(0.0m)
                         , statutoryHoliday = Hours(6.0m)
                         }
+    | "days[*].kind=PrescribedHoliday"
+        : (
+            [
+                DailyAttendance {
+                    day = Date("2000-01-01"),
+                    worked = Hours(0m),
+                    lateNight = Hours(0m),
+                    kind = PrescribedHoliday
+                }
+            ]
+        )
+        -> MonthlyTally { ordinary = Hours(0.0m), overtimeWithinSixty = Hours(0.0m), overtimeBeyondSixty = Hours(0.0m), lateNight = Hours(0.0m), statutoryHoliday = Hours(0.0m) }
+    | "seven hours on an ordinary day is under the statutory eight, so it is all ordinary and none is overtime" :
+        ([ DailyAttendance { ...ordinaryDay, worked = Hours(7.0m) } ])
+        -> MonthlyTally { ordinary = Hours(7.0m)
+                        , overtimeWithinSixty = Hours(0.0m)
+                        , overtimeBeyondSixty = Hours(0.0m)
+                        , lateNight = Hours(0.0m)
+                        , statutoryHoliday = Hours(0.0m)
+                        }
+    | "ten hours on a prescribed holiday is overtime like any ordinary day, not holiday work" :
+        ([ DailyAttendance { ...ordinaryDay, worked = Hours(10.0m), kind = PrescribedHoliday } ])
+        -> MonthlyTally { ordinary = Hours(8.0m)
+                        , overtimeWithinSixty = Hours(2.0m)
+                        , overtimeBeyondSixty = Hours(0.0m)
+                        , lateNight = Hours(0.0m)
+                        , statutoryHoliday = Hours(0.0m)
+                        }
+    | "sixty-four hours of overtime in a month, so the sixty-hour split puts four hours beyond it" :
+        ([ DailyAttendance { ...ordinaryDay, worked = Hours(16.0m) }
+         , DailyAttendance { ...ordinaryDay, worked = Hours(16.0m) }
+         , DailyAttendance { ...ordinaryDay, worked = Hours(16.0m) }
+         , DailyAttendance { ...ordinaryDay, worked = Hours(16.0m) }
+         , DailyAttendance { ...ordinaryDay, worked = Hours(16.0m) }
+         , DailyAttendance { ...ordinaryDay, worked = Hours(16.0m) }
+         , DailyAttendance { ...ordinaryDay, worked = Hours(16.0m) }
+         , DailyAttendance { ...ordinaryDay, worked = Hours(16.0m) }
+         ])
+        -> MonthlyTally { ordinary = Hours(64.0m)
+                        , overtimeWithinSixty = Hours(60.0m)
+                        , overtimeBeyondSixty = Hours(4.0m)
+                        , lateNight = Hours(0.0m)
+                        , statutoryHoliday = Hours(0.0m)
+                        }
 
 let quietMonth = OvertimeHistory
     { monthOvertime = Hours(40.0m)
@@ -428,6 +472,156 @@ example judgeOvertimeLimits
         (WithoutSpecialClause, busyMonth) -> LimitsExceeded
     | "a hundred hours counting holiday work is a breach even with a special clause, and so is the average" :
         (WithSpecialClause, busyMonth) -> LimitsExceeded
+    | (WithSpecialClause, OvertimeHistory { ...quietMonth, yearOvertime = Hours(721m) })    -> LimitsExceeded { breaches = [ AnnualLimitExceeded { limit = Hours(720.0m), actual = Hours(721.0m) } ] }
+    | (
+        WithSpecialClause,
+        OvertimeHistory { ...busyMonth, yearOvertime = Hours(721m), extendedMonths = 7 }
+    )
+        -> LimitsExceeded { breaches = [ AbsoluteMonthlyLimitReached { limit = Hours(100.0m), actual = Hours(100.0m) }, RollingAverageExceeded { limit = Hours(80.0m), actual = Hours(84.0m) }, AnnualLimitExceeded { limit = Hours(720.0m), actual = Hours(721.0m) }, TooManyExtendedMonths { limit = 6, actual = 7 } ] }
+    | (
+        WithSpecialClause,
+        OvertimeHistory {
+            ...quietMonth,
+            yearOvertime = Hours(721m),
+            extendedMonths = 7,
+            highestRollingAverage = Hours(81m)
+        }
+    )
+        -> LimitsExceeded { breaches = [ RollingAverageExceeded { limit = Hours(80.0m), actual = Hours(81.0m) }, AnnualLimitExceeded { limit = Hours(720.0m), actual = Hours(721.0m) }, TooManyExtendedMonths { limit = 6, actual = 7 } ] }
+    | (
+        WithSpecialClause,
+        OvertimeHistory {
+            ...quietMonth,
+            yearOvertime = Hours(721m),
+            extendedMonths = 7,
+            monthOvertimeWithHoliday = Hours(100m)
+        }
+    )
+        -> LimitsExceeded { breaches = [ AbsoluteMonthlyLimitReached { limit = Hours(100.0m), actual = Hours(100.0m) }, AnnualLimitExceeded { limit = Hours(720.0m), actual = Hours(721.0m) }, TooManyExtendedMonths { limit = 6, actual = 7 } ] }
+    | (
+        WithSpecialClause,
+        OvertimeHistory { ...quietMonth, yearOvertime = Hours(721m), extendedMonths = 7 }
+    )
+        -> LimitsExceeded { breaches = [ AnnualLimitExceeded { limit = Hours(720.0m), actual = Hours(721.0m) }, TooManyExtendedMonths { limit = 6, actual = 7 } ] }
+    | (
+        WithSpecialClause,
+        OvertimeHistory { ...busyMonth, yearOvertime = Hours(0m), extendedMonths = 7 }
+    )
+        -> LimitsExceeded { breaches = [ AbsoluteMonthlyLimitReached { limit = Hours(100.0m), actual = Hours(100.0m) }, RollingAverageExceeded { limit = Hours(80.0m), actual = Hours(84.0m) }, TooManyExtendedMonths { limit = 6, actual = 7 } ] }
+    | (
+        WithSpecialClause,
+        OvertimeHistory { ...quietMonth, extendedMonths = 7, highestRollingAverage = Hours(81m) }
+    )
+        -> LimitsExceeded { breaches = [ RollingAverageExceeded { limit = Hours(80.0m), actual = Hours(81.0m) }, TooManyExtendedMonths { limit = 6, actual = 7 } ] }
+    | (
+        WithSpecialClause,
+        OvertimeHistory {
+            ...quietMonth,
+            extendedMonths = 7,
+            monthOvertimeWithHoliday = Hours(100m)
+        }
+    )
+        -> LimitsExceeded { breaches = [ AbsoluteMonthlyLimitReached { limit = Hours(100.0m), actual = Hours(100.0m) }, TooManyExtendedMonths { limit = 6, actual = 7 } ] }
+    | (WithSpecialClause, OvertimeHistory { ...busyMonth, yearOvertime = Hours(721m) })     -> LimitsExceeded { breaches = [ AbsoluteMonthlyLimitReached { limit = Hours(100.0m), actual = Hours(100.0m) }, RollingAverageExceeded { limit = Hours(80.0m), actual = Hours(84.0m) }, AnnualLimitExceeded { limit = Hours(720.0m), actual = Hours(721.0m) } ] }
+    | (
+        WithSpecialClause,
+        OvertimeHistory {
+            ...quietMonth,
+            yearOvertime = Hours(721m),
+            highestRollingAverage = Hours(81m)
+        }
+    )
+        -> LimitsExceeded { breaches = [ RollingAverageExceeded { limit = Hours(80.0m), actual = Hours(81.0m) }, AnnualLimitExceeded { limit = Hours(720.0m), actual = Hours(721.0m) } ] }
+    | (
+        WithSpecialClause,
+        OvertimeHistory {
+            ...quietMonth,
+            yearOvertime = Hours(721m),
+            monthOvertimeWithHoliday = Hours(100m)
+        }
+    )
+        -> LimitsExceeded { breaches = [ AbsoluteMonthlyLimitReached { limit = Hours(100.0m), actual = Hours(100.0m) }, AnnualLimitExceeded { limit = Hours(720.0m), actual = Hours(721.0m) } ] }
+    | (WithSpecialClause, OvertimeHistory { ...quietMonth, highestRollingAverage = Hours(81m) })
+        -> LimitsExceeded { breaches = [ RollingAverageExceeded { limit = Hours(80.0m), actual = Hours(81.0m) } ] }
+    | (WithoutSpecialClause, OvertimeHistory { ...quietMonth, yearOvertime = Hours(540m) }) -> LimitsExceeded { breaches = [ AnnualLimitExceeded { limit = Hours(360.0m), actual = Hours(540.0m) } ] }
+    | (WithoutSpecialClause, OvertimeHistory { ...busyMonth, yearOvertime = Hours(0m) })    -> LimitsExceeded { breaches = [ MonthlyLimitExceeded { limit = Hours(45.0m), actual = Hours(92.0m) } ] }
+    | (
+        WithoutSpecialClause,
+        OvertimeHistory {
+            monthOvertime = Hours(45m),
+            monthOvertimeWithHoliday = Hours(45m),
+            highestRollingAverage = Hours(0m),
+            yearOvertime = Hours(0m),
+            extendedMonths = 0
+        }
+    )
+        -> WithinLimits
+    | (
+        WithSpecialClause,
+        OvertimeHistory {
+            monthOvertime = Hours(0m),
+            monthOvertimeWithHoliday = Hours(101m),
+            highestRollingAverage = Hours(0m),
+            yearOvertime = Hours(0m),
+            extendedMonths = 0
+        }
+    )
+        -> LimitsExceeded { breaches = [ AbsoluteMonthlyLimitReached { limit = Hours(100.0m), actual = Hours(101.0m) } ] }
+    | (
+        WithSpecialClause,
+        OvertimeHistory {
+            monthOvertime = Hours(0m),
+            monthOvertimeWithHoliday = Hours(0m),
+            highestRollingAverage = Hours(80m),
+            yearOvertime = Hours(0m),
+            extendedMonths = 0
+        }
+    )
+        -> WithinLimits
+    | (
+        WithSpecialClause,
+        OvertimeHistory {
+            monthOvertime = Hours(0m),
+            monthOvertimeWithHoliday = Hours(0m),
+            highestRollingAverage = Hours(0m),
+            yearOvertime = Hours(720m),
+            extendedMonths = 0
+        }
+    )
+        -> WithinLimits
+    | (
+        WithoutSpecialClause,
+        OvertimeHistory {
+            monthOvertime = Hours(0m),
+            monthOvertimeWithHoliday = Hours(0m),
+            highestRollingAverage = Hours(0m),
+            yearOvertime = Hours(360m),
+            extendedMonths = 0
+        }
+    )
+        -> WithinLimits
+    | (
+        WithSpecialClause,
+        OvertimeHistory {
+            monthOvertime = Hours(0m),
+            monthOvertimeWithHoliday = Hours(0m),
+            highestRollingAverage = Hours(0m),
+            yearOvertime = Hours(0m),
+            extendedMonths = 6
+        }
+    )
+        -> WithinLimits
+    | (
+        WithSpecialClause,
+        OvertimeHistory {
+            monthOvertime = Hours(0m),
+            monthOvertimeWithHoliday = Hours(0m),
+            highestRollingAverage = Hours(0m),
+            yearOvertime = Hours(0m),
+            extendedMonths = 8
+        }
+    )
+        -> LimitsExceeded { breaches = [ TooManyExtendedMonths { limit = 6, actual = 8 } ] }
 
 example grantAnnualLeave
     | "six months in, a full-time employee who attended eight tenths gets ten days" :
@@ -445,6 +639,63 @@ example grantAnnualLeave
     | "attending seven tenths accrues nothing" :
         (HalfYear, WeeklyWorkDays(5), WeeklyScheduledHours(40.0m), AttendanceRate(0.7m))
         -> AttendanceRateTooLow
+    | (OneAndAHalfYears, WeeklyWorkDays(3), WeeklyScheduledHours(0m), AttendanceRate(0.8m))   -> LeaveGrant { days = LeaveDays(6), band = OneAndAHalfYears }
+    | (TwoAndAHalfYears, WeeklyWorkDays(3), WeeklyScheduledHours(0m), AttendanceRate(0.8m))   -> LeaveGrant { days = LeaveDays(6), band = TwoAndAHalfYears }
+    | (ThreeAndAHalfYears, WeeklyWorkDays(3), WeeklyScheduledHours(0m), AttendanceRate(0.8m)) -> LeaveGrant { days = LeaveDays(8), band = ThreeAndAHalfYears }
+    | (FourAndAHalfYears, WeeklyWorkDays(3), WeeklyScheduledHours(0m), AttendanceRate(0.8m))  -> LeaveGrant { days = LeaveDays(9), band = FourAndAHalfYears }
+    | (FiveAndAHalfYears, WeeklyWorkDays(3), WeeklyScheduledHours(0m), AttendanceRate(0.8m))  -> LeaveGrant { days = LeaveDays(10), band = FiveAndAHalfYears }
+    | (HalfYear, WeeklyWorkDays(2), WeeklyScheduledHours(0m), AttendanceRate(0.8m))           -> LeaveGrant { days = LeaveDays(3), band = HalfYear }
+    | (HalfYear, WeeklyWorkDays(1), WeeklyScheduledHours(0m), AttendanceRate(0.8m))           -> LeaveGrant { days = LeaveDays(1), band = HalfYear }
+    | (HalfYear, WeeklyWorkDays(4), WeeklyScheduledHours(0m), AttendanceRate(0.8m))           -> LeaveGrant { days = LeaveDays(7), band = HalfYear }
+    | (OneAndAHalfYears, WeeklyWorkDays(3), WeeklyScheduledHours(30m), AttendanceRate(0.8m))  -> LeaveGrant { days = LeaveDays(11), band = OneAndAHalfYears }
+    | (TwoAndAHalfYears, WeeklyWorkDays(3), WeeklyScheduledHours(30m), AttendanceRate(0.8m))  -> LeaveGrant { days = LeaveDays(12), band = TwoAndAHalfYears }
+    | (ThreeAndAHalfYears, WeeklyWorkDays(3), WeeklyScheduledHours(30m), AttendanceRate(0.8m))
+        -> LeaveGrant { days = LeaveDays(14), band = ThreeAndAHalfYears }
+    | (FourAndAHalfYears, WeeklyWorkDays(3), WeeklyScheduledHours(30m), AttendanceRate(0.8m)) -> LeaveGrant { days = LeaveDays(16), band = FourAndAHalfYears }
+    | (FiveAndAHalfYears, WeeklyWorkDays(3), WeeklyScheduledHours(30m), AttendanceRate(0.8m)) -> LeaveGrant { days = LeaveDays(18), band = FiveAndAHalfYears }
+    | (OneAndAHalfYears, WeeklyWorkDays(4), WeeklyScheduledHours(0m), AttendanceRate(0.8m))   -> LeaveGrant { days = LeaveDays(8), band = OneAndAHalfYears }
+    | (TwoAndAHalfYears, WeeklyWorkDays(4), WeeklyScheduledHours(0m), AttendanceRate(0.8m))   -> LeaveGrant { days = LeaveDays(9), band = TwoAndAHalfYears }
+    | (ThreeAndAHalfYears, WeeklyWorkDays(4), WeeklyScheduledHours(0m), AttendanceRate(0.8m)) -> LeaveGrant { days = LeaveDays(10), band = ThreeAndAHalfYears }
+    | (FourAndAHalfYears, WeeklyWorkDays(4), WeeklyScheduledHours(0m), AttendanceRate(0.8m))  -> LeaveGrant { days = LeaveDays(12), band = FourAndAHalfYears }
+    | (FiveAndAHalfYears, WeeklyWorkDays(4), WeeklyScheduledHours(0m), AttendanceRate(0.8m))  -> LeaveGrant { days = LeaveDays(13), band = FiveAndAHalfYears }
+    | (SixAndAHalfYearsOrMore, WeeklyWorkDays(4), WeeklyScheduledHours(0m), AttendanceRate(0.8m))
+        -> LeaveGrant { days = LeaveDays(15), band = SixAndAHalfYearsOrMore }
+    | (SixAndAHalfYearsOrMore, WeeklyWorkDays(3), WeeklyScheduledHours(0m), AttendanceRate(0.8m))
+        -> LeaveGrant { days = LeaveDays(11), band = SixAndAHalfYearsOrMore }
+    | (OneAndAHalfYears, WeeklyWorkDays(2), WeeklyScheduledHours(0m), AttendanceRate(0.8m))   -> LeaveGrant { days = LeaveDays(4), band = OneAndAHalfYears }
+    | (TwoAndAHalfYears, WeeklyWorkDays(2), WeeklyScheduledHours(0m), AttendanceRate(0.8m))   -> LeaveGrant { days = LeaveDays(4), band = TwoAndAHalfYears }
+    | (ThreeAndAHalfYears, WeeklyWorkDays(2), WeeklyScheduledHours(0m), AttendanceRate(0.8m)) -> LeaveGrant { days = LeaveDays(5), band = ThreeAndAHalfYears }
+    | (FourAndAHalfYears, WeeklyWorkDays(2), WeeklyScheduledHours(0m), AttendanceRate(0.8m))  -> LeaveGrant { days = LeaveDays(6), band = FourAndAHalfYears }
+    | (FiveAndAHalfYears, WeeklyWorkDays(2), WeeklyScheduledHours(0m), AttendanceRate(0.8m))  -> LeaveGrant { days = LeaveDays(6), band = FiveAndAHalfYears }
+    | (SixAndAHalfYearsOrMore, WeeklyWorkDays(2), WeeklyScheduledHours(0m), AttendanceRate(0.8m))
+        -> LeaveGrant { days = LeaveDays(7), band = SixAndAHalfYearsOrMore }
+    | (OneAndAHalfYears, WeeklyWorkDays(1), WeeklyScheduledHours(0m), AttendanceRate(0.8m))   -> LeaveGrant { days = LeaveDays(2), band = OneAndAHalfYears }
+    | (TwoAndAHalfYears, WeeklyWorkDays(1), WeeklyScheduledHours(0m), AttendanceRate(0.8m))   -> LeaveGrant { days = LeaveDays(2), band = TwoAndAHalfYears }
+    | (ThreeAndAHalfYears, WeeklyWorkDays(1), WeeklyScheduledHours(0m), AttendanceRate(0.8m)) -> LeaveGrant { days = LeaveDays(2), band = ThreeAndAHalfYears }
+    | (FourAndAHalfYears, WeeklyWorkDays(1), WeeklyScheduledHours(0m), AttendanceRate(0.8m))  -> LeaveGrant { days = LeaveDays(3), band = FourAndAHalfYears }
+    | (FiveAndAHalfYears, WeeklyWorkDays(1), WeeklyScheduledHours(0m), AttendanceRate(0.8m))  -> LeaveGrant { days = LeaveDays(3), band = FiveAndAHalfYears }
+    | (SixAndAHalfYearsOrMore, WeeklyWorkDays(1), WeeklyScheduledHours(0m), AttendanceRate(0.8m))
+        -> LeaveGrant { days = LeaveDays(3), band = SixAndAHalfYearsOrMore }
+    | (OneAndAHalfYears, WeeklyWorkDays(5), WeeklyScheduledHours(0m), AttendanceRate(0.8m))   -> LeaveGrant { days = LeaveDays(11), band = OneAndAHalfYears }
+    | (TwoAndAHalfYears, WeeklyWorkDays(5), WeeklyScheduledHours(0m), AttendanceRate(0.8m))   -> LeaveGrant { days = LeaveDays(12), band = TwoAndAHalfYears }
+    | (ThreeAndAHalfYears, WeeklyWorkDays(5), WeeklyScheduledHours(0m), AttendanceRate(0.8m)) -> LeaveGrant { days = LeaveDays(14), band = ThreeAndAHalfYears }
+    | (FourAndAHalfYears, WeeklyWorkDays(5), WeeklyScheduledHours(0m), AttendanceRate(0.8m))  -> LeaveGrant { days = LeaveDays(16), band = FourAndAHalfYears }
+    | (FiveAndAHalfYears, WeeklyWorkDays(5), WeeklyScheduledHours(0m), AttendanceRate(0.8m))  -> LeaveGrant { days = LeaveDays(18), band = FiveAndAHalfYears }
+    | (OneAndAHalfYears, WeeklyWorkDays(3), WeeklyScheduledHours(0m), AttendanceRate(0m))     -> AttendanceRateTooLow
+    | (TwoAndAHalfYears, WeeklyWorkDays(3), WeeklyScheduledHours(0m), AttendanceRate(0m))     -> AttendanceRateTooLow
+    | (ThreeAndAHalfYears, WeeklyWorkDays(3), WeeklyScheduledHours(0m), AttendanceRate(0m))   -> AttendanceRateTooLow
+    | (FourAndAHalfYears, WeeklyWorkDays(3), WeeklyScheduledHours(0m), AttendanceRate(0m))    -> AttendanceRateTooLow
+    | (FiveAndAHalfYears, WeeklyWorkDays(3), WeeklyScheduledHours(0m), AttendanceRate(0m))    -> AttendanceRateTooLow
+    | (SixAndAHalfYearsOrMore, WeeklyWorkDays(3), WeeklyScheduledHours(0m), AttendanceRate(0m))
+        -> AttendanceRateTooLow
+    | (HalfYear, WeeklyWorkDays(2), WeeklyScheduledHours(30m), AttendanceRate(0.8m))          -> LeaveGrant { days = LeaveDays(10), band = HalfYear }
+    | (HalfYear, WeeklyWorkDays(1), WeeklyScheduledHours(30m), AttendanceRate(0.8m))          -> LeaveGrant { days = LeaveDays(10), band = HalfYear }
+    | (HalfYear, WeeklyWorkDays(4), WeeklyScheduledHours(30m), AttendanceRate(0.8m))          -> LeaveGrant { days = LeaveDays(10), band = HalfYear }
+    | (HalfYear, WeeklyWorkDays(2), WeeklyScheduledHours(0m), AttendanceRate(0m))             -> AttendanceRateTooLow
+    | (HalfYear, WeeklyWorkDays(1), WeeklyScheduledHours(0m), AttendanceRate(0m))             -> AttendanceRateTooLow
+    | (HalfYear, WeeklyWorkDays(4), WeeklyScheduledHours(0m), AttendanceRate(0m))             -> AttendanceRateTooLow
+    | (HalfYear, WeeklyWorkDays(6), WeeklyScheduledHours(0m), AttendanceRate(0.8m))           -> LeaveGrant { days = LeaveDays(10), band = HalfYear }
+    | (HalfYear, WeeklyWorkDays(7), WeeklyScheduledHours(0m), AttendanceRate(0m))             -> AttendanceRateTooLow
 
 example judgeDesignationDuty
     | "granted ten and took two, so three more have to be designated" :
@@ -456,3 +707,21 @@ example judgeDesignationDuty
     | "granted twenty and took five, which is what the duty asks for" :
         (LeaveGrant { days = LeaveDays(20), band = SixAndAHalfYearsOrMore }, 5)
         -> DutyDischarged
+    | "grant.band=OneAndAHalfYears"
+        : (LeaveGrant { days = LeaveDays(10), band = OneAndAHalfYears }, 4)
+        -> DesignationRequired { shortfall = 1 }
+    | "grant.band=TwoAndAHalfYears"
+        : (LeaveGrant { days = LeaveDays(10), band = TwoAndAHalfYears }, 4)
+        -> DesignationRequired { shortfall = 1 }
+    | "grant.band=ThreeAndAHalfYears"
+        : (LeaveGrant { days = LeaveDays(10), band = ThreeAndAHalfYears }, 4)
+        -> DesignationRequired { shortfall = 1 }
+    | "grant.band=FourAndAHalfYears"
+        : (LeaveGrant { days = LeaveDays(10), band = FourAndAHalfYears }, 4)
+        -> DesignationRequired { shortfall = 1 }
+    | "grant.band=FiveAndAHalfYears"
+        : (LeaveGrant { days = LeaveDays(10), band = FiveAndAHalfYears }, 4)
+        -> DesignationRequired { shortfall = 1 }
+    | (LeaveGrant { days = LeaveDays(1), band = HalfYear }, 5)  -> DutyDischarged
+    | (LeaveGrant { days = LeaveDays(9), band = HalfYear }, 0)  -> DutyDischarged
+    | (LeaveGrant { days = LeaveDays(10), band = HalfYear }, 6) -> DutyDischarged
