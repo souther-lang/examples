@@ -5,48 +5,86 @@
 // would be a helper, which this file may not hold.
 //
 // Conversion is what earns the companion: every row states a lead, a request and the two books the
-// duplicate rules are checked against, and what each row is about is one field of one of them. The four
-// are named values, declared here beside the only rows that use them, and a row spreads the one it varies.
+// duplicate rules are checked against, and what each row is about is one field of one of them. The lead,
+// the request and the empty books are declared in crm.sou, because example.pipeline starts from them too;
+// the books with accounts on file are declared here, beside the only rows that use them.
 //
 // crm.sou keeps the examples for the small transitions, because there the row is shorter than the
 // behavior and belongs next to it.
 examples for example.crm
 
-// The lead. `acmeQualified` spreads `acmeWorking`, declared in crm.sou and used by that module's own
-// examples too — a value published or not is in scope bare within its own module either way.
-let acmeQualified = QualifiedLead
-    { ...acmeWorking, qualifiedOn = Date("2026-07-15"), score = LeadScore(72), budgetConfirmed = true }
-
 // The books a duplicate rule reads. A rule reads a set, so a row has to show the set — which is why the
 // books are values too rather than four accounts written per row.
-let noAccounts   = AccountBook([ ])
-let noContacts   = ContactBook([ ])
 let betaOnFile   = AccountBook([ betaAccount ])
 let bothOnFile   = AccountBook([ betaAccount, gammaAccount ])
 let aoyagiOnFile = ContactBook([ acmeContact ])
 
-// What conversion is asked for. Every row varies one field of it, so the request is a value as well.
-let conversionRequest = ConversionRequest
-    { accountId = AccountId("001000000000100")
-    , contactId = ContactId("003000000000100")
-    , convertedOn = Date("2026-07-20")
-    , intent = OpportunityRequested { amount = Amount(4800000.00m), closeDate = Date("2026-09-30") }
-    , accountType = Prospect
-    , industry = Technology
-    , employees = EmployeeCount(420)
-    , currency = CurrencyCode("JPY")
-    }
+// Accounts across every industry and every kind of account, on domains of their own, and two of them on
+// the lead's own domain. One has no website on file. The contacts are reached by each of the three ways, and
+// one of them is on the lead's own address.
+let mixedAccounts = AccountBook(
+    [ Account { ...acmeAccount, id = AccountId("001000000000301"), domain = DomainName("acme.example.com")
+              , industry = Technology, accountType = Partner }
+    , Account { ...acmeAccount, id = AccountId("001000000000302"), domain = DomainName("beta.example.com")
+              , industry = Financial, accountType = Competitor }
+    , Account { ...acmeAccount, id = AccountId("001000000000303"), domain = DomainName("delta.example.com")
+              , industry = Healthcare, accountType = Customer { since = Date("2024-04-01") } }
+    , Account { ...acmeAccount, id = AccountId("001000000000304"), domain = DomainName("epsilon.example.com")
+              , industry = Education }
+    , Account { ...acmeAccount, id = AccountId("001000000000305"), domain = None
+              , industry = PublicSector }
+    , Account { ...acmeAccount, id = AccountId("001000000000306"), domain = DomainName("zeta.example.com")
+              , industry = Manufacturing }
+    , Account { ...acmeAccount, id = AccountId("001000000000307"), domain = DomainName("eta.example.com")
+              , industry = Retail }
+    , Account { ...acmeAccount, id = AccountId("001000000000308"), domain = DomainName("acme.example.com")
+              , industry = Technology } ])
+
+let mixedContacts = ContactBook(
+    [ Contact { ...acmeContact, id = ContactId("003000000000401"), title = None
+              , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") } }
+    , Contact { ...acmeContact, id = ContactId("003000000000402")
+              , reach = PhoneOnly { phone = PhoneNumber("+81-3-0000-0002") } }
+    , Contact { ...acmeContact, id = ContactId("003000000000403")
+              , reach = EmailAndPhone { email = EmailAddress("coo@gamma.example.com")
+                                      , phone = PhoneNumber("+81-3-0000-0003") } } ])
+
+// The leads conversion is asked about besides `acmeQualifiedLead`, one for each other way a lead arrives and
+// each with what that row varies: how it can be reached, what it is called, and its score.
+let toConvertViaPhone = QualifiedLead
+    { ...workingViaPhone, qualifiedOn = Date("2026-07-15"), score = LeadScore(0), budgetConfirmed = true
+    , person = PersonName("x"), firstTouchedOn = Date("2026-07-01"), touches = 1 }
+let toConvertViaChat = QualifiedLead
+    { ...workingViaChat, qualifiedOn = Date("2026-07-15"), score = LeadScore(100), budgetConfirmed = true
+    , title = JobTitle("x"), campaigns = Set.fromList([ CampaignName("x") ]), reach = EmailAndPhone { email = EmailAddress("ops@chat.example.com"), phone = PhoneNumber("+81-3-1234-5678") } }
+let toConvertViaEmployee = QualifiedLead
+    { ...workingViaEmployee, qualifiedOn = Date("2026-07-15"), score = LeadScore(72), budgetConfirmed = true
+    , reach = EmailOnly { email = EmailAddress("emp@employee.example.com") } }
+let toConvertViaList = QualifiedLead
+    { ...workingViaList, qualifiedOn = Date("2026-07-15"), score = LeadScore(72), budgetConfirmed = true
+    , reach = EmailOnly { email = EmailAddress("buy@list.example.com") } }
+let toConvertViaTradeShow = QualifiedLead
+    { ...workingViaTradeShow, qualifiedOn = Date("2026-07-15"), score = LeadScore(72), budgetConfirmed = true
+    , reach = EmailOnly { email = EmailAddress("expo@show.example.com") } }
+let toConvertViaCold = QualifiedLead
+    { ...workingViaCold, qualifiedOn = Date("2026-07-15"), score = LeadScore(72), budgetConfirmed = true
+    , reach = EmailOnly { email = EmailAddress("cold@outreach.example.com") } }
+
+// An address whose domain is not a domain name: it is not on any account, so the lead converts to one with
+// no website on file.
+let toConvertOnBadDomain = QualifiedLead
+    { ...toConvertViaCold, reach = EmailOnly { email = EmailAddress("x@-bad.example.com") } }
 
 example convertLead
     | "a clean conversion carries the lead's address to the contact and derives the account's domain" :
-        (QualifiedLead { ...acmeQualified
+        (QualifiedLead { ...acmeQualifiedLead
                        , reach = EmailAndPhone { email = EmailAddress("cto@acme.example.com")
                                                , phone = PhoneNumber("+81-3-1234-5678") }
                        , source = PartnerReferral { partner = AccountId("001000000000009") }
                        },
          conversionRequest, betaOnFile, noContacts)
         -> LeadConverted
-            { lead = ConvertedLead { ...acmeQualified
+            { lead = ConvertedLead { ...acmeQualifiedLead
                                    , reach = EmailAndPhone { email = EmailAddress("cto@acme.example.com")
                                                            , phone = PhoneNumber("+81-3-1234-5678") }
                                    , source = PartnerReferral { partner = AccountId("001000000000009") }
@@ -67,16 +105,16 @@ example convertLead
             , intent = OpportunityRequested { amount = Amount(4800000.00m), closeDate = Date("2026-09-30") }
             }
     | "filing a lead with no opportunity asked for needs no budget and no close date" :
-        (QualifiedLead { ...acmeQualified, budgetConfirmed = false },
+        (QualifiedLead { ...acmeQualifiedLead, budgetConfirmed = false },
          ConversionRequest { ...conversionRequest, intent = NoOpportunity },
          noAccounts, noContacts)
         -> LeadConverted
     | "an opportunity asked for on an unconfirmed budget is blocked" :
-        (QualifiedLead { ...acmeQualified, budgetConfirmed = false },
+        (QualifiedLead { ...acmeQualifiedLead, budgetConfirmed = false },
          conversionRequest, noAccounts, noContacts)
         -> ConversionBlocked { reasons = [ BudgetNotConfirmed ] }
     | "a close date before the conversion is blocked, and the date it objects to is in the reason" :
-        (acmeQualified,
+        (acmeQualifiedLead,
          ConversionRequest { ...conversionRequest
                            , intent = OpportunityRequested { amount = Amount(500000.00m)
                                                            , closeDate = Date("2026-06-01") }
@@ -84,7 +122,7 @@ example convertLead
          noAccounts, noContacts)
         -> ConversionBlocked { reasons = [ CloseDateInPast { requested = Date("2026-06-01") } ] }
     | "both reasons are reported at once, which is the whole point of collecting them" :
-        (QualifiedLead { ...acmeQualified, budgetConfirmed = false },
+        (QualifiedLead { ...acmeQualifiedLead, budgetConfirmed = false },
          ConversionRequest { ...conversionRequest
                            , intent = OpportunityRequested { amount = Amount(500000.00m)
                                                            , closeDate = Date("2026-06-01") }
@@ -94,12 +132,121 @@ example convertLead
             { reasons = [ BudgetNotConfirmed
                         , CloseDateInPast { requested = Date("2026-06-01") } ] }
     | "an account already on this domain blocks the conversion and names the account" :
-        (QualifiedLead { ...acmeQualified
+        (QualifiedLead { ...acmeQualifiedLead
                        , reach = EmailOnly { email = EmailAddress("h@beta.example.com") } },
          ConversionRequest { ...conversionRequest, intent = NoOpportunity },
          bothOnFile, noContacts)
         -> ConversionBlocked
             { reasons = [ DuplicateAccount { existing = AccountId("001000000000002") } ] }
+    | "a phone inquiry from a customer already on file converts to an account with no website, and no title" :
+        (toConvertViaPhone,
+         ConversionRequest { ...conversionRequest, accountType = Customer { since = Date("2024-04-01") }, industry = Manufacturing, intent = OpportunityRequested { amount = Amount(0.0m), closeDate = Date("2026-09-30") } },
+         mixedAccounts, mixedContacts)
+        -> LeadConverted
+            { lead = ConvertedLead { ...toConvertViaPhone
+                                   , convertedOn = Date("2026-07-20")
+                                   , accountId = AccountId("001000000000100")
+                                   , contactId = ContactId("003000000000100") }
+            , account = Account { ...acmeAccount, id = AccountId("001000000000100")
+                                , employees = EmployeeCount(420), industry = Manufacturing, accountType = Customer { since = Date("2024-04-01") }, domain = None }
+            , contact = Contact { ...acmeContact, id = ContactId("003000000000100")
+                                , accountId = AccountId("001000000000100")
+                                , name = PersonName("x"), title = None
+                                , reach = PhoneOnly { phone = PhoneNumber("+81-3-1234-5678") } }
+            , intent = OpportunityRequested { amount = Amount(0.0m), closeDate = Date("2026-09-30") } }
+    | "a chat request from a partner converts, with the address the lead gave" :
+        (toConvertViaChat,
+         ConversionRequest { ...conversionRequest, accountType = Partner, industry = Financial },
+         mixedAccounts, mixedContacts)
+        -> LeadConverted
+            { lead = ConvertedLead { ...toConvertViaChat
+                                   , convertedOn = Date("2026-07-20")
+                                   , accountId = AccountId("001000000000100")
+                                   , contactId = ContactId("003000000000100") }
+            , account = Account { ...acmeAccount, id = AccountId("001000000000100")
+                                , employees = EmployeeCount(420), industry = Financial, accountType = Partner, domain = DomainName("chat.example.com") }
+            , contact = Contact { ...acmeContact, id = ContactId("003000000000100")
+                                , accountId = AccountId("001000000000100")
+                                , name = PersonName("Aoyagi"), title = JobTitle("x")
+                                , reach = EmailAndPhone { email = EmailAddress("ops@chat.example.com"), phone = PhoneNumber("+81-3-1234-5678") } }
+            , intent = OpportunityRequested { amount = Amount(4800000.00m), closeDate = Date("2026-09-30") } }
+    | "an employee referral from a competitor converts" :
+        (toConvertViaEmployee,
+         ConversionRequest { ...conversionRequest, accountType = Competitor, industry = Retail },
+         mixedAccounts, mixedContacts)
+        -> LeadConverted
+            { lead = ConvertedLead { ...toConvertViaEmployee
+                                   , convertedOn = Date("2026-07-20")
+                                   , accountId = AccountId("001000000000100")
+                                   , contactId = ContactId("003000000000100") }
+            , account = Account { ...acmeAccount, id = AccountId("001000000000100")
+                                , employees = EmployeeCount(420), industry = Retail, accountType = Competitor, domain = DomainName("employee.example.com") }
+            , contact = Contact { ...acmeContact, id = ContactId("003000000000100")
+                                , accountId = AccountId("001000000000100")
+                                , name = PersonName("Aoyagi"), title = JobTitle("CTO")
+                                , reach = EmailOnly { email = EmailAddress("emp@employee.example.com") } }
+            , intent = OpportunityRequested { amount = Amount(4800000.00m), closeDate = Date("2026-09-30") } }
+    | "a purchased list lead in healthcare converts" :
+        (toConvertViaList,
+         ConversionRequest { ...conversionRequest, industry = Healthcare },
+         mixedAccounts, mixedContacts)
+        -> LeadConverted
+            { lead = ConvertedLead { ...toConvertViaList
+                                   , convertedOn = Date("2026-07-20")
+                                   , accountId = AccountId("001000000000100")
+                                   , contactId = ContactId("003000000000100") }
+            , account = Account { ...acmeAccount, id = AccountId("001000000000100")
+                                , employees = EmployeeCount(420), industry = Healthcare, domain = DomainName("list.example.com") }
+            , contact = Contact { ...acmeContact, id = ContactId("003000000000100")
+                                , accountId = AccountId("001000000000100")
+                                , name = PersonName("Aoyagi"), title = JobTitle("CTO")
+                                , reach = EmailOnly { email = EmailAddress("buy@list.example.com") } }
+            , intent = OpportunityRequested { amount = Amount(4800000.00m), closeDate = Date("2026-09-30") } }
+    | "a trade show lead in education converts" :
+        (toConvertViaTradeShow,
+         ConversionRequest { ...conversionRequest, industry = Education },
+         mixedAccounts, mixedContacts)
+        -> LeadConverted
+            { lead = ConvertedLead { ...toConvertViaTradeShow
+                                   , convertedOn = Date("2026-07-20")
+                                   , accountId = AccountId("001000000000100")
+                                   , contactId = ContactId("003000000000100") }
+            , account = Account { ...acmeAccount, id = AccountId("001000000000100")
+                                , employees = EmployeeCount(420), industry = Education, domain = DomainName("show.example.com") }
+            , contact = Contact { ...acmeContact, id = ContactId("003000000000100")
+                                , accountId = AccountId("001000000000100")
+                                , name = PersonName("Aoyagi"), title = JobTitle("CTO")
+                                , reach = EmailOnly { email = EmailAddress("expo@show.example.com") } }
+            , intent = OpportunityRequested { amount = Amount(4800000.00m), closeDate = Date("2026-09-30") } }
+    | "a cold outreach lead in the public sector converts" :
+        (toConvertViaCold,
+         ConversionRequest { ...conversionRequest, industry = PublicSector },
+         mixedAccounts, mixedContacts)
+        -> LeadConverted
+            { lead = ConvertedLead { ...toConvertViaCold
+                                   , convertedOn = Date("2026-07-20")
+                                   , accountId = AccountId("001000000000100")
+                                   , contactId = ContactId("003000000000100") }
+            , account = Account { ...acmeAccount, id = AccountId("001000000000100")
+                                , employees = EmployeeCount(420), industry = PublicSector, domain = DomainName("outreach.example.com") }
+            , contact = Contact { ...acmeContact, id = ContactId("003000000000100")
+                                , accountId = AccountId("001000000000100")
+                                , name = PersonName("Aoyagi"), title = JobTitle("CTO")
+                                , reach = EmailOnly { email = EmailAddress("cold@outreach.example.com") } }
+            , intent = OpportunityRequested { amount = Amount(4800000.00m), closeDate = Date("2026-09-30") } }
+    | "an address whose domain is not a domain name converts to an account with no website" :
+        (toConvertOnBadDomain, conversionRequest, mixedAccounts, mixedContacts)
+        -> LeadConverted
+            { lead = ConvertedLead { ...toConvertOnBadDomain
+                                   , convertedOn = Date("2026-07-20")
+                                   , accountId = AccountId("001000000000100")
+                                   , contactId = ContactId("003000000000100") }
+            , account = Account { ...acmeAccount, id = AccountId("001000000000100")
+                                , employees = EmployeeCount(420), domain = None }
+            , contact = Contact { ...acmeContact, id = ContactId("003000000000100")
+                                , accountId = AccountId("001000000000100")
+                                , reach = EmailOnly { email = EmailAddress("x@-bad.example.com") } }
+            , intent = OpportunityRequested { amount = Amount(4800000.00m), closeDate = Date("2026-09-30") } }
 
 // Screening is the same two rules, asked before anybody has been qualified. The two keys are what make
 // them two rules: an account is a company, so its key is the domain; a contact is a person, so its key is
@@ -120,3 +267,27 @@ example screenForDuplicates
         (NewLead { ...acmeNew, reach = EmailOnly { email = EmailAddress("s@gamma.example.com") } },
          AccountBook([ gammaAccount ]), noContacts)
         -> NoDuplicate
+
+    | "a phone-only lead has no address to screen, whatever the books hold" :
+        (newViaPhone, mixedAccounts, mixedContacts)
+        -> NoEmailOnLead
+    | "a chat request reachable both ways is screened by its address: two accounts on the domain and a contact on it" :
+        (newViaChat, mixedAccounts, mixedContacts)
+        -> PossibleDuplicate { accounts = [ AccountId("001000000000301"), AccountId("001000000000308") ]
+                             , contacts = [ ContactId("003000000000401") ] }
+    | "a partner referral on a domain with one account and no contact" :
+        (NewLead { ...newViaPartner, reach = EmailOnly { email = EmailAddress("h@beta.example.com") } }, mixedAccounts, mixedContacts)
+        -> PossibleDuplicate { accounts = [ AccountId("001000000000302") ], contacts = [ ] }
+    | "an employee referral on an address only a contact has" :
+        (NewLead { ...newViaEmployee, reach = EmailOnly { email = EmailAddress("coo@gamma.example.com") } }, mixedAccounts, mixedContacts)
+        -> PossibleDuplicate { accounts = [ ], contacts = [ ContactId("003000000000403") ] }
+    | "a purchased list lead on an address nobody has is clean" :
+        (NewLead { ...newViaList, reach = EmailOnly { email = EmailAddress("nobody@nowhere.example.com") } }, mixedAccounts, mixedContacts)
+        -> NoDuplicate
+    | "an address whose domain is not one matches no account, and nobody has the address either" :
+        (NewLead { ...newViaTradeShow, reach = EmailOnly { email = EmailAddress("x@-bad.example.com") } }, mixedAccounts, mixedContacts)
+        -> NoDuplicate
+    | "a cold outreach lead on the shared domain is a possible duplicate of the same two accounts" :
+        (newViaCold, mixedAccounts, mixedContacts)
+        -> PossibleDuplicate { accounts = [ AccountId("001000000000301"), AccountId("001000000000308") ]
+                             , contacts = [ ContactId("003000000000401") ] }
