@@ -410,3 +410,160 @@ example verifyMyNumber
         (MyNumber("123456789018")) -> MyNumberVerified
     | "transposing two digits changes the weighted sum, so the check digit no longer agrees" :
         (MyNumber("123456789081")) -> CheckDigitMismatch
+    | "a twelve-digit number whose weighted sum leaves a remainder of one has the check digit 0" :
+        (MyNumber("123456789000")) -> MyNumberVerified
+    | "a remainder of zero is also a check digit of 0" :
+        (MyNumber("000000000000")) -> MyNumberVerified
+    | "a remainder of one with any other twelfth digit does not verify" :
+        (MyNumber("123456789005")) -> CheckDigitMismatch
+
+// === The people the rows are about ===
+
+let satoIdentity = PersonalIdentity
+    { id = EmployeeId("000123")
+    , birthday = Date("1990-04-01")
+    , sex = Female
+    , myNumber = MyNumber("123456789018")
+    }
+
+let satoTerms = EmploymentTerms
+    { officeId = OfficeId("13-000001")
+    , employmentType = FullTime
+    , weeklyHours = WeeklyScheduledHours(40.0m)
+    , contract = Indefinite
+    , student = NotDaytimeStudent
+    }
+
+let satoPay = MonthlyRemuneration
+    { baseSalary = Yen(260000)
+    , scheduledAllowances = Yen(20000)
+    , commutingAllowance = Yen(15000)
+    , excludedAllowances = Yen(5000)
+    , variableAllowances = Yen(0)
+    }
+
+let satoCommon = EmploymentCommon
+    { identity = satoIdentity
+    , personalName = PersonalName { name = PersonName("Sato Hanako"), kana = KanaName("ｻﾄｳ ﾊﾅｺ") }
+    , residence = Residence
+        { address = Address { postalCode = PostalCode("100-0001"), prefecture = PrefectureCode("13"), line = "Chiyoda 1-1" } }
+    , terms = satoTerms
+    , remuneration = satoPay
+    }
+
+// A man on a fixed-term contract who is still a daytime student, with a one-character name and address.
+let taroCommon = EmploymentCommon
+    { identity = PersonalIdentity { ...satoIdentity, id = EmployeeId("000456"), sex = Male }
+    , personalName = PersonalName { name = PersonName("T"), kana = KanaName("ﾀ") }
+    , residence = Residence
+        { address = Address { postalCode = PostalCode("530-0001"), prefecture = PrefectureCode("27"), line = "x" } }
+    , terms = EmploymentTerms
+        { ...satoTerms
+        , officeId = OfficeId("27-000001")
+        , employmentType = ContractEmployee
+        , weeklyHours = WeeklyScheduledHours(30.0m)
+        , contract = TermUntil { endsOn = Date("2027-03-31") }
+        , student = DaytimeStudent
+        }
+    , remuneration = MonthlyRemuneration { ...satoPay, baseSalary = Yen(200000) }
+    }
+
+// A part-timer on a contract that schedules no hours at all.
+let partTimeCommon = EmploymentCommon
+    { ...satoCommon
+    , terms = EmploymentTerms { ...satoTerms, employmentType = PartTime, weeklyHours = WeeklyScheduledHours(0.0m) }
+    , remuneration = MonthlyRemuneration { ...satoPay, baseSalary = Yen(110000) }
+    }
+
+// An executive, whose hours are not scheduled by the week and so run to the end of it.
+let executiveCommon = EmploymentCommon
+    { ...satoCommon
+    , terms = EmploymentTerms { ...satoTerms, employmentType = Executive, weeklyHours = WeeklyScheduledHours(168.0m) }
+    , remuneration = MonthlyRemuneration { ...satoPay, baseSalary = Yen(800000) }
+    }
+
+let satoProspective = Prospective { ...satoCommon, hireOn = Date("2026-04-01") }
+let satoEmployed = Employed { ...satoCommon, hiredOn = Date("2026-04-01") }
+let satoOnLeave = OnLeave { ...satoEmployed, leave = MaternityLeave, leaveFrom = Date("2026-09-01") }
+
+let taroEmployed = Employed { ...taroCommon, hiredOn = Date("2025-10-01") }
+let partTimeEmployed = Employed { ...partTimeCommon, hiredOn = Date("2024-04-01") }
+let executiveEmployed = Employed { ...executiveCommon, hiredOn = Date("2020-04-01") }
+
+// On leave from the day of the hire, which is the earliest the invariant allows.
+let taroOnLeave = OnLeave { ...taroEmployed, leave = SickLeave, leaveFrom = Date("2025-10-01") }
+let partTimeOnLeave = OnLeave { ...partTimeEmployed, leave = ChildcareLeave, leaveFrom = Date("2025-06-01") }
+let executiveOnLeave = OnLeave { ...executiveEmployed, leave = CaregiverLeave, leaveFrom = Date("2026-01-15") }
+
+example hire
+    | "a prospective hire becomes an employee hired on the day the offer says" :
+        (satoProspective) -> satoEmployed
+    | "a man on a fixed-term contract keeps every term of it when he is hired" :
+        (Prospective { ...taroCommon, hireOn = Date("2025-10-01") }) -> taroEmployed
+    | "a part-timer is hired on the terms the offer carried" :
+        (Prospective { ...partTimeCommon, hireOn = Date("2024-04-01") }) -> partTimeEmployed
+    | "an executive is hired on the terms the offer carried" :
+        (Prospective { ...executiveCommon, hireOn = Date("2020-04-01") }) -> executiveEmployed
+
+example beginLeave
+    | "a leave that starts after the hire is recorded with its kind and start" :
+        (satoEmployed, MaternityLeave, Date("2026-09-01")) -> satoOnLeave
+    | "a leave that starts on the hire day is not before it" :
+        (taroEmployed, SickLeave, Date("2025-10-01")) -> taroOnLeave
+    | "a part-timer may take childcare leave" :
+        (partTimeEmployed, ChildcareLeave, Date("2025-06-01")) -> partTimeOnLeave
+    | "an executive may take caregiver leave" :
+        (executiveEmployed, CaregiverLeave, Date("2026-01-15")) -> executiveOnLeave
+    | "a leave dated the day before the hire is a data-entry error the system reports" :
+        (satoEmployed, ChildcareLeave, Date("2026-03-31")) -> LeaveBeforeHire
+    | "a leave dated years before the hire is reported the same way" :
+        (taroEmployed, SickLeave, Date("2019-01-01")) -> LeaveBeforeHire
+
+example returnFromLeave
+    | "returning after the leave began gives back an employee hired on the same day" :
+        (satoOnLeave, Date("2027-03-01")) -> satoEmployed
+    | "returning on the day the leave began is not before it" :
+        (satoOnLeave, Date("2026-09-01")) -> satoEmployed
+    | "an employee on sick leave from the day of the hire returns to the same terms" :
+        (taroOnLeave, Date("2025-12-01")) -> taroEmployed
+    | "a part-timer returns from childcare leave" :
+        (partTimeOnLeave, Date("2026-06-01")) -> partTimeEmployed
+    | "an executive returns from caregiver leave" :
+        (executiveOnLeave, Date("2026-03-01")) -> executiveEmployed
+    | "returning the day before the leave began is an error the system reports" :
+        (satoOnLeave, Date("2026-08-31")) -> ReturnBeforeLeave
+    | "returning years before the leave began is reported the same way" :
+        (satoOnLeave, Date("2020-01-01")) -> ReturnBeforeLeave
+
+example separate
+    | "an employee at work who retires is separated on that day for that reason" :
+        (satoEmployed, Date("2027-03-31"), MandatoryRetirement)
+        -> Separated { ...satoEmployed, separatedOn = Date("2027-03-31"), reason = MandatoryRetirement }
+    | "somebody on leave may still resign" :
+        (satoOnLeave, Date("2026-12-31"), VoluntaryResignation)
+        -> Separated { ...satoEmployed, separatedOn = Date("2026-12-31"), reason = VoluntaryResignation }
+    | "separating on the hire day is not before it" :
+        (satoEmployed, Date("2026-04-01"), Death)
+        -> Separated { ...satoEmployed, separatedOn = Date("2026-04-01"), reason = Death }
+    | "a fixed-term contract that ends after renewal was sought carries that in the reason" :
+        (taroEmployed, Date("2027-03-31"), ContractExpiry { renewal = RenewalSought })
+        -> Separated { ...taroEmployed, separatedOn = Date("2027-03-31"), reason = ContractExpiry { renewal = RenewalSought } }
+    | "one that ends with no renewal sought says so" :
+        (taroOnLeave, Date("2027-03-31"), ContractExpiry { renewal = RenewalNotSought })
+        -> Separated { ...taroEmployed, separatedOn = Date("2027-03-31"), reason = ContractExpiry { renewal = RenewalNotSought } }
+    | "a business closure separates a part-timer" :
+        (partTimeEmployed, Date("2026-09-30"), BusinessClosure)
+        -> Separated { ...partTimeEmployed, separatedOn = Date("2026-09-30"), reason = BusinessClosure }
+    | "an encouraged resignation separates a part-timer on leave" :
+        (partTimeOnLeave, Date("2026-02-28"), EncouragedResignation)
+        -> Separated { ...partTimeEmployed, separatedOn = Date("2026-02-28"), reason = EncouragedResignation }
+    | "a dismissal for misconduct separates an executive" :
+        (executiveEmployed, Date("2026-05-31"), DismissalForMisconduct)
+        -> Separated { ...executiveEmployed, separatedOn = Date("2026-05-31"), reason = DismissalForMisconduct }
+    | "an executive on leave may be dismissed" :
+        (executiveOnLeave, Date("2026-02-28"), Dismissal)
+        -> Separated { ...executiveEmployed, separatedOn = Date("2026-02-28"), reason = Dismissal }
+    | "separating the day before the hire is an error the system reports" :
+        (satoEmployed, Date("2026-03-31"), Dismissal) -> SeparationBeforeHire
+    | "separating years before the hire is reported the same way" :
+        (satoOnLeave, Date("2019-01-01"), Death) -> SeparationBeforeHire
