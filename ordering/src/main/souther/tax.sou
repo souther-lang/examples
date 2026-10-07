@@ -313,3 +313,18 @@ example taxRoundedPerLine
         (PricedCart { items = [ LineItem { sku = Sku("rice"), quantity = 2, unitPrice = 550, weightGrams = 120 } ],
             total = 1100, highValue = false }, ReducedRate, Date("2019-09-30"))
         -> NoRateYet { on = Date("2019-09-30") }
+
+// === the contract with the rate table ===
+// scheduleOf is implemented outside, so these rows are what the outside world is held to: the whole
+// history a category has, oldest change first, and not the one row that happens to apply today.
+example scheduleOf
+    | "the standard rate is the history of its four revisions" :
+        (StandardRate)
+            -> RateSchedule(
+                [ RateChange { from = Date("1989-04-01"), rate = TaxRate(0.03m) }
+                , RateChange { from = Date("1997-04-01"), rate = TaxRate(0.05m) }
+                , RateChange { from = Date("2014-04-01"), rate = TaxRate(0.08m) }
+                , RateChange { from = Date("2019-10-01"), rate = TaxRate(0.10m) } ])
+    | "the reduced rate starts with the last revision" :
+        (ReducedRate)
+            -> RateSchedule([ RateChange { from = Date("2019-10-01"), rate = TaxRate(0.08m) } ])

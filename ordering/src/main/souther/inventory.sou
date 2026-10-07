@@ -113,10 +113,14 @@ let allocate (order, readStock, commitStock) = {
 
 fake readStock
     | (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 } ], total = 300, highValue = false })
-        -> StockSnapshot { rows = [ StockLine { sku = Sku("apple"), quantity = Eaches(5) } ] }
+        -> StockSnapshot { rows = [ StockLine { sku = Sku("apple"), quantity = Eaches(10) } ] }
+    | (PricedCart { items = [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000, weightGrams = 120 } ], total = 200000, highValue = true })
+        -> StockSnapshot { rows = [ StockLine { sku = Sku("tv"), quantity = Eaches(3) } ] }
     | _ -> StockSnapshot { rows = [ StockLine { sku = Sku("apple"), quantity = Eaches(1) } ] }
 
 fake commitStock
+    | (PricedCart { items = [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000, weightGrams = 120 } ], total = 200000, highValue = true })
+        -> Allocated { total = 200000 }
     | _ -> Allocated { total = 300 }
 
 example allocate
@@ -375,3 +379,22 @@ example checkExpiry
     | "the day after the best-before is past by one" :
         (Lot { sku = Sku("milk"), bestBefore = Date("2026-07-24") }, Date("2026-07-25"))
             -> Expired { daysPast = 1 }
+
+// === the contract with the stock table ===
+// readStock and commitStock are implemented outside, so these rows are what the outside world is
+// held to: what the stock table answers for an order, and what the decrement reports back.
+example readStock
+    | "the on-hand of the order's sku is read as one row" :
+        (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 } ], total = 300, highValue = false })
+            -> StockSnapshot { rows = [ StockLine { sku = Sku("apple"), quantity = Eaches(10) } ] }
+    | "a scarce sku reads as the few there are" :
+        (PricedCart { items = [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000, weightGrams = 120 } ], total = 200000, highValue = true })
+            -> StockSnapshot { rows = [ StockLine { sku = Sku("tv"), quantity = Eaches(3) } ] }
+
+example commitStock
+    | "committing the order reports its total as allocated" :
+        (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 } ], total = 300, highValue = false })
+            -> Allocated { total = 300 }
+    | "a high-value order is committed like any other" :
+        (PricedCart { items = [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000, weightGrams = 120 } ], total = 200000, highValue = true })
+            -> Allocated { total = 200000 }

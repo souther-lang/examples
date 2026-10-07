@@ -105,7 +105,17 @@ let crashOnSave = Issue { id = IssueId("i-1"), title = "crash on save",
     labels = Set.fromList([ Label("bug"), Label("ui") ]), assignee = Assignee("kawasima") }
 
 fake createIssue
+    | (Issue { id = IssueId("i-2"), title = "whitespace", labels = [ Label("ui") ], assignee = None }) -> Issue { id = IssueId("i-2"), title = "whitespace", labels = [ Label("ui") ], assignee = None }
     | _ -> crashOnSave
+
+example createIssue
+    | "the database answers the issue as stored" :
+        (Issue { id = IssueId("i-1"), title = "crash on save", labels = [ Label("bug"), Label("ui") ],
+            assignee = Assignee("kawasima") })
+        -> crashOnSave
+    | "an unassigned issue is inserted all the same" :
+        (Issue { id = IssueId("i-2"), title = "whitespace", labels = [ Label("ui") ], assignee = None })
+        -> Issue { id = IssueId("i-2"), title = "whitespace", labels = [ Label("ui") ], assignee = None }
 
 example openIssue
     | "case and spacing collapse into one label, and the issue is stored" :
@@ -157,7 +167,22 @@ fake findIssue
 fake storeLabels
     | (crashOnSave) -> crashOnSave
     | (Issue { ...crashOnSave, labels = [] }) -> Issue { ...crashOnSave, labels = [] }
+    | (Issue { id = IssueId("i-2"), title = "whitespace", labels = [ Label("ui") ], assignee = None }) -> Issue { id = IssueId("i-2"), title = "whitespace", labels = [ Label("ui") ], assignee = None }
     | _ -> Issue { id = IssueId("i-0"), title = "unstored", labels = [], assignee = None }
+
+example findIssue
+    | "a stored issue is read back by its id" :
+        (IssueId("i-1")) -> Issue { ...crashOnSave, labels = [ Label("bug") ] }
+    | "an id the database does not hold is not found" : (IssueId("nope")) -> IssueNotFound
+
+example storeLabels
+    | "the issue is written and answered as stored" :
+        (crashOnSave) -> crashOnSave
+    | "an issue whose labels were all removed is written with an empty set" :
+        (Issue { ...crashOnSave, labels = [] }) -> Issue { ...crashOnSave, labels = [] }
+    | "an unassigned issue is written and answered as stored" :
+        (Issue { id = IssueId("i-2"), title = "whitespace", labels = [ Label("ui") ], assignee = None })
+        -> Issue { id = IssueId("i-2"), title = "whitespace", labels = [ Label("ui") ], assignee = None }
 
 example attachLabel
     | "a new label joins the set and is written back" :

@@ -135,3 +135,15 @@ example report
             [ LineItem { sku = Sku("pen"), quantity = 1, unitPrice = 1000, weightGrams = 10 } ]
             , total = 1000 })
         -> SalesReport { total = 1000, distinctSkus = [ "pen" ], lineCount = 1, highValueLines = 1 }
+
+// === the contract with the orders and stock tables ===
+// reserveStock is implemented outside, so these rows are what the outside world is held to: what the
+// conditional UPDATE answers per order. recordOrder has no row on purpose: the id it hands back is a
+// random UUID minted by the insert, and a row can only name a value, not "some id".
+example reserveStock
+    | "every line within stock confirms the order under its id and total" :
+        (RecordedOrder { orderId = OrderId("order-1"), items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 } ], total = 300 })
+            -> ConfirmedOrder { orderId = OrderId("order-1"), total = 300 }
+    | "a line the stock cannot cover is OutOfStock" :
+        (RecordedOrder { orderId = OrderId("order-oos"), items = [ LineItem { sku = Sku("tv"), quantity = 4, unitPrice = 200000, weightGrams = 120 } ], total = 800000 })
+            -> OutOfStock
