@@ -703,3 +703,6 @@ example dayLoadOf
     | "an owner with no meetings has a load of nought" :
         ([ introCall, unopenedDeck ], UserId("u-001"))
         -> DayLoad { minutesPerDay = [ ], busiestMinutes = 0 }
+    | "a meeting about an opportunity is load on its day like any other" :
+        ([ opportunityWorkshop ], UserId("u-001"))
+        -> DayLoad { minutesPerDay = [ (Date("2026-07-24"), 90) ], busiestMinutes = 90 }

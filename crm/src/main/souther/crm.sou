@@ -1056,6 +1056,13 @@ fake findAccountByDomain
     | (DomainName("beta.example.com")) -> betaAccount
     | _ -> AccountNotFound
 
+// The lookup is held to what the books answer: an account whose domain matches, and nothing otherwise.
+example findAccountByDomain
+    | "a domain an account is registered under finds that account" :
+        (DomainName("beta.example.com")) -> betaAccount
+    | "a domain nobody is registered under finds nothing, which is not a failure" :
+        (DomainName("gamma.example.com")) -> AccountNotFound
+
 example linkLeadToAccount
     | "a lead on a known domain is linked to that account" :
         (NewLead { ...acmeNew, reach = EmailOnly { email = EmailAddress("h@beta.example.com") } })

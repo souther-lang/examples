@@ -625,11 +625,26 @@ example prescribedBenefitDays
         (SpecifiedReasonRecipient, UnderThirty, OneToFiveYears) -> BenefitDays(90)
     | "a specified-reason recipient of thirty to thirty-four with twenty years or more reads the specified table" :
         (SpecifiedReasonRecipient, ThirtyToThirtyFour, TwentyYearsOrMore) -> BenefitDays(240)
+    | "an ordinary recipient under thirty still draws by the insured period alone, whatever the age says" :
+        (GeneralRecipient, UnderThirty, TwentyYearsOrMore) -> BenefitDays(150)
 
 fake insuranceRatesOf
     | (GeneralBusiness, Date("2026-07-01"))
         -> InsuranceRates { employee = InsuranceRate(0.0055m), employer = InsuranceRate(0.0090m) }
     | _ -> InsuranceRates { employee = InsuranceRate(0.0065m), employer = InsuranceRate(0.0105m) }
+
+// The rates are read from outside, so these rows are what the rate table is held to: general business
+// is the lower pair, and construction and the primary industries share the higher one.
+example insuranceRatesOf
+    | "general business pays the lower rates" :
+        (GeneralBusiness, Date("2026-07-01"))
+            -> InsuranceRates { employee = InsuranceRate(0.0055m), employer = InsuranceRate(0.0090m) }
+    | "construction pays the higher rates" :
+        (ConstructionBusiness, Date("2026-07-01"))
+            -> InsuranceRates { employee = InsuranceRate(0.0065m), employer = InsuranceRate(0.0105m) }
+    | "the primary industries pay the higher rates as construction does" :
+        (AgricultureForestryFisheryOrSake, Date("2026-07-01"))
+            -> InsuranceRates { employee = InsuranceRate(0.0065m), employer = InsuranceRate(0.0105m) }
 
 let pay300k = MonthlyRemuneration
     { baseSalary = Yen(260000)
