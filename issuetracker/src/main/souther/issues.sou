@@ -421,3 +421,28 @@ example busyLabels
             [ Issue { id = IssueId("x"), title = "x", labels = [ Label("bug") ],
                 assignee = Assignee("x") } ] }, 1)
         -> LabelUsage { counts = [ ("bug", 1) ] }
+
+// A label is at least one character, and the shortest one is counted and ranked like any other.
+example countByLabel
+    | "a one-character label is counted" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("x") ], assignee = None } ] })
+        -> LabelCounts { counts = [ ("x", 1) ] }
+
+example topLabels
+    | "a one-character label ranks, and the label used twice leads it" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("x"), Label("bug") ], assignee = None }
+            , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("bug") ], assignee = None } ] }, 2)
+        -> LabelRanking { labels = [ "bug", "x" ] }
+    | "asking for none gives none" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ], assignee = None } ] }, 0)
+        -> LabelRanking { labels = [ ] }
+
+example busyLabels
+    | "a one-character label carried by two issues is busy" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("x") ], assignee = None }
+            , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("x") ], assignee = None } ] }, 2)
+        -> LabelUsage { counts = [ ("x", 2) ] }
