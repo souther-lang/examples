@@ -99,7 +99,7 @@ import example.employee (
     StudentStatus, DaytimeStudent, NotDaytimeStudent,
     ActiveEmployee, Employed, OnLeave,
     SickLeave, MaternityLeave, ChildcareLeave, CaregiverLeave,
-    OfficeId, ContractTerm, Indefinite,
+    OfficeId, Indefinite,
     attainedAgeOn, scheduledWage, fixedRemuneration, totalRemuneration, toYen
 )
 
