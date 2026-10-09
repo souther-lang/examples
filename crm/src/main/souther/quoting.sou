@@ -337,6 +337,37 @@ example buildQuote
         (QuoteNumber("0Q0000000000001"), acmeChampioned,
          [ LineRequest { ...platformLine, quantity = -1 } ], Date("2026-08-10"), 30)
         -> NoLines
+    | "a negative discount is not a discount, however small the line" :
+        (QuoteNumber("0Q0000000000001"), acmeChampioned,
+         [ LineRequest { ...supportLine, discount = -0.1m } ], Date("2026-08-10"), 30)
+        -> LineDiscountOverCap
+    | "a line of nought units is no line, so its negative discount is never looked at" :
+        (QuoteNumber("0Q0000000000001"), acmeChampioned,
+         [ LineRequest { ...supportLine, quantity = 0, discount = -0.1m } ], Date("2026-08-10"), 30)
+        -> NoLines
+    | "a line of nought units is no line, so its discount past half off is never looked at" :
+        (QuoteNumber("0Q0000000000001"), acmeChampioned,
+         [ LineRequest { ...supportLine, quantity = 0, discount = 0.7m } ], Date("2026-08-10"), 30)
+        -> NoLines
+    | "exactly half off on a small line is within the per-line cap, and the blend holds" :
+        (QuoteNumber("0Q0000000000001"), acmeChampioned,
+         [ platformLine, LineRequest { ...supportLine, discount = 0.5m } ], Date("2026-08-10"), 30)
+        -> Quote { number = QuoteNumber("0Q0000000000001")
+                 , opportunityId = OpportunityId("006000000000001")
+                 , accountId = AccountId("001000000000100")
+                 , lines = QuoteLines(
+                       [ QuoteLine { product = ProductCode("SW-1001"), name = ProductName("Platform licence")
+                                   , quantity = Quantity(10), listPrice = UnitPrice(1000.00m)
+                                   , discount = DiscountRate(0.10m), net = Amount(9000.00m) }
+                       , QuoteLine { product = ProductCode("SW-2002"), name = ProductName("Support plan")
+                                   , quantity = Quantity(1), listPrice = UnitPrice(100.00m)
+                                   , discount = DiscountRate(0.5m), net = Amount(50.00m) } ])
+                 , subtotal = Amount(10100.00m)
+                 , total = Amount(9050.00m)
+                 , issuedOn = Date("2026-08-10")
+                 , expiresOn = Date("2026-09-09")
+                 , approval = NotSubmitted
+                 }
     | "the smallest quote there is: one unit, no discount, good for a day, and a one-character name" :
         (QuoteNumber("0Q0000000000001"), acmeChampioned,
          [ LineRequest { ...supportLine, name = ProductName("x") } ], Date("2026-08-10"), 1)

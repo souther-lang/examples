@@ -842,6 +842,18 @@ example decideRegularly
     | "the average is truncated to the yen, so 289,999 and two thirds stays under the 290,000 bound" :
         (ThreeMonthWindow { first = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-04-01")), paidBaseDays = PaidBaseDays(30), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(249999) } }, second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01")), paidBaseDays = PaidBaseDays(31), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(250000) } }, third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")), paidBaseDays = PaidBaseDays(30), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(250000) } } })
         -> GradeDecision { basis = RegularDetermination, standard = Yen(280000), health = HealthGrade(21), pension = PensionGrade(18), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "only April reaches seventeen paid days, so only April is averaged" :
+        (ThreeMonthWindow { first = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-04-01")), paidBaseDays = PaidBaseDays(17), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(260000) } }, second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01")), paidBaseDays = PaidBaseDays(16), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(960000) } }, third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")), paidBaseDays = PaidBaseDays(16), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(960000) } } })
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(300000), health = HealthGrade(22), pension = PensionGrade(19), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "only May reaches seventeen paid days, so only May is averaged" :
+        (ThreeMonthWindow { first = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-04-01")), paidBaseDays = PaidBaseDays(16), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(960000) } }, second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01")), paidBaseDays = PaidBaseDays(17), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(260000) } }, third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")), paidBaseDays = PaidBaseDays(16), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(960000) } } })
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(300000), health = HealthGrade(22), pension = PensionGrade(19), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "only June reaches seventeen paid days, so only June is averaged" :
+        (ThreeMonthWindow { first = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-04-01")), paidBaseDays = PaidBaseDays(16), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(960000) } }, second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01")), paidBaseDays = PaidBaseDays(16), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(960000) } }, third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")), paidBaseDays = PaidBaseDays(17), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(260000) } } })
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(300000), health = HealthGrade(22), pension = PensionGrade(19), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "three months of sixteen paid days leave no month to average" :
+        (ThreeMonthWindow { first = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-04-01")), paidBaseDays = PaidBaseDays(16), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(260000) } }, second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01")), paidBaseDays = PaidBaseDays(16), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(260000) } }, third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")), paidBaseDays = PaidBaseDays(16), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(260000) } } })
+        -> NoPayableMonth
 
 let currentGrade22 = GradeDecision
     { basis = RegularDetermination
@@ -889,6 +901,27 @@ example judgeOccasionalRevision
     | "a month of 16 paid base days blocks the revision and is named with its days" :
         (currentGrade22, Yen(300000), ThreeMonthWindow { ...raisedWindow, second = MonthlyPayRecord { ...raisedWindow.second, paidBaseDays = PaidBaseDays(16) } })
         -> RevisionNotRequired { reasons = [ PaidDaysBelowSeventeen { month = ContributionMonth(Date("2026-05-01")), days = PaidBaseDays(16) } ] }
+    | "a month of 16 paid base days in April blocks the revision just as it does in May" :
+        (currentGrade22, Yen(300000), ThreeMonthWindow { ...raisedWindow, first = MonthlyPayRecord { ...raisedWindow.first, paidBaseDays = PaidBaseDays(16) } })
+        -> RevisionNotRequired { reasons = [ PaidDaysBelowSeventeen { month = ContributionMonth(Date("2026-04-01")), days = PaidBaseDays(16) } ] }
+    | "a month of 16 paid base days in June blocks the revision just as it does in May" :
+        (currentGrade22, Yen(300000), ThreeMonthWindow { ...raisedWindow, third = MonthlyPayRecord { ...raisedWindow.third, paidBaseDays = PaidBaseDays(16) } })
+        -> RevisionNotRequired { reasons = [ PaidDaysBelowSeventeen { month = ContributionMonth(Date("2026-06-01")), days = PaidBaseDays(16) } ] }
+    | "seventeen paid base days in the first month do not block the revision" :
+        (currentGrade22, Yen(300000), ThreeMonthWindow { ...raisedWindow, first = MonthlyPayRecord { ...raisedWindow.first, paidBaseDays = PaidBaseDays(17) } })
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(360000), health = HealthGrade(25), pension = PensionGrade(22), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "seventeen paid base days in the second month do not block the revision" :
+        (currentGrade22, Yen(300000), ThreeMonthWindow { ...raisedWindow, second = MonthlyPayRecord { ...raisedWindow.second, paidBaseDays = PaidBaseDays(17) } })
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(360000), health = HealthGrade(25), pension = PensionGrade(22), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "seventeen paid base days in the third month do not block the revision" :
+        (currentGrade22, Yen(300000), ThreeMonthWindow { ...raisedWindow, third = MonthlyPayRecord { ...raisedWindow.third, paidBaseDays = PaidBaseDays(17) } })
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(360000), health = HealthGrade(25), pension = PensionGrade(22), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "ten paid base days in the first month are named with their days" :
+        (currentGrade22, Yen(300000), ThreeMonthWindow { ...raisedWindow, first = MonthlyPayRecord { ...raisedWindow.first, paidBaseDays = PaidBaseDays(10) } })
+        -> RevisionNotRequired { reasons = [ PaidDaysBelowSeventeen { month = ContributionMonth(Date("2026-04-01")), days = PaidBaseDays(10) } ] }
+    | "ten paid base days in the third month are named with their days" :
+        (currentGrade22, Yen(300000), ThreeMonthWindow { ...raisedWindow, third = MonthlyPayRecord { ...raisedWindow.third, paidBaseDays = PaidBaseDays(10) } })
+        -> RevisionNotRequired { reasons = [ PaidDaysBelowSeventeen { month = ContributionMonth(Date("2026-06-01")), days = PaidBaseDays(10) } ] }
     | "a cut in pay moves the grade down by three and the revision follows" :
         (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...pay300k, baseSalary = Yen(200000) }))
         -> GradeDecision { basis = OccasionalRevision, standard = Yen(240000), health = HealthGrade(19), pension = PensionGrade(16), appliesFrom = ContributionMonth(Date("2026-07-01")) }

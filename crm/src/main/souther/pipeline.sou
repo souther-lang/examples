@@ -1095,6 +1095,12 @@ example openNegotiation
     | "a walk-away price above the ask is not a price anybody would walk away from" :
         (acmeQuoted, Date("2026-09-01"), Amount(4800000.01m))
         -> FloorAboveAsk
+    | "a smaller ask can be matched by the walk-away price as well" :
+        (ProposalPriceQuote { ...acmeQuoted, amount = Amount(4799999.00m) }, Date("2026-09-01"), Amount(4799999.00m))
+        -> NegotiationReview { ...acmeInNegotiation, amount = Amount(4799999.00m), floorAmount = Amount(4799999.00m) }
+    | "and a larger ask can be matched too" :
+        (ProposalPriceQuote { ...acmeQuoted, amount = Amount(4800001.00m) }, Date("2026-09-01"), Amount(4800001.00m))
+        -> NegotiationReview { ...acmeInNegotiation, amount = Amount(4800001.00m), floorAmount = Amount(4800001.00m) }
 
 // A deal is won out of a proposal or out of a negotiation, and the difference is exactly what the two
 // states carry: a NegotiationReview has a walk-away price, a ProposalPriceQuote does not. So the discount
@@ -1127,6 +1133,12 @@ example closeWon
     | "a cent below the floor is refused, with both figures" :
         (acmeInNegotiation, Date("2026-09-20"), Amount(4199999.99m))
         -> BelowFloor { floor = Amount(4200000.00m), offered = Amount(4199999.99m) }
+    | "a negotiation with a lower floor closes exactly at that floor too" :
+        (NegotiationReview { ...acmeInNegotiation, floorAmount = Amount(4199999.00m) }, Date("2026-09-20"), Amount(4199999.00m))
+        -> ClosedWon { ...acmeInNegotiation, closedOn = Date("2026-09-20"), wonAmount = Amount(4199999.00m) }
+    | "and a higher floor closes exactly at that floor too" :
+        (NegotiationReview { ...acmeInNegotiation, floorAmount = Amount(4200001.00m) }, Date("2026-09-20"), Amount(4200001.00m))
+        -> ClosedWon { ...acmeInNegotiation, closedOn = Date("2026-09-20"), wonAmount = Amount(4200001.00m) }
 
 // Every open stage spreads OpportunityCommon, so the sum carries that part and the loss is written once
 // rather than per stage. What a win/loss review reads first is the stage the deal was lost at, and it is
