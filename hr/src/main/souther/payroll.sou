@@ -365,3 +365,21 @@ example taxableAmount
         (pay300k, Yen(0), Yen(285000)) -> Yen(0)
     | "premiums a yen beyond that exceed the gross" :
         (pay300k, Yen(0), Yen(285001)) -> DeductionsExceedGross
+    | "a commuting allowance of 150,001 alone, less a premium of 1, is exactly spent" :
+        (MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(150001), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Yen(0), Yen(1)) -> Yen(0)
+    | "one yen more of premium than that exceeds the gross" :
+        (MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(150001), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Yen(0), Yen(2)) -> DeductionsExceedGross
+    | "two yen more of premium than that exceeds it too" :
+        (MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(150001), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Yen(0), Yen(3)) -> DeductionsExceedGross
+    | "no pay at all cannot cover a premium of 2" :
+        (MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Yen(0), Yen(2)) -> DeductionsExceedGross
+    | "salary and an over-ceiling commuting allowance together are spent by exactly their premium" :
+        (MonthlyRemuneration { baseSalary = Yen(10000), scheduledAllowances = Yen(0), commutingAllowance = Yen(150001), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Yen(0), Yen(10001)) -> Yen(0)
+    | "salary and allowances with no commuting allowance are spent by exactly their premium" :
+        (MonthlyRemuneration { baseSalary = Yen(259999), scheduledAllowances = Yen(20000), commutingAllowance = Yen(0), excludedAllowances = Yen(5001), variableAllowances = Yen(0) }, Yen(0), Yen(285000)) -> Yen(0)
+    | "a different split of the same pay, spent by exactly the premium, leaves nothing too" :
+        (MonthlyRemuneration { baseSalary = Yen(260001), scheduledAllowances = Yen(20000), commutingAllowance = Yen(0), excludedAllowances = Yen(4999), variableAllowances = Yen(0) }, Yen(0), Yen(285000)) -> Yen(0)
+    | "every kind of pay at once, spent by exactly the premium, leaves nothing" :
+        (MonthlyRemuneration { baseSalary = Yen(100000), scheduledAllowances = Yen(30000), commutingAllowance = Yen(0), excludedAllowances = Yen(7000), variableAllowances = Yen(3000) }, Yen(0), Yen(140000)) -> Yen(0)
+    | "every kind of pay and an uplift with an over-ceiling commuting allowance, spent by exactly the premium" :
+        (MonthlyRemuneration { baseSalary = Yen(20000), scheduledAllowances = Yen(3000), commutingAllowance = Yen(150001), excludedAllowances = Yen(1000), variableAllowances = Yen(500) }, Yen(700), Yen(25201)) -> Yen(0)

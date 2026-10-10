@@ -87,6 +87,12 @@ example quote
         (Cart { open = false, items =
             [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 } ] })
         -> EmptyCart
+    | "an open cart with no lines -> empty" :
+        (Cart { open = true, items = [] })
+        -> EmptyCart
+    | "a closed cart with no lines -> empty" :
+        (Cart { open = false, items = [] })
+        -> EmptyCart
     | "a zero-quantity line -> invalid" :
         (Cart { open = true, items =
             [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 }
