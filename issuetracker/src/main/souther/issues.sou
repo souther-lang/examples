@@ -106,6 +106,7 @@ let crashOnSave = Issue { id = IssueId("i-1"), title = "crash on save",
 
 fake createIssue
     | (Issue { id = IssueId("i-2"), title = "whitespace", labels = [ Label("ui") ], assignee = None }) -> Issue { id = IssueId("i-2"), title = "whitespace", labels = [ Label("ui") ], assignee = None }
+    | (Issue { id = IssueId("i-3"), title = "one label", labels = [ Label("x") ], assignee = None }) -> Issue { id = IssueId("i-3"), title = "one label", labels = [ Label("x") ], assignee = None }
     | _ -> crashOnSave
 
 example createIssue
@@ -125,6 +126,9 @@ example openIssue
     | "blank pieces leave no labels, so nothing is written" :
         (NewIssue { id = IssueId("i-2"), title = "whitespace", labels = " , ", assignee = None })
         -> NoLabels
+    | "a single one-character label is enough, and the issue is stored" :
+        (NewIssue { id = IssueId("i-3"), title = "one label", labels = "x", assignee = None })
+        -> Issue { id = IssueId("i-3"), title = "one label", labels = [ Label("x") ], assignee = None }
 
 // === attachLabel / detachLabel: read the issue, change its label set, write it back ===
 // Set insert / remove on the labels field, with constructor spread reusing every other field. Both

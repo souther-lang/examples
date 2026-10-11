@@ -209,6 +209,18 @@ example dispatchWindow
     | "a day past the cut-off is no window this behavior plans" :
         (DateTime("2026-07-26T16:00"), DateTime("2026-07-25T15:00"), 2)
             -> PastCutoff { minutesPast = 1500 }
+    | "a minute before the cut-off there is still a minute left, and it goes out today" :
+        (DateTime("2026-07-25T14:59:00"), DateTime("2026-07-25T15:00:00"), 0)
+            -> DispatchPlan { dispatchOn = Date("2026-07-25"), minutesToCutoff = 1, deliverBy = Date("2026-07-25") }
+    | "fifty-nine seconds before the cut-off is a window of nought minutes" :
+        (DateTime("2026-07-25T14:59:01"), DateTime("2026-07-25T15:00:00"), 0)
+            -> DispatchPlan { dispatchOn = Date("2026-07-26"), minutesToCutoff = 0, deliverBy = Date("2026-07-26") }
+    | "exactly a day past the cut-off is no window" :
+        (DateTime("2026-07-26T15:00:00"), DateTime("2026-07-25T15:00:00"), 0)
+            -> PastCutoff { minutesPast = 1440 }
+    | "a second short of a day past the cut-off is still a window" :
+        (DateTime("2026-07-26T14:59:59"), DateTime("2026-07-25T15:00:00"), 0)
+            -> DispatchPlan { dispatchOn = Date("2026-07-27"), minutesToCutoff = 0, deliverBy = Date("2026-07-27") }
 
 // === planCalendar: how many go out each day ===
 // The warehouse plans staffing from the count per dispatch day, so the output is keyed by the day

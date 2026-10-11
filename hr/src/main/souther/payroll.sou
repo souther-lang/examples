@@ -310,7 +310,18 @@ let julyDeductions =
                       }
     ]
 
+let shortDeduction = AgreedDeduction { name = DeductionName("a"), amount = Yen(1), agreement = AgreementNumber("b") }
+
 example buildPaySlip
+    | "a deduction with a one-character name and agreement number is a deduction like any other" :
+        (PayMonth(Date("2026-07-01")),
+         Earnings { fixed = Yen(300000), uplift = Yen(0) },
+         [ shortDeduction ])
+        -> PaySlip { month = PayMonth(Date("2026-07-01"))
+                   , earnings = Earnings { fixed = Yen(300000), uplift = Yen(0) }
+                   , deductions = [ shortDeduction ]
+                   , net = Yen(299999)
+                   }
     | "gross less every deduction is net, and the slip's own invariant says so" :
         (PayMonth(Date("2026-07-01")),
          Earnings { fixed = Yen(300000), uplift = Yen(22750) },
@@ -373,6 +384,28 @@ example taxableAmount
         (MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(150001), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Yen(0), Yen(3)) -> DeductionsExceedGross
     | "no pay at all cannot cover a premium of 2" :
         (MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Yen(0), Yen(2)) -> DeductionsExceedGross
+    | "an uplift of a yen with an over-ceiling commuting allowance is still a yen short of a premium of 150,003" :
+        (MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(150001), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Yen(1), Yen(3)) -> DeductionsExceedGross
+    | "a yen of variable allowance with an over-ceiling commuting allowance is still a yen short of a premium of 150,003" :
+        (MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(150001), excludedAllowances = Yen(0), variableAllowances = Yen(1) }, Yen(0), Yen(3)) -> DeductionsExceedGross
+    | "a yen of scheduled allowance with an over-ceiling commuting allowance is still a yen short of a premium of 150,003" :
+        (MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(1), commutingAllowance = Yen(150001), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Yen(0), Yen(3)) -> DeductionsExceedGross
+    | "a yen of excluded allowance with an over-ceiling commuting allowance is still a yen short of a premium of 150,003" :
+        (MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(150001), excludedAllowances = Yen(1), variableAllowances = Yen(0) }, Yen(0), Yen(3)) -> DeductionsExceedGross
+    | "an uplift of a yen on a pay of 284,999 is spent by exactly a premium of 285,000" :
+        (MonthlyRemuneration { baseSalary = Yen(259999), scheduledAllowances = Yen(20000), commutingAllowance = Yen(0), excludedAllowances = Yen(5000), variableAllowances = Yen(0) }, Yen(1), Yen(285000)) -> Yen(0)
+    | "9,999 of salary and 150,002 of commuting allowance are spent by exactly a premium of 10,001" :
+        (MonthlyRemuneration { baseSalary = Yen(9999), scheduledAllowances = Yen(0), commutingAllowance = Yen(150002), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Yen(0), Yen(10001)) -> Yen(0)
+    | "an uplift of a yen on a pay of 284,999 is a yen short of a premium of 285,001" :
+        (MonthlyRemuneration { baseSalary = Yen(259999), scheduledAllowances = Yen(20000), commutingAllowance = Yen(0), excludedAllowances = Yen(5000), variableAllowances = Yen(0) }, Yen(1), Yen(285001)) -> DeductionsExceedGross
+    | "an over-ceiling commuting allowance of 150,002 alone is a yen short of a premium of 150,003" :
+        (MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(150002), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Yen(0), Yen(3)) -> DeductionsExceedGross
+    | "a pay of 285,000 split over four kinds is a yen short of a premium of 285,001" :
+        (MonthlyRemuneration { baseSalary = Yen(259999), scheduledAllowances = Yen(20000), commutingAllowance = Yen(0), excludedAllowances = Yen(5000), variableAllowances = Yen(1) }, Yen(0), Yen(285001)) -> DeductionsExceedGross
+    | "a yen of salary and an over-ceiling commuting allowance, a yen short of the premium" :
+        (MonthlyRemuneration { baseSalary = Yen(1), scheduledAllowances = Yen(0), commutingAllowance = Yen(150001), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Yen(0), Yen(3)) -> DeductionsExceedGross
+    | "scheduled allowances of 20,001 alone are a yen short of a premium of 20,002" :
+        (MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(20001), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Yen(0), Yen(20002)) -> DeductionsExceedGross
     | "salary and an over-ceiling commuting allowance together are spent by exactly their premium" :
         (MonthlyRemuneration { baseSalary = Yen(10000), scheduledAllowances = Yen(0), commutingAllowance = Yen(150001), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Yen(0), Yen(10001)) -> Yen(0)
     | "salary and allowances with no commuting allowance are spent by exactly their premium" :

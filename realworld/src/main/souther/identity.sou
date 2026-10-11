@@ -229,6 +229,7 @@ let jakeInFull = User
     { ...jake, bio = Bio("Trains dragons"), image = ImageUrl("https://example.com/jake.png") }
 let jakeAtANewAddress = User { ...jake, email = Email("jake@new.example") }
 let jacob = User { ...jake, username = Username("jacob") }
+let jacobAtANewAddress = User { ...jake, username = Username("jacob"), email = Email("jake@new.example") }
 let jakeWithBio   = User { ...jake, bio = Bio("Trains dragons") }
 let jakeWithImage = User { ...jake, image = ImageUrl("https://example.com/jake.png") }
 
@@ -238,6 +239,7 @@ fake storeUserUpdate
     | (Username("jake"), jakeInFull)        -> jakeInFull
     | (Username("jake"), jakeAtANewAddress) -> jakeAtANewAddress
     | (Username("jake"), jacob)             -> jacob
+    | (Username("jake"), jacobAtANewAddress) -> jacobAtANewAddress
     | (Username("jake"), jake)              -> jake
     | (Username("jake"), jakeWithBio)       -> jakeWithBio
     | (Username("jake"), jakeWithImage)     -> jakeWithImage
@@ -276,6 +278,11 @@ example updateUser
         (jake, jakeAtANewAddress) -> jakeAtANewAddress
     | "moving to a username nobody holds is stored" :
         (jake, jacob) -> jacob
+    | "moving both to free names is stored" :
+        (jake, jacobAtANewAddress) -> jacobAtANewAddress
+    | "moving both, the username held by somebody else, is refused" :
+        (jake, User { username = Username("gerome"), bio = None, image = None, email = Email("jake@new.example") })
+        -> UsernameTaken
 
 // === logging in ===
 // What a login reads is one row: the user and the hash to check the password against. They are read

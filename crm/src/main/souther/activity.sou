@@ -700,6 +700,13 @@ example dayLoadOf
         ([ Meeting { ...workshop, id = ActivityId("00T000000000023"), related = viaLead } ],
          UserId("u-001"))
         -> DayLoad { minutesPerDay = [ (Date("2026-07-23"), 90) ], busiestMinutes = 90 }
+    | "a one-character subject and a quarter-hour meeting are the shortest day load" :
+        ([ CallTask { ...introCall, subject = Subject("x") }, EmailTask { ...unopenedDeck, subject = Subject("x") },
+           Meeting { ...workshop, subject = Subject("x"), minutes = DurationMinutes(15) } ], UserId("u-001"))
+        -> DayLoad { minutesPerDay = [ (Date("2026-07-23"), 15) ], busiestMinutes = 15 }
+    | "an eight-hour meeting is the longest a day load takes" :
+        ([ Meeting { ...workshop, minutes = DurationMinutes(480) } ], UserId("u-001"))
+        -> DayLoad { minutesPerDay = [ (Date("2026-07-23"), 480) ], busiestMinutes = 480 }
     | "an owner with no meetings has a load of nought" :
         ([ introCall, unopenedDeck ], UserId("u-001"))
         -> DayLoad { minutesPerDay = [ ], busiestMinutes = 0 }

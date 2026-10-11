@@ -598,6 +598,11 @@ example probabilityOf
     | "a deal lost on price is still zero" : (ClosedLost { ...acmeLost, reason = PriceLoss { gapToBudget = Amount(200000.00m) } }) -> Probability(0)
 
 example categoryOf
+    | "a negotiation with one-character fields, two decision makers and the floor at the ask is a commit" : (NegotiationReview { ...acmeInNegotiation, name = OpportunityName("x")
+          , businessCase = BusinessCase("x"), criteria = [ DecisionCriterion("x") ]
+          , decisionMakers = DecisionMakers(Set.fromList([ ContactId("003000000000200"), ContactId("003000000000201") ]))
+          , risks = [ PerceivedRisk("x") ], openedOn = Date("2026-09-30"), floorAmount = Amount(4800000.00m) }) -> Commit
+    | "a deal lost at a one-character stage is omitted" : (ClosedLost { ...acmeLost, stageAtLoss = StageName("x"), openedOn = Date("2026-08-31") }) -> Omitted
     | "a deal nobody has qualified is pipeline" : (acme) -> Pipeline
     | "a qualified deal is still pipeline" : (acmeQualified) -> Pipeline
     | "a recorded need is pipeline" : (acmeDiscovered) -> Pipeline

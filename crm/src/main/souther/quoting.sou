@@ -498,6 +498,8 @@ let dayPassQuote = Quote { ...listPriceQuote
 // each get a row on each side. A matrix nobody has checked at its edges is a matrix that lets a rep sign
 // off their own thirty per cent, and an edge checked on one side only is a matrix whose bands can drift
 // one step without a row noticing.
+let freeQuoteBase = quoteAt(DiscountRate(0.0m), Amount(10000.00m))
+
 example approvalNeeded
     | "a tenth off is a rep's own call" :
         (quoteAt(DiscountRate(0.10m), Amount(9000.00m)))
@@ -520,6 +522,19 @@ example approvalNeeded
     | "deep discounts stay the CFO's however far they go" :
         (quoteAt(DiscountRate(0.40m), Amount(6000.00m)))
         -> NeedsApproval { role = Cfo, worstDiscount = DiscountRate(0.40m) }
+    | "exactly half off still goes to the CFO" :
+        (quoteAt(DiscountRate(0.5m), Amount(5000.00m)))
+        -> NeedsApproval { role = Cfo, worstDiscount = DiscountRate(0.5m) }
+    | "a free line is within a rep's authority" :
+        (Quote { ...freeQuoteBase
+               , lines = QuoteLines([ QuoteLine { product = ProductCode("SW-1001"), name = ProductName("Platform licence")
+                            , quantity = Quantity(10), listPrice = UnitPrice(0.0m)
+                            , discount = DiscountRate(0.0m), net = Amount(0.0m) } ])
+               , subtotal = Amount(0.0m), total = Amount(0.0m) })
+        -> WithinAuthority
+    | "a rejected quote with a one-character note still needs the approval its discount calls for" :
+        (Quote { ...rejectedQuote, approval = RejectedQuote { rejectedOn = Date("2026-08-12"), approver = UserId("u-vp"), note = RejectionNote("x") } })
+        -> NeedsApproval { role = RegionalVp, worstDiscount = DiscountRate(0.21m) }
     | "no discount at all is a rep's own call" :
         (quoteAt(DiscountRate(0.0m), Amount(10000.00m)))
         -> WithinAuthority

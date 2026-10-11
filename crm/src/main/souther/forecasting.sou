@@ -313,6 +313,49 @@ example weightedForecast
             , total = Amount(0.0m)
             , dealCount = 0
             }
+    | "a fiscal year that starts in December has no month after it, and an empty list forecasts nothing" :
+        (UserId("u-001"), [ ], 12, yenRates)
+        -> Forecast
+            { owner = UserId("u-001")
+            , currency = CurrencyCode("JPY")
+            , periods = [ ]
+            , byPeriod = Map.empty
+            , total = Amount(0.0m)
+            , dealCount = 0
+            }
+    | "a deal closing on 30 September falls in the first quarter of a year that starts in September" :
+        (UserId("u-001"), [ acmeDeal ], 9, yenRates)
+        -> Forecast
+            { owner = UserId("u-001")
+            , currency = CurrencyCode("JPY")
+            , periods = [ FiscalPeriod("FY26-Q1") ]
+            , byPeriod = Map.fromList([ (FiscalPeriod("FY26-Q1"), Amount(100000.00m)) ])
+            , total = Amount(100000.00m)
+            , dealCount = 1
+            }
+    | "the same deal falls in the last quarter of a year that starts in October" :
+        (UserId("u-001"), [ acmeDeal ], 10, yenRates)
+        -> Forecast
+            { owner = UserId("u-001")
+            , currency = CurrencyCode("JPY")
+            , periods = [ FiscalPeriod("FY25-Q4") ]
+            , byPeriod = Map.fromList([ (FiscalPeriod("FY25-Q4"), Amount(100000.00m)) ])
+            , total = Amount(100000.00m)
+            , dealCount = 1
+            }
+    | "a deal closing in August falls in the first quarter of a year that starts in August" :
+        (UserId("u-001"), [ Prospecting { ...acmeDeal, closeDate = Date("2026-08-15") } ], 8, yenRates)
+        -> Forecast
+            { owner = UserId("u-001")
+            , currency = CurrencyCode("JPY")
+            , periods = [ FiscalPeriod("FY26-Q1") ]
+            , byPeriod = Map.fromList([ (FiscalPeriod("FY26-Q1"), Amount(100000.00m)) ])
+            , total = Amount(100000.00m)
+            , dealCount = 1
+            }
+    | "a fourteenth month is no start of a year either" :
+        (UserId("u-001"), [ ], 14, yenRates)
+        -> InvalidFiscalYearStart
     | "there is still no thirteenth month" :
         (UserId("u-001"), [ ], 13, yenRates)
         -> InvalidFiscalYearStart
