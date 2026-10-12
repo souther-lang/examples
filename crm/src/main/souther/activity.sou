@@ -677,6 +677,147 @@ example nextStepFor
         (acmeInNegotiation, Recency { lastOn = Date("2026-09-08"), daysSince = 2 }, Date("2026-09-10"))
         -> NextStep { description = Subject("Agree the last point and put a signature date on it")
                     , dueOn = Date("2026-09-10") }
+    | "a prospect with 0 days since the last touch" :
+        (acme, Recency { lastOn = Date("2000-01-01"), daysSince = 0 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Call to confirm there is a project and a budget holder")
+                    , dueOn = Date("2000-01-15") }
+    | "a prospect with 4 days since the last touch" :
+        (acme, Recency { lastOn = Date("2000-01-01"), daysSince = 4 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Call to confirm there is a project and a budget holder")
+                    , dueOn = Date("2000-01-11") }
+    | "a prospect with 6 days since the last touch" :
+        (acme, Recency { lastOn = Date("2000-01-01"), daysSince = 6 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Call to confirm there is a project and a budget holder")
+                    , dueOn = Date("2000-01-09") }
+    | "a prospect with 8 days since the last touch" :
+        (acme, Recency { lastOn = Date("2000-01-01"), daysSince = 8 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Call to confirm there is a project and a budget holder")
+                    , dueOn = Date("2000-01-07") }
+    | "a qualified deal with 0 days since the last touch" :
+        (acmeQualified, Recency { lastOn = Date("2000-01-01"), daysSince = 0 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Book a discovery call and write down what hurts")
+                    , dueOn = Date("2000-01-08") }
+    | "a qualified deal with 3 days since the last touch" :
+        (acmeQualified, Recency { lastOn = Date("2000-01-01"), daysSince = 3 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Book a discovery call and write down what hurts")
+                    , dueOn = Date("2000-01-05") }
+    | "a qualified deal with 4 days since the last touch" :
+        (acmeQualified, Recency { lastOn = Date("2000-01-01"), daysSince = 4 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Book a discovery call and write down what hurts")
+                    , dueOn = Date("2000-01-04") }
+    | "a qualified deal with 8 days since the last touch" :
+        (acmeQualified, Recency { lastOn = Date("2000-01-01"), daysSince = 8 }, Date("2000-01-01"))
+        -> Overdue
+    | "a qualified deal with 15 days since the last touch" :
+        (acmeQualified, Recency { lastOn = Date("2000-01-01"), daysSince = 15 }, Date("2000-01-01"))
+        -> Overdue
+    | "a deal in discovery with 3 days since the last touch" :
+        (acmeDiscovered, Recency { lastOn = Date("2000-01-01"), daysSince = 3 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Send the business case against the recorded needs")
+                    , dueOn = Date("2000-01-05") }
+    | "a deal in discovery with 4 days since the last touch" :
+        (acmeDiscovered, Recency { lastOn = Date("2000-01-01"), daysSince = 4 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Send the business case against the recorded needs")
+                    , dueOn = Date("2000-01-04") }
+    | "a deal in discovery with 6 days since the last touch" :
+        (acmeDiscovered, Recency { lastOn = Date("2000-01-01"), daysSince = 6 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Send the business case against the recorded needs")
+                    , dueOn = Date("2000-01-02") }
+    | "a deal in discovery with 8 days since the last touch" :
+        (acmeDiscovered, Recency { lastOn = Date("2000-01-01"), daysSince = 8 }, Date("2000-01-01"))
+        -> Overdue
+    | "a deal in discovery with 15 days since the last touch" :
+        (acmeDiscovered, Recency { lastOn = Date("2000-01-01"), daysSince = 15 }, Date("2000-01-01"))
+        -> Overdue
+    | "a deal with a business case with 0 days since the last touch" :
+        (acmeValued, Recency { lastOn = Date("2000-01-01"), daysSince = 0 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Ask who else has to agree, by name")
+                    , dueOn = Date("2000-01-08") }
+    | "a deal with a business case with 3 days since the last touch" :
+        (acmeValued, Recency { lastOn = Date("2000-01-01"), daysSince = 3 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Ask who else has to agree, by name")
+                    , dueOn = Date("2000-01-05") }
+    | "a deal with a business case with 4 days since the last touch" :
+        (acmeValued, Recency { lastOn = Date("2000-01-01"), daysSince = 4 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Ask who else has to agree, by name")
+                    , dueOn = Date("2000-01-04") }
+    | "a deal with a business case with 15 days since the last touch" :
+        (acmeValued, Recency { lastOn = Date("2000-01-01"), daysSince = 15 }, Date("2000-01-01"))
+        -> Overdue
+    | "a deal with identified decision makers with 3 days since the last touch" :
+        (acmeIdentified, Recency { lastOn = Date("2000-01-01"), daysSince = 3 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Meet the sponsor and ask what would stop this")
+                    , dueOn = Date("2000-01-03") }
+    | "a deal with identified decision makers with 4 days since the last touch" :
+        (acmeIdentified, Recency { lastOn = Date("2000-01-01"), daysSince = 4 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Meet the sponsor and ask what would stop this")
+                    , dueOn = Date("2000-01-02") }
+    | "a deal with identified decision makers with 6 days since the last touch" :
+        (acmeIdentified, Recency { lastOn = Date("2000-01-01"), daysSince = 6 }, Date("2000-01-01"))
+        -> Overdue
+    | "a deal with identified decision makers with 8 days since the last touch" :
+        (acmeIdentified, Recency { lastOn = Date("2000-01-01"), daysSince = 8 }, Date("2000-01-01"))
+        -> Overdue
+    | "a deal with identified decision makers with 15 days since the last touch" :
+        (acmeIdentified, Recency { lastOn = Date("2000-01-01"), daysSince = 15 }, Date("2000-01-01"))
+        -> Overdue
+    | "a deal with a champion with 0 days since the last touch" :
+        (acmeChampioned, Recency { lastOn = Date("2000-01-01"), daysSince = 0 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Send the quote with the risks answered in it")
+                    , dueOn = Date("2000-01-06") }
+    | "a deal with a champion with 3 days since the last touch" :
+        (acmeChampioned, Recency { lastOn = Date("2000-01-01"), daysSince = 3 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Send the quote with the risks answered in it")
+                    , dueOn = Date("2000-01-03") }
+    | "a deal with a champion with 6 days since the last touch" :
+        (acmeChampioned, Recency { lastOn = Date("2000-01-01"), daysSince = 6 }, Date("2000-01-01"))
+        -> Overdue
+    | "a deal with a champion with 8 days since the last touch" :
+        (acmeChampioned, Recency { lastOn = Date("2000-01-01"), daysSince = 8 }, Date("2000-01-01"))
+        -> Overdue
+    | "a deal with a champion with 15 days since the last touch" :
+        (acmeChampioned, Recency { lastOn = Date("2000-01-01"), daysSince = 15 }, Date("2000-01-01"))
+        -> Overdue
+    | "a quoted deal with 3 days since the last touch" :
+        (acmeQuoted, Recency { lastOn = Date("2000-01-01"), daysSince = 3 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Chase the quote and ask what is missing from it")
+                    , dueOn = Date("2000-01-01") }
+    | "a quoted deal with 6 days since the last touch" :
+        (acmeQuoted, Recency { lastOn = Date("2000-01-01"), daysSince = 6 }, Date("2000-01-01"))
+        -> Overdue
+    | "a quoted deal with 8 days since the last touch" :
+        (acmeQuoted, Recency { lastOn = Date("2000-01-01"), daysSince = 8 }, Date("2000-01-01"))
+        -> Overdue
+    | "a quoted deal with 15 days since the last touch" :
+        (acmeQuoted, Recency { lastOn = Date("2000-01-01"), daysSince = 15 }, Date("2000-01-01"))
+        -> Overdue
+    | "a deal in negotiation with 3 days since the last touch" :
+        (acmeInNegotiation, Recency { lastOn = Date("2000-01-01"), daysSince = 3 }, Date("2000-01-01"))
+        -> Overdue
+    | "a deal in negotiation with 4 days since the last touch" :
+        (acmeInNegotiation, Recency { lastOn = Date("2000-01-01"), daysSince = 4 }, Date("2000-01-01"))
+        -> Overdue
+    | "a deal in negotiation with 8 days since the last touch" :
+        (acmeInNegotiation, Recency { lastOn = Date("2000-01-01"), daysSince = 8 }, Date("2000-01-01"))
+        -> Overdue
+    | "a deal in negotiation with 15 days since the last touch" :
+        (acmeInNegotiation, Recency { lastOn = Date("2000-01-01"), daysSince = 15 }, Date("2000-01-01"))
+        -> Overdue
+    | "a placeholder prospect with 14 days since the last touch" :
+        (Prospecting { id = OpportunityId("006000000000000"), accountId = AccountId("001000000000000")
+                       , name = example.pipeline.OpportunityName("x"), owner = UserId("x")
+                       , amount = example.crm.Amount(0m), currency = example.crm.CurrencyCode("AAA")
+                       , closeDate = Date("2000-01-01"), openedOn = Date("2000-01-01") },
+         Recency { lastOn = Date("2000-01-01"), daysSince = 14 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Call to confirm there is a project and a budget holder")
+                    , dueOn = Date("2000-01-01") }
+    | "a placeholder prospect with 16 days since the last touch" :
+        (Prospecting { id = OpportunityId("006000000000000"), accountId = AccountId("001000000000000")
+                       , name = example.pipeline.OpportunityName("x"), owner = UserId("x")
+                       , amount = example.crm.Amount(0m), currency = example.crm.CurrencyCode("AAA")
+                       , closeDate = Date("2000-01-01"), openedOn = Date("2000-01-01") },
+         Recency { lastOn = Date("2000-01-01"), daysSince = 16 }, Date("2000-01-01"))
+        -> Overdue
 
 // The meetings of one owner, summed by day: the other owner's meeting on the same day and the calls and
 // emails are not part of the load.

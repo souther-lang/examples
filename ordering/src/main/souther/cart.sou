@@ -98,6 +98,14 @@ example quote
             [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 }
             , LineItem { sku = Sku("tv"), quantity = 0, unitPrice = 200000, weightGrams = 120 } ] })
         -> InvalidQuantity { invalidCount = 1 }
+    | "a closed cart with a bad quantity and a dear line is still empty" :
+        (Cart { open = false, items =
+            [ LineItem { sku = Sku("x"), quantity = 0, unitPrice = 100000, weightGrams = 0 } ] })
+        -> EmptyCart
+    | "a negative quantity is invalid, like a zero one" :
+        (Cart { open = true, items =
+            [ LineItem { sku = Sku("x"), quantity = -1, unitPrice = 0, weightGrams = 0 } ] })
+        -> InvalidQuantity { invalidCount = 1 }
     | "a weightless line, with the shortest sku, is priced like any other" :
         (Cart { open = true, items =
             [ LineItem { sku = Sku("x"), quantity = 1, unitPrice = 500, weightGrams = 0 } ] })

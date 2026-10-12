@@ -402,6 +402,15 @@ example judgeYearEndEligibility
     | "every reason that applies is given, in the order of the rule" :
         (LeftDuringYear, Yen(21000000), NoDeclarationFiled)
         -> YearEndNotApplicable { reasons = [ NotEmployedAtYearEnd, SalaryOverTwentyMillion { ceiling = Yen(20000000), salary = Yen(21000000) }, NoDependantDeclaration ] }
+    | "one yen over the ceiling and gone from the books gives both reasons" :
+        (LeftDuringYear, Yen(20000001), DeclarationFiled)
+        -> YearEndNotApplicable { reasons = [ NotEmployedAtYearEnd, SalaryOverTwentyMillion { ceiling = Yen(20000000), salary = Yen(20000001) } ] }
+    | "one yen over the ceiling with no declaration gives both reasons" :
+        (EmployedAtYearEnd, Yen(20000001), NoDeclarationFiled)
+        -> YearEndNotApplicable { reasons = [ SalaryOverTwentyMillion { ceiling = Yen(20000000), salary = Yen(20000001) }, NoDependantDeclaration ] }
+    | "exactly at the ceiling, gone from the books with no declaration, gives those two reasons" :
+        (LeftDuringYear, salaryCeiling, NoDeclarationFiled)
+        -> YearEndNotApplicable { reasons = [ NotEmployedAtYearEnd, NoDependantDeclaration ] }
 
 example employmentIncomeDeductionFor
     | "at the top of the minimum-guarantee band both formulas give 650,000, which is what makes it one table" :

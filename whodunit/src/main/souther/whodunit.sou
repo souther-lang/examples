@@ -124,3 +124,13 @@ example solve
     | "Alice was not in the Study" : ([ WasElsewhere { who = Alice, room = Study } ]) -> StillAmbiguous
     | "Alice was not in the Garden" : ([ WasElsewhere { who = Alice, room = Garden } ]) -> StillAmbiguous
     | "Carol was not in the Kitchen" : ([ WasElsewhere { who = Carol, room = Kitchen } ]) -> StillAmbiguous
+    | "Alice was seen in the Kitchen" : ([ SawIn { who = Alice, room = Kitchen } ]) -> StillAmbiguous
+    | "Bob was seen in the Study" : ([ SawIn { who = Bob, room = Study } ]) -> StillAmbiguous
+    | "Bob was seen in the Garden" : ([ SawIn { who = Bob, room = Garden } ]) -> StillAmbiguous
+    | "Carol was seen in the Study" : ([ SawIn { who = Carol, room = Study } ]) -> StillAmbiguous
+    | "Carol was seen in the Garden" : ([ SawIn { who = Carol, room = Garden } ]) -> StillAmbiguous
+    | "Alice was not in the Kitchen" : ([ WasElsewhere { who = Alice, room = Kitchen } ]) -> StillAmbiguous
+    | "Bob was not in the Study" : ([ WasElsewhere { who = Bob, room = Study } ]) -> StillAmbiguous
+    | "Bob was not in the Garden" : ([ WasElsewhere { who = Bob, room = Garden } ]) -> StillAmbiguous
+    | "Carol was not in the Study" : ([ WasElsewhere { who = Carol, room = Study } ]) -> StillAmbiguous
+    | "Carol was not in the Garden" : ([ WasElsewhere { who = Carol, room = Garden } ]) -> StillAmbiguous

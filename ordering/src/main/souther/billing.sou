@@ -653,6 +653,22 @@ example issueCreditNote
             -> ExceedsInvoice { against = InvoiceNo("INV-2026-000042"),
                                 alreadyCredited = Amount(400.0m), remaining = Amount(0.0m),
                                 asked = Amount(55.0m) }
+    | "a zero-amount note against a zero invoice is allowed" :
+        (Invoice { no = InvoiceNo("INV-0000-000000"), orderId = OrderId("x"),
+                   issuedOn = Date("2000-01-01"), dueOn = Date("2000-01-01"),
+                   net = Amount(0m), tax = Amount(0m), gross = Amount(0m) }
+        , [], PriceError, Amount(0m), Amount(0m), Date("2000-01-01"), 0)
+            -> CreditNote { no = InvoiceNo("INV-2026-000000"), against = InvoiceNo("INV-0000-000000"),
+                            issuedOn = Date("2000-01-01"), reason = PriceError,
+                            net = Amount(0m), tax = Amount(0m), gross = Amount(0m) }
+    | "a note against an empty invoice is refused for any amount" :
+        (Invoice { no = InvoiceNo("INV-0000-000000"), orderId = OrderId("x"),
+                   issuedOn = Date("2000-01-01"), dueOn = Date("2000-01-01"),
+                   net = Amount(0m), tax = Amount(0m), gross = Amount(0m) }
+        , [], PriceError, Amount(0m), Amount(1m), Date("2000-01-01"), 0)
+            -> ExceedsInvoice { against = InvoiceNo("INV-0000-000000"),
+                                alreadyCredited = Amount(0m), remaining = Amount(0m),
+                                asked = Amount(1m) }
 
 example netOfCredits
     | "an invoice with no credit notes owes what it states" : (julyInvoice, []) -> Amount(346.0m)

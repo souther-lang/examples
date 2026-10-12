@@ -638,6 +638,20 @@ example dealsAtRisk
     | "a report with no accounts in it says nothing, so there is nothing to be at risk from" :
         ([ acmeInNegotiation ], StaleReport { daysSince = Map.empty, stale = [ ] }, 14)
         -> NoActivityRecorded
+    | "a prospect is not a commitment, however quiet its account, and a staleness threshold of nought changes nothing" :
+        ([ Prospecting { id = OpportunityId("006000000000000"), accountId = AccountId("001000000000000")
+                       , name = OpportunityName("x"), owner = UserId("x")
+                       , amount = Amount(0m), currency = CurrencyCode("AAA")
+                       , closeDate = Date("2000-01-01"), openedOn = Date("2000-01-01") } ],
+         coldAccount, 0)
+        -> RiskReport { atRisk = [ ], atRiskAmount = Amount(0.0m), healthy = 1 }
+    | "a report whose accounts have no days recorded says nothing, whatever the threshold" :
+        ([ Prospecting { id = OpportunityId("006000000000000"), accountId = AccountId("001000000000000")
+                       , name = OpportunityName("x"), owner = UserId("x")
+                       , amount = Amount(0m), currency = CurrencyCode("AAA")
+                       , closeDate = Date("2000-01-01"), openedOn = Date("2000-01-01") } ],
+         StaleReport { ...coldAccount, daysSince = [ ] }, 0)
+        -> NoActivityRecorded
 
 // === rollupTeam ===
 // A manager's number is the reps' numbers summed, and Map.union is the wrong tool for it: union is left-biased

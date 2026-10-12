@@ -136,6 +136,12 @@ example report
             , total = 1000 })
         -> SalesReport { total = 1000, distinctSkus = [ "pen" ], lineCount = 1, highValueLines = 1 }
 
+example recordOrder
+    | "order.highValue=true"  : (PricedCart { items = [], total = 0, highValue = true })
+        -> RecordedOrder { orderId = OrderId("order-oos"), items = [], total = 0 }
+    | "order.highValue=false" : (PricedCart { items = [], total = 0, highValue = false })
+        -> RecordedOrder { orderId = OrderId("order-oos"), items = [], total = 0 }
+
 // === the contract with the orders and stock tables ===
 // reserveStock is implemented outside, so these rows are what the outside world is held to: what the
 // conditional UPDATE answers per order. recordOrder has no row on purpose: the id it hands back is a
