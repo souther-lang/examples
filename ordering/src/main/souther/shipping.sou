@@ -191,6 +191,14 @@ example splitPicks
                 ready = [],
                 backordered = [ PickLine { sku = Sku("x"), quantity = 1, location = Location("A-00-00") } ],
                 readyUnits = 0 }
+    | "a single unit on a shelf that never mentions the sku is backordered too" :
+        (PickList { lines =
+            [ PickLine { sku = Sku("x"), quantity = 1, location = Location("A-00-00") } ] }
+        , [ (Sku("xx"), 0) ])
+            -> SplitShipment {
+                ready = [],
+                backordered = [ PickLine { sku = Sku("x"), quantity = 1, location = Location("A-00-00") } ],
+                readyUnits = 0 }
 
 // === dispatchWindow: the carrier's cut-off, and the promise that follows from it ===
 // An order placed before the cut-off goes out the same day; one placed after it goes out the next.

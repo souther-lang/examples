@@ -414,6 +414,14 @@ example tallyMonth
             ]
         )
         -> MonthlyTally { ordinary = Hours(0.0m), overtimeWithinSixty = Hours(0.0m), overtimeBeyondSixty = Hours(0.0m), lateNight = Hours(0.0m), statutoryHoliday = Hours(0.0m) }
+    | "nine hours on the statutory holiday are all holiday work, with no ordinary hours and no overtime beside them" :
+        ([ DailyAttendance { ...sundayShift, worked = Hours(9.0m) } ])
+        -> MonthlyTally { ordinary = Hours(0.0m)
+                        , overtimeWithinSixty = Hours(0.0m)
+                        , overtimeBeyondSixty = Hours(0.0m)
+                        , lateNight = Hours(0.0m)
+                        , statutoryHoliday = Hours(9.0m)
+                        }
     | "seven hours on an ordinary day is under the statutory eight, so it is all ordinary and none is overtime" :
         ([ DailyAttendance { ...ordinaryDay, worked = Hours(7.0m) } ])
         -> MonthlyTally { ordinary = Hours(7.0m)

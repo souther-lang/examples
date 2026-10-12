@@ -248,6 +248,26 @@ example convertLead
                                 , reach = EmailOnly { email = EmailAddress("x@-bad.example.com") } }
             , intent = OpportunityRequested { amount = Amount(4800000.00m), closeDate = Date("2026-09-30") } }
 
+    | "a contact already on the lead's address blocks the conversion and names the contact, though no account matches" :
+        (QualifiedLead { ...acmeQualifiedLead, reach = EmailOnly { email = EmailAddress("!@!.!") } },
+         ConversionRequest { ...conversionRequest, intent = NoOpportunity },
+         AccountBook([ Account { ...acmeAccount, id = AccountId("001000000000000"), domain = None } ]),
+         ContactBook([ Contact { ...acmeContact, id = ContactId("003000000000000")
+                               , accountId = AccountId("001000000000000")
+                               , reach = EmailOnly { email = EmailAddress("!@!.!") } } ]))
+        -> ConversionBlocked
+            { reasons = [ DuplicateContact { existing = ContactId("003000000000000") } ] }
+    | "a contact on the lead's address is found too when it can be reached by phone as well" :
+        (QualifiedLead { ...acmeQualifiedLead, reach = EmailOnly { email = EmailAddress("!@!.!") } },
+         ConversionRequest { ...conversionRequest, intent = NoOpportunity },
+         AccountBook([ Account { ...acmeAccount, id = AccountId("001000000000000"), domain = None } ]),
+         ContactBook([ Contact { ...acmeContact, id = ContactId("003000000000000")
+                               , accountId = AccountId("001000000000000")
+                               , reach = EmailAndPhone { email = EmailAddress("!@!.!")
+                                                       , phone = PhoneNumber("0      ") } } ]))
+        -> ConversionBlocked
+            { reasons = [ DuplicateContact { existing = ContactId("003000000000000") } ] }
+
 // Screening is the same two rules, asked before anybody has been qualified. The two keys are what make
 // them two rules: an account is a company, so its key is the domain; a contact is a person, so its key is
 // the address.

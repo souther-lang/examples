@@ -365,6 +365,18 @@ example weightedForecast
     | "nor a negative one" :
         (UserId("u-001"), [ ], -2, yenRates)
         -> InvalidFiscalYearStart
+    | "a month nought is refused whatever stage the deals are in" :
+        (UserId("u-001"),
+         [ acme, acmeQualified, acmeDiscovered, acmeValued, acmeIdentified, acmeChampioned, acmeQuoted
+         , acmeInNegotiation ],
+         0, yenRates)
+        -> InvalidFiscalYearStart
+    | "a thirteenth month is refused whatever stage the deals are in" :
+        (UserId("u-001"),
+         [ acme, acmeQualified, acmeDiscovered, acmeValued, acmeIdentified, acmeChampioned, acmeQuoted
+         , acmeInNegotiation ],
+         13, yenRates)
+        -> InvalidFiscalYearStart
     // The probability is the stage's, so each of the eight open stages weighs the same ask differently:
     // ten, ten, twenty, fifty, sixty, seventy, seventy-five and ninety per cent of four million eight hundred
     // thousand come to three hundred and eighty-five per cent of it. The fiscal year starts in May, so the
@@ -645,6 +657,14 @@ example dealsAtRisk
                        , closeDate = Date("2000-01-01"), openedOn = Date("2000-01-01") } ],
          coldAccount, 0)
         -> RiskReport { atRisk = [ ], atRiskAmount = Amount(0.0m), healthy = 1 }
+    | "a report with no days recorded says nothing about any stage before the last, at a threshold of nought" :
+        ([ acmeQualified, acmeDiscovered, acmeValued, acmeIdentified, acmeChampioned, acmeQuoted ],
+         StaleReport { ...coldAccount, daysSince = [ ] }, 0)
+        -> NoActivityRecorded
+    | "a deal nobody has touched is at risk at a threshold of nought, which every deal has already passed" :
+        ([ secondCommit ], coldAccount, 0)
+        -> RiskReport { atRisk = [ OpportunityId("006000000000002") ]
+                      , atRiskAmount = Amount(3000000.00m), healthy = 0 }
     | "a report whose accounts have no days recorded says nothing, whatever the threshold" :
         ([ Prospecting { id = OpportunityId("006000000000000"), accountId = AccountId("001000000000000")
                        , name = OpportunityName("x"), owner = UserId("x")

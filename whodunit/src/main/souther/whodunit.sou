@@ -134,3 +134,66 @@ example solve
     | "Bob was not in the Garden" : ([ WasElsewhere { who = Bob, room = Garden } ]) -> StillAmbiguous
     | "Carol was not in the Study" : ([ WasElsewhere { who = Carol, room = Study } ]) -> StillAmbiguous
     | "Carol was not in the Garden" : ([ WasElsewhere { who = Carol, room = Garden } ]) -> StillAmbiguous
+
+// Rows the generator offered: pairs of clues that pin the evening down once a third is added.
+example solve
+    | "the Study deed, Alice in the Kitchen and Bob in the Study name Bob" :
+        ([ CulpritWasIn { room = Study }, SawIn { who = Alice, room = Kitchen }, SawIn { who = Bob, room = Study } ])
+        -> Unraveled { culprit = Bob
+                     , places = [ Placement { who = Alice, room = Kitchen }
+                                , Placement { who = Bob,   room = Study }
+                                , Placement { who = Carol, room = Garden } ] }
+    | "the Garden deed, Alice in the Kitchen and Bob in the Study name Carol" :
+        ([ CulpritWasIn { room = Garden }, SawIn { who = Alice, room = Kitchen }, SawIn { who = Bob, room = Study } ])
+        -> Unraveled { culprit = Carol
+                     , places = [ Placement { who = Alice, room = Kitchen }
+                                , Placement { who = Bob,   room = Study }
+                                , Placement { who = Carol, room = Garden } ] }
+    | "a Kitchen deed with Alice there and Carol in the Study names Alice" :
+        ([ CulpritWasIn { room = Kitchen }, SawIn { who = Alice, room = Kitchen }, SawIn { who = Carol, room = Study } ])
+        -> Unraveled { culprit = Alice
+                     , places = [ Placement { who = Alice, room = Kitchen }
+                                , Placement { who = Bob,   room = Garden }
+                                , Placement { who = Carol, room = Study } ] }
+    | "a Kitchen deed with Alice there and Bob in the Garden names Alice" :
+        ([ CulpritWasIn { room = Kitchen }, SawIn { who = Alice, room = Kitchen }, SawIn { who = Bob, room = Garden } ])
+        -> Unraveled { culprit = Alice
+                     , places = [ Placement { who = Alice, room = Kitchen }
+                                , Placement { who = Bob,   room = Garden }
+                                , Placement { who = Carol, room = Study } ] }
+    | "a Kitchen deed with Bob there and Alice not in the Study names Bob" :
+        ([ CulpritWasIn { room = Kitchen }, SawIn { who = Bob, room = Kitchen }, WasElsewhere { who = Alice, room = Study } ])
+        -> Unraveled { culprit = Bob
+                     , places = [ Placement { who = Alice, room = Garden }
+                                , Placement { who = Bob,   room = Kitchen }
+                                , Placement { who = Carol, room = Study } ] }
+    | "a Kitchen deed with Alice there and Carol not in the Study names Alice" :
+        ([ CulpritWasIn { room = Kitchen }, SawIn { who = Alice, room = Kitchen }, WasElsewhere { who = Carol, room = Study } ])
+        -> Unraveled { culprit = Alice
+                     , places = [ Placement { who = Alice, room = Kitchen }
+                                , Placement { who = Bob,   room = Study }
+                                , Placement { who = Carol, room = Garden } ] }
+    | "a Kitchen deed with Alice there and Bob not in the Garden names Alice" :
+        ([ CulpritWasIn { room = Kitchen }, SawIn { who = Alice, room = Kitchen }, WasElsewhere { who = Bob, room = Garden } ])
+        -> Unraveled { culprit = Alice
+                     , places = [ Placement { who = Alice, room = Kitchen }
+                                , Placement { who = Bob,   room = Study }
+                                , Placement { who = Carol, room = Garden } ] }
+    | "a Kitchen deed with Bob in the Study and Alice cleared names Carol" :
+        ([ CulpritWasIn { room = Kitchen }, SawIn { who = Bob, room = Study }, Innocent { who = Alice } ])
+        -> Unraveled { culprit = Carol
+                     , places = [ Placement { who = Alice, room = Garden }
+                                , Placement { who = Bob,   room = Study }
+                                , Placement { who = Carol, room = Kitchen } ] }
+    | "a Kitchen deed with Alice in the Study and Bob cleared names Carol" :
+        ([ CulpritWasIn { room = Kitchen }, SawIn { who = Alice, room = Study }, Innocent { who = Bob } ])
+        -> Unraveled { culprit = Carol
+                     , places = [ Placement { who = Alice, room = Study }
+                                , Placement { who = Bob,   room = Garden }
+                                , Placement { who = Carol, room = Kitchen } ] }
+    | "a Kitchen deed with Alice in the Study and Carol cleared names Bob" :
+        ([ CulpritWasIn { room = Kitchen }, SawIn { who = Alice, room = Study }, Innocent { who = Carol } ])
+        -> Unraveled { culprit = Bob
+                     , places = [ Placement { who = Alice, room = Study }
+                                , Placement { who = Bob,   room = Kitchen }
+                                , Placement { who = Carol, room = Garden } ] }

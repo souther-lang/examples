@@ -585,6 +585,16 @@ example sharedAttendees
                                                                           , ContactId("003000000000300") ])) })
         -> Coverage { contacts = [ ContactId("003000000000100"), ContactId("003000000000200") ]
                     , count = 2, singleThreaded = false }
+    | "three people in both rooms, in whatever order each room lists them, are three threads" :
+        (Meeting { ...workshop, attendees = Attendees(Set.fromList([ ContactId("003000000000100")
+                                                                   , ContactId("003000000000200")
+                                                                   , ContactId("003000000000300") ])) },
+         Meeting { ...followUpMeeting, attendees = Attendees(Set.fromList([ ContactId("003000000000300")
+                                                                          , ContactId("003000000000200")
+                                                                          , ContactId("003000000000100") ])) })
+        -> Coverage { contacts = [ ContactId("003000000000100"), ContactId("003000000000200")
+                                 , ContactId("003000000000300") ]
+                    , count = 3, singleThreaded = false }
 
 example staleAccounts
     | "an activity about a lead rolls up to no account, and recency is the freshest touch" :
