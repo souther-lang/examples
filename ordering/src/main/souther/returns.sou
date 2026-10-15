@@ -117,6 +117,18 @@ example requestReturn
             [ ReturnedLine { sku = Sku("apple"), quantity = 1 } ], requestedOn = Date("2026-08-25") }
         , [ Sku("apple"), Sku("tv") ], Date("2026-07-25"), 14)
             -> OutsideWindow { rma = Rma("RMA-00000003"), daysSinceDispatch = 31, windowDays = 14 }
+    | "asked on the last day of the window is still accepted" :
+        (ReturnRequest { rma = Rma("RMA-00000004"), shipmentId = ShipmentId("SH-000001"),
+                         invoiceNo = InvoiceNo("INV-2026-000042"), lines =
+            [ ReturnedLine { sku = Sku("apple"), quantity = 1 } ], requestedOn = Date("2026-08-08") }
+        , [ Sku("apple"), Sku("tv") ], Date("2026-07-25"), 14)
+            -> Accepted { rma = Rma("RMA-00000004"), skus = [ Sku("apple") ], daysSinceDispatch = 14 }
+    | "asked a day after the window closed is declined" :
+        (ReturnRequest { rma = Rma("RMA-00000005"), shipmentId = ShipmentId("SH-000001"),
+                         invoiceNo = InvoiceNo("INV-2026-000042"), lines =
+            [ ReturnedLine { sku = Sku("apple"), quantity = 1 } ], requestedOn = Date("2026-08-09") }
+        , [ Sku("apple"), Sku("tv") ], Date("2026-07-25"), 14)
+            -> OutsideWindow { rma = Rma("RMA-00000005"), daysSinceDispatch = 15, windowDays = 14 }
 
 // === reconcile: what went out against what came back ===
 // The warehouse counts what physically arrived; the request says what was declared. The two are
@@ -237,3 +249,29 @@ example planRefund
             -> RefundPlan { rma = Rma("RMA-00000003"), invoiceNo = InvoiceNo("INV-2026-000044"),
                             refund = Refund(0.0m), restockingFee = Refund(0.0m),
                             withinInvoiced = true, repeatReturn = false, recentRmas = [] }
+    | "an agreed sku with no unit price adds nothing to the refund" :
+        (Accepted { rma = Rma("RMA-00000004"), skus = [ Sku("apple") ], daysSinceDispatch = 2 }
+        , Reconciliation { agreed = [ (Sku("apple"), 2) ], declaredOnly = [], receivedOnly = [],
+                           inDispute = 0 }
+        , [ (Sku("tv"), 200000) ], InvoiceNo("INV-2026-000045"), Amount(300.0m), 0.1m, [], [])
+            -> RefundPlan { rma = Rma("RMA-00000004"), invoiceNo = InvoiceNo("INV-2026-000045"),
+                            refund = Refund(0.0m), restockingFee = Refund(0.0m),
+                            withinInvoiced = true, repeatReturn = false, recentRmas = [] }
+    | "a restocking rate above one takes the whole line and no more" :
+        (Accepted { rma = Rma("RMA-00000005"), skus = [ Sku("apple") ], daysSinceDispatch = 2 }
+        , Reconciliation { agreed = [ (Sku("apple"), 2) ], declaredOnly = [], receivedOnly = [],
+                           inDispute = 0 }
+        , [ (Sku("apple"), 150) ], InvoiceNo("INV-2026-000046"), Amount(300.0m), 1.5m, [], [])
+            -> RefundPlan { rma = Rma("RMA-00000005"), invoiceNo = InvoiceNo("INV-2026-000046"),
+                            refund = Refund(0.0m), restockingFee = Refund(300.0m),
+                            withinInvoiced = true, repeatReturn = false, recentRmas = [] }
+    | "only the three most recent returns are listed, newest first" :
+        (Accepted { rma = Rma("RMA-00000009"), skus = [ Sku("apple") ], daysSinceDispatch = 1 }
+        , Reconciliation { agreed = [ (Sku("apple"), 1) ], declaredOnly = [], receivedOnly = [],
+                           inDispute = 0 }
+        , [ (Sku("apple"), 150) ], InvoiceNo("INV-2026-000047"), Amount(150.0m), 0.0m
+        , [ Rma("RMA-00000006"), Rma("RMA-00000007"), Rma("RMA-00000008"), Rma("RMA-00000009") ], [])
+            -> RefundPlan { rma = Rma("RMA-00000009"), invoiceNo = InvoiceNo("INV-2026-000047"),
+                            refund = Refund(150.0m), restockingFee = Refund(0.0m),
+                            withinInvoiced = true, repeatReturn = false,
+                            recentRmas = [ Rma("RMA-00000009"), Rma("RMA-00000008"), Rma("RMA-00000007") ] }

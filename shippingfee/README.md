@@ -31,29 +31,56 @@ example.shippingfee                                      measurement: complete
   送料を求める             implemented   rows 3    pending 0
     signature   out specified 2/2  observed 2/2  verified 2/2
     partition   axes 3   equivalence partitions 5/7
-      · no row is in `北海道沖縄` at 注文.地域
-      · no row is in `離島` at 注文.地域
-      · not derivable: 注文.番号
-    combination pairs 7 reached / 7 known reachable, 9 untried
-    border      borders 3   coverage items 4/8   excluded 4
-      ! no row is at an IN point of 送料を求める/注文.合計, 0 <= 注文.合計 < 4999 (comparison@48:23)
-      ! no row is at an OUT point of 送料を求める/注文.合計, 5000 < 注文.合計 <= 1000000 (comparison@48:23)
-      · no OFF point is owed at 注文.合計 = 0 (invariant 商品合計 #1): excluded — the rules leave no value there
-      · no OUT point is owed at 注文.合計 = 0 (invariant 商品合計 #1): excluded — the rules leave no value there
-      · no OFF point is owed at 注文.合計 = 1000000 (invariant 商品合計 #1): excluded — the rules leave no value there
-      · no OUT point is owed at 注文.合計 = 1000000 (invariant 商品合計 #1): excluded — the rules leave no value there
+      ! no row is in `北海道沖縄` at 注文.地域
+      ! no row is in `離島` at 注文.地域
+      · no line: invariant 注文番号 #1 — it restricts this position to the values it admits, and no other value can be built here, about `注文.番号`
+    combination pairs 5 covered, 6 uncovered
+      ! no row is in `注文.合計/0 <= x < 5000` at 送料を求める/注文.合計 with `北海道沖縄` at 送料を求める/注文.地域
+      ! no row is in `注文.合計/0 <= x < 5000` at 送料を求める/注文.合計 with `離島` at 送料を求める/注文.地域
+      ! no row is in `注文.合計/5000 <= x <= 1000000` at 送料を求める/注文.合計 with `北海道沖縄` at 送料を求める/注文.地域
+      ! no row is in `注文.合計/5000 <= x <= 1000000` at 送料を求める/注文.合計 with `離島` at 送料を求める/注文.地域
+      ! no row is in `一般` at 送料を求める/注文.会員 with `北海道沖縄` at 送料を求める/注文.地域
+      ! no row is in `一般` at 送料を求める/注文.会員 with `離島` at 送料を求める/注文.地域
+    border      borders 1   obligations 2/4
+      ! no row is at an IN point (comparison@48:23)
+          · read as 送料を求める/注文.合計: in 0 <= 注文.合計 < 4999 in 一般会員の送料@44:17
+      ! no row is at an OUT point (comparison@48:23)
+          · read as 送料を求める/注文.合計: in 5000 < 注文.合計 <= 1000000 in 一般会員の送料@44:17
     branch      6/10
       ! no row goes through `case 北海道沖縄` (59:5)
       ! no row goes through `case 離島` (59:5)
       ! no row goes through `case 離島` (53:5)
       ! no row goes through `case 北海道沖縄` (53:5)
+    decision    rules 7   taken 3
+      ! no row takes a decision rule
+          · it goes through `case 一般` (42:5)
+          · the comparison at 48:23 holds in 一般会員の送料@44:17
+          · it goes through `case 北海道沖縄` (59:5) in 地域別送料@49:17 in 一般会員の送料@44:17
+      ! no row takes a decision rule
+          · it goes through `case 一般` (42:5)
+          · the comparison at 48:23 holds in 一般会員の送料@44:17
+          · it goes through `case 離島` (59:5) in 地域別送料@49:17 in 一般会員の送料@44:17
+      ! no row takes a decision rule
+          · it goes through `case 一般` (42:5)
+          · the comparison at 48:23 does not hold in 一般会員の送料@44:17
+          · it goes through `case 離島` (53:5) in 離島以外は無料@48:35 in 一般会員の送料@44:17
+      ! no row takes a decision rule
+          · it goes through `case 一般` (42:5)
+          · the comparison at 48:23 does not hold in 一般会員の送料@44:17
+          · it goes through `case 北海道沖縄` (53:5) in 離島以外は無料@48:35 in 一般会員の送料@44:17
+    replacement 7/7
+  declarations   borders 2   obligations 2/4
+      · no OFF point is owed at value = 0 (invariant 商品合計 #1): excluded — no value can stand there
+      · no OUT point is owed at value = 0 (invariant 商品合計 #1): excluded — no value can stand there
+      · no OFF point is owed at value = 1000000 (invariant 商品合計 #1): excluded — no value can stand there
+      · no OUT point is owed at value = 1000000 (invariant 商品合計 #1): excluded — no value can stand there
   商品合計
       ! no row is at the ON point value = 0 (invariant 商品合計 #1)
       ! no row is at the ON point value = 1000000 (invariant 商品合計 #1)
 
 1 behavior: 1 implemented, 0 unimplemented, 0 injected; 0 rows waiting for a `let`.
 adequacy: not satisfied
-8 gaps marked `!`: what a strict build refuses over.
+20 gaps marked `!`: what a strict build refuses over.
 ```
 
 None of that came from a coverage tool watching a test run. The classes are the ones the model's own
@@ -61,14 +88,25 @@ types name, the boundaries are the ones its `invariant`s and `guard`s state, and
 arms of its own `match`. Nobody decided that 北海道沖縄 is a case worth testing; the regulation did,
 by naming it.
 
-`not derivable: 注文.番号` is the report declining to guess. What the model says about an order
+`no line: invariant 注文番号 #1` is the report declining to guess. What the model says about an order
 number is `matches("[0-9]{4}-[0-9]{6}", value)` — a format rather than a set of classes — so there is
 nothing there to divide the field into, and the position is named rather than counted as covered.
 
-The last two are not under the behavior, because they are not about it. `商品合計` says a total is
-between 0 and 1,000,000, and whether a row stands at either end is a question about that data — asked
-once, wherever the rows that answer it are. What is under `送料を求める` is what its own rules draw:
-the guard at 5,000 and the arms of its `match`.
+The pairs it asks for are the ones the rules combine. `一般` is paired with each region, because a
+general member's fee depends on where the order goes. `プレミアム` is paired with nothing: the
+`match` on 会員 answers `送料無料` before the total or the region is read, so no rule of the model
+puts a premium member together with either.
+
+`replacement` asks something `branch` does not. A row going through an arm shows the arm ran, not
+that it decided anything; here each arm a row goes through is rewritten as one of its siblings, and
+`7/7` says every such rewrite makes some row come out differently.
+
+The `declarations` part is not under the behavior, because it is not about it. `商品合計` says a total
+is between 0 and 1,000,000, and whether a row stands at either end is a question about that data —
+asked once, wherever the rows that answer it are. The two `!` under `商品合計` are those ends; the
+four `·` lines above them are the points just outside, where no value can stand, so no row is owed
+there. What is under `送料を求める` is what its own rules draw: the guard at 5,000 and the arms of
+its `match`.
 
 The `!` marks are the subset a `--strict` build fails over, and the count at the end is of those.
 
@@ -79,38 +117,57 @@ everything was looked at, and this is what nothing covers.
 ## The rows it hands back
 
 ```sh
-souther examples --generate --boundaries src/main/souther/*.sou
+souther examples --generate src/main/souther/*.sou
 ```
 
-The report comes out first and the rows follow it; the block below is the tail.
+The report comes out first and the rows follow it; the block below is the rows.
 
 ```
 // generated by `souther examples --generate`: 5 rows to fill what nothing covers.
-// Replace each `<?>` with what the system actually answers, then uncomment.
-// example 送料を求める
+// Replace each `<?>` with what the system actually answers.
+example 送料を求める
 // fills 注文.地域=北海道沖縄
-// fills case 北海道沖縄
-//     | (注文 { 番号 = 注文番号("0000-000000"), 合計 = 商品合計(0), 地域 = 北海道沖縄, 会員 = 一般 })
-//         -> <?>
+// fills case 北海道沖縄 (59:5)
+// fills 注文.合計=0 <= x < 5000
+// fills 注文.地域=北海道沖縄
+// fills 注文.会員=一般
+// fills 注文.地域=北海道沖縄
+// fills a decision rule (it goes through `case 一般` (42:5); the comparison at 48:23 holds in 一般会員の送料@44:17; it goes through `case 北海道沖縄` (59:5) in 地域別送料@49:17 in 一般会員の送料@44:17)
+// fills value = 0
+// fills IN point of comparison@shippingfee.sou:48:23
+    | (注文 { 番号 = 注文番号("0000-000000"), 合計 = 商品合計(0), 地域 = 北海道沖縄, 会員 = 一般 })
+        -> <?>
 // fills 注文.地域=離島
-// fills case 離島
-//     | (注文 { 番号 = 注文番号("0000-000000"), 合計 = 商品合計(0), 地域 = 離島, 会員 = 一般 })
-//         -> <?>
-//     | "case 離島"
-//         : (注文 { 番号 = 注文番号("0000-000000"), 合計 = 商品合計(5000), 地域 = 離島, 会員 = 一般 })
-//         -> <?>
-//     | "case 北海道沖縄"
-//         : (
-//             注文 {
-//                 番号 = 注文番号("0000-000000"),
-//                 合計 = 商品合計(5000),
-//                 地域 = 北海道沖縄,
-//                 会員 = 一般
-//             }
-//         )
-//         -> <?>
-//     | (注文 { 番号 = 注文番号("0000-000000"), 合計 = 商品合計(1000000), 地域 = 本州, 会員 = 一般 })
-//         -> <?>
+// fills case 離島 (59:5)
+// fills 注文.合計=0 <= x < 5000
+// fills 注文.地域=離島
+// fills 注文.会員=一般
+// fills 注文.地域=離島
+// fills a decision rule (it goes through `case 一般` (42:5); the comparison at 48:23 holds in 一般会員の送料@44:17; it goes through `case 離島` (59:5) in 地域別送料@49:17 in 一般会員の送料@44:17)
+    | (注文 { 番号 = 注文番号("0000-000000"), 合計 = 商品合計(0), 地域 = 離島, 会員 = 一般 }) -> <?>
+// fills case 離島 (53:5)
+// fills 注文.合計=5000 <= x <= 1000000
+// fills 注文.地域=離島
+// fills a decision rule (it goes through `case 一般` (42:5); the comparison at 48:23 does not hold in 一般会員の送料@44:17; it goes through `case 離島` (53:5) in 離島以外は無料@48:35 in 一般会員の送料@44:17)
+    | (注文 { 番号 = 注文番号("0000-000000"), 合計 = 商品合計(5000), 地域 = 離島, 会員 = 一般 })
+        -> <?>
+// fills case 北海道沖縄 (53:5)
+// fills 注文.合計=5000 <= x <= 1000000
+// fills 注文.地域=北海道沖縄
+// fills a decision rule (it goes through `case 一般` (42:5); the comparison at 48:23 does not hold in 一般会員の送料@44:17; it goes through `case 北海道沖縄` (53:5) in 離島以外は無料@48:35 in 一般会員の送料@44:17)
+    | (
+        注文 {
+            番号 = 注文番号("0000-000000"),
+            合計 = 商品合計(5000),
+            地域 = 北海道沖縄,
+            会員 = 一般
+        }
+    )
+        -> <?>
+// fills value = 1000000
+// fills OUT point of comparison@shippingfee.sou:48:23
+    | (注文 { 番号 = 注文番号("0000-000000"), 合計 = 商品合計(1000000), 地域 = 本州, 会員 = 一般 })
+        -> <?>
 ```
 
 Five rows. The `fills` lines say what a row is there for, and no row in the batch is one another row
@@ -134,10 +191,10 @@ value for is one nothing knows about, and it is reported as its own kind of answ
 
 ## The clause that is left
 
-Two of the five carry a name rather than a `fills` line: `"case 離島"` and `"case 北海道沖縄"`, both
-at 5,000 yen. They are the arms of `離島以外は無料`, which is the regulation's ただし書き — 5,000 yen
-or more, and the destination is a remote island. The three obvious rows never reach that `match` at
-all, and it is where the production bug is.
+Two of the five matter most: the rows that fill `case 離島` and `case 北海道沖縄`, both at 5,000 yen.
+They are the arms of `離島以外は無料`, which is the regulation's ただし書き — 5,000 yen or more, and
+the destination is a remote island. The three obvious rows never reach that `match` at all, and it is
+where the production bug is.
 
 The generator writes those two inputs and stops there, which is the whole of what it can do. Whether
 a remote island at 5,000 yen is still paid is a sentence somebody wrote in the regulation, not
@@ -154,22 +211,26 @@ example.shippingfee                                      measurement: complete
   送料を求める             implemented   rows 8    pending 0
     signature   out specified 2/2  observed 2/2  verified 2/2
     partition   axes 3   equivalence partitions 7/7
-      · not derivable: 注文.番号
-    combination pairs 13 reached / 13 known reachable, 3 untried
-    border      borders 3   coverage items 8/8   excluded 4
-      · no OFF point is owed at 注文.合計 = 0 (invariant 商品合計 #1): excluded — the rules leave no value there
-      · no OUT point is owed at 注文.合計 = 0 (invariant 商品合計 #1): excluded — the rules leave no value there
-      · no OFF point is owed at 注文.合計 = 1000000 (invariant 商品合計 #1): excluded — the rules leave no value there
-      · no OUT point is owed at 注文.合計 = 1000000 (invariant 商品合計 #1): excluded — the rules leave no value there
+      · no line: invariant 注文番号 #1 — it restricts this position to the values it admits, and no other value can be built here, about `注文.番号`
+    combination pairs 11/11
+    border      borders 1   obligations 4/4
     branch      10/10
+    decision    rules 7   taken 7
+    replacement 13/13
+  declarations   borders 2   obligations 4/4
+      · no OFF point is owed at value = 0 (invariant 商品合計 #1): excluded — no value can stand there
+      · no OUT point is owed at value = 0 (invariant 商品合計 #1): excluded — no value can stand there
+      · no OFF point is owed at value = 1000000 (invariant 商品合計 #1): excluded — no value can stand there
+      · no OUT point is owed at value = 1000000 (invariant 商品合計 #1): excluded — no value can stand there
 
 1 behavior: 1 implemented, 0 unimplemented, 0 injected; 0 rows waiting for a `let`.
 adequacy: satisfied
 ```
 
-`combination pairs 13 reached / 13 known reachable, 3 untried` is not a gap: every pair the report
-knows to be reachable is reached, and the three it did not try are ones it cannot say are reachable
-at all.
+`combination pairs 11/11` says every pair of classes the rules combine has a row, and
+`replacement 13/13` that every arm rewritten as a sibling makes some row come out differently. The
+four `·` lines under `declarations` are points the report does not owe a row, because `商品合計`
+admits no value just outside 0 or 1,000,000.
 
 ## And when the regulation changes
 
@@ -181,26 +242,58 @@ pass again.
 What is not ordinary is that they are now measurably short, and by exactly this much:
 
 ```
+  送料を求める             implemented   rows 8    pending 0
+    signature   out specified 2/2  observed 2/2  verified 2/2
     partition   axes 3   equivalence partitions 7/8
-      · no row is in `沖縄` at 注文.地域
-      · not derivable: 注文.番号
-    combination pairs 13 reached / 13 known reachable, 7 untried
+      ! no row is in `沖縄` at 注文.地域
+      · no line: invariant 注文番号 #1 — it restricts this position to the values it admits, and no other value can be built here, about `注文.番号`
+    combination pairs 11 covered, 3 uncovered
+      ! no row is in `注文.合計/0 <= x < 5000` at 送料を求める/注文.合計 with `沖縄` at 送料を求める/注文.地域
+      ! no row is in `注文.合計/5000 <= x <= 1000000` at 送料を求める/注文.合計 with `沖縄` at 送料を求める/注文.地域
+      ! no row is in `一般` at 送料を求める/注文.会員 with `沖縄` at 送料を求める/注文.地域
+    border      borders 1   obligations 4/4
     branch      10/12
       ! no row goes through `case 沖縄` (61:5)
       ! no row goes through `case 沖縄` (54:5)
+    decision    rules 9   taken 7
+      ! no row takes a decision rule
+          · it goes through `case 一般` (43:5)
+          · the comparison at 49:23 holds in 一般会員の送料@45:17
+          · it goes through `case 沖縄` (61:5) in 地域別送料@50:17 in 一般会員の送料@45:17
+      ! no row takes a decision rule
+          · it goes through `case 一般` (43:5)
+          · the comparison at 49:23 does not hold in 一般会員の送料@45:17
+          · it goes through `case 沖縄` (54:5) in 離島以外は無料@49:35 in 一般会員の送料@45:17
+    replacement 16/16
+  declarations   borders 2   obligations 4/4
+      · no OFF point is owed at value = 0 (invariant 商品合計 #1): excluded — no value can stand there
+      · no OUT point is owed at value = 0 (invariant 商品合計 #1): excluded — no value can stand there
+      · no OFF point is owed at value = 1000000 (invariant 商品合計 #1): excluded — no value can stand there
+      · no OUT point is owed at value = 1000000 (invariant 商品合計 #1): excluded — no value can stand there
+
+1 behavior: 1 implemented, 0 unimplemented, 0 injected; 0 rows waiting for a `let`.
+adequacy: not satisfied
+8 gaps marked `!`: what a strict build refuses over.
 ```
 
 ```
 // generated by `souther examples --generate`: 2 rows to fill what nothing covers.
-// Replace each `<?>` with what the system actually answers, then uncomment.
-// example 送料を求める
+// Replace each `<?>` with what the system actually answers.
+example 送料を求める
 // fills 注文.地域=沖縄
-// fills case 沖縄
-//     | (注文 { 番号 = 注文番号("0000-000000"), 合計 = 商品合計(0), 地域 = 沖縄, 会員 = 一般 })
-//         -> <?>
-//     | "case 沖縄"
-//         : (注文 { 番号 = 注文番号("0000-000000"), 合計 = 商品合計(5000), 地域 = 沖縄, 会員 = 一般 })
-//         -> <?>
+// fills case 沖縄 (61:5)
+// fills 注文.合計=0 <= x < 5000
+// fills 注文.地域=沖縄
+// fills 注文.会員=一般
+// fills 注文.地域=沖縄
+// fills a decision rule (it goes through `case 一般` (43:5); the comparison at 49:23 holds in 一般会員の送料@45:17; it goes through `case 沖縄` (61:5) in 地域別送料@50:17 in 一般会員の送料@45:17)
+    | (注文 { 番号 = 注文番号("0000-000000"), 合計 = 商品合計(0), 地域 = 沖縄, 会員 = 一般 }) -> <?>
+// fills case 沖縄 (54:5)
+// fills 注文.合計=5000 <= x <= 1000000
+// fills 注文.地域=沖縄
+// fills a decision rule (it goes through `case 一般` (43:5); the comparison at 49:23 does not hold in 一般会員の送料@45:17; it goes through `case 沖縄` (54:5) in 離島以外は無料@49:35 in 一般会員の送料@45:17)
+    | (注文 { 番号 = 注文番号("0000-000000"), 合計 = 商品合計(5000), 地域 = 沖縄, 会員 = 一般 })
+        -> <?>
 ```
 
 The second is the same input at 5,000 yen, where the free-shipping clause is the one that decides.

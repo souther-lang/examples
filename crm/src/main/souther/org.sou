@@ -137,7 +137,13 @@ example teamOf
         (acmeOrg) -> Team { members = [ UserId("u-ceo"), UserId("u-vp"), UserId("u-dir"),
                                         UserId("u-mgr"), UserId("u-rep"), UserId("u-rep2"),
                                         UserId("u-rep3"), UserId("u-ops") ] }
+    | "a role with nobody under it is a team of its holder alone" :
+        (RoleNode { role = RoleName("x"), holder = UserId("x"), reports = [] })
+        -> Team { members = [ UserId("x") ] }
 
 example widestSpan
     | "the manager with three reps is the widest point, not the chief executive with two" :
         (acmeOrg) -> Span { widest = 3, at = RoleName("Manager") }
+    | "a lone role has no reports, and is its own widest point" :
+        (RoleNode { role = RoleName("x"), holder = UserId("x"), reports = [] })
+        -> Span { widest = 0, at = RoleName("x") }

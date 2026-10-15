@@ -108,6 +108,13 @@ example planPicks
             , total = 200000, highValue = true }
         , [ (Sku("apple"), Location("A-03-12")) ])
             -> NothingToShip
+    | "an order that is not high value is walked the same way" :
+        (PricedCart { items =
+            [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 } ]
+            , total = 300, highValue = false }
+        , [ (Sku("apple"), Location("A-03-12")) ])
+            -> PickList { lines =
+                [ PickLine { sku = Sku("apple"), quantity = 2, location = Location("A-03-12") } ] }
 
 // === splitPicks: what ships today and what waits ===
 // Allocation says the order as a whole fits (inventory.allocate); a pick can still find a shelf
@@ -154,6 +161,43 @@ example splitPicks
         , [ (Sku("tv"), 9) ])
             -> SplitShipment { ready = [], backordered =
                 [ PickLine { sku = Sku("apple"), quantity = 2, location = Location("A-03-12") } ],
+                readyUnits = 0 }
+    | "a zero-unit pick is covered by an empty shelf" :
+        (PickList { lines =
+            [ PickLine { sku = Sku("x"), quantity = 0, location = Location("A-00-00") } ] }
+        , [ (Sku("xx"), 0) ])
+            -> SplitShipment {
+                ready = [ PickLine { sku = Sku("x"), quantity = 0, location = Location("A-00-00") } ],
+                backordered = [], readyUnits = 0 }
+    | "a negative pick is covered by an empty shelf and subtracts from the units" :
+        (PickList { lines =
+            [ PickLine { sku = Sku("x"), quantity = -1, location = Location("A-00-00") } ] }
+        , [ (Sku("xx"), -1) ])
+            -> SplitShipment {
+                ready = [ PickLine { sku = Sku("x"), quantity = -1, location = Location("A-00-00") } ],
+                backordered = [], readyUnits = -1 }
+    | "a shelf holding exactly the pick covers it" :
+        (PickList { lines =
+            [ PickLine { sku = Sku("x"), quantity = 1, location = Location("A-00-00") } ] }
+        , [ (Sku("x"), 1) ])
+            -> SplitShipment {
+                ready = [ PickLine { sku = Sku("x"), quantity = 1, location = Location("A-00-00") } ],
+                backordered = [], readyUnits = 1 }
+    | "a shelf with a negative count backorders the pick" :
+        (PickList { lines =
+            [ PickLine { sku = Sku("x"), quantity = 1, location = Location("A-00-00") } ] }
+        , [ (Sku("x"), -1) ])
+            -> SplitShipment {
+                ready = [],
+                backordered = [ PickLine { sku = Sku("x"), quantity = 1, location = Location("A-00-00") } ],
+                readyUnits = 0 }
+    | "a single unit on a shelf that never mentions the sku is backordered too" :
+        (PickList { lines =
+            [ PickLine { sku = Sku("x"), quantity = 1, location = Location("A-00-00") } ] }
+        , [ (Sku("xx"), 0) ])
+            -> SplitShipment {
+                ready = [],
+                backordered = [ PickLine { sku = Sku("x"), quantity = 1, location = Location("A-00-00") } ],
                 readyUnits = 0 }
 
 // === dispatchWindow: the carrier's cut-off, and the promise that follows from it ===
@@ -202,6 +246,18 @@ example dispatchWindow
     | "a day past the cut-off is no window this behavior plans" :
         (DateTime("2026-07-26T16:00"), DateTime("2026-07-25T15:00"), 2)
             -> PastCutoff { minutesPast = 1500 }
+    | "a minute before the cut-off there is still a minute left, and it goes out today" :
+        (DateTime("2026-07-25T14:59:00"), DateTime("2026-07-25T15:00:00"), 0)
+            -> DispatchPlan { dispatchOn = Date("2026-07-25"), minutesToCutoff = 1, deliverBy = Date("2026-07-25") }
+    | "fifty-nine seconds before the cut-off is a window of nought minutes" :
+        (DateTime("2026-07-25T14:59:01"), DateTime("2026-07-25T15:00:00"), 0)
+            -> DispatchPlan { dispatchOn = Date("2026-07-26"), minutesToCutoff = 0, deliverBy = Date("2026-07-26") }
+    | "exactly a day past the cut-off is no window" :
+        (DateTime("2026-07-26T15:00:00"), DateTime("2026-07-25T15:00:00"), 0)
+            -> PastCutoff { minutesPast = 1440 }
+    | "a second short of a day past the cut-off is still a window" :
+        (DateTime("2026-07-26T14:59:59"), DateTime("2026-07-25T15:00:00"), 0)
+            -> DispatchPlan { dispatchOn = Date("2026-07-27"), minutesToCutoff = 0, deliverBy = Date("2026-07-27") }
 
 // === planCalendar: how many go out each day ===
 // The warehouse plans staffing from the count per dispatch day, so the output is keyed by the day

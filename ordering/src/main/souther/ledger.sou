@@ -36,7 +36,7 @@ module example.ledger exposing (
     postCreditNote,
     balanceOff
 )
-import example.billing ( Amount, InvoiceNo, Invoice, CreditNote, PriceError )
+import example.billing ( Amount, InvoiceNo, Invoice, CreditNote, PriceError, Returned, AgreedDiscount )
 import example.ordering ( OrderId )
 import List ( fold, filter, map, length, flatMap )
 
@@ -173,7 +173,9 @@ let balanceOff (entries) = {
 
 // The key came out of the map's own key list, so the absent branch is a case the model has ruled out.
 let lookup (net: Map<AccountCode, Decimal>, account: AccountCode): Decimal =
-    Map.get(account, net) |> Option.withDefault(0.0m)
+    match Map.get(account, net) with
+        | Some figure -> figure
+        | None -> unreachable "the account was read from the keys of this map"
 
 let chart = ChartOfAccounts { receivable = AccountCode("1310"), revenue = AccountCode("4100"),
                               taxPayable = AccountCode("2170"), salesReturns = AccountCode("4300") }
@@ -195,6 +197,15 @@ example postInvoice
                     [ Posting { account = AccountCode("1310"), side = Debit, amount = Amount(346.0m) }
                     , Posting { account = AccountCode("4100"), side = Credit, amount = Amount(315.0m) }
                     , Posting { account = AccountCode("2170"), side = Credit, amount = Amount(31.0m) } ] }
+    | "another invoice posts its own figures to the same three accounts" :
+        (Invoice { no = InvoiceNo("INV-2026-000007"), orderId = OrderId("ORD-2"),
+                   issuedOn = Date("2026-07-25"), dueOn = Date("2026-08-07"),
+                   net = Amount(1100.0m), tax = Amount(88.0m), gross = Amount(1188.0m) }, chart)
+            -> JournalEntry { date = Date("2026-07-25"), source = InvoiceNo("INV-2026-000007"),
+                postings =
+                    [ Posting { account = AccountCode("1310"), side = Debit, amount = Amount(1188.0m) }
+                    , Posting { account = AccountCode("4100"), side = Credit, amount = Amount(1100.0m) }
+                    , Posting { account = AccountCode("2170"), side = Credit, amount = Amount(88.0m) } ] }
 
 example postCreditNote
     | "the correction is its own entry, dated when it was issued, with the sides swapped" :
@@ -204,6 +215,22 @@ example postCreditNote
                     [ Posting { account = AccountCode("4300"), side = Debit, amount = Amount(100.0m) }
                     , Posting { account = AccountCode("2170"), side = Debit, amount = Amount(10.0m) }
                     , Posting { account = AccountCode("1310"), side = Credit, amount = Amount(110.0m) } ] }
+    | "goods that came back post the same way, whatever the reason" :
+        (CreditNote { ...priceErrorNote, reason = Returned,
+                      net = Amount(200.0m), tax = Amount(20.0m), gross = Amount(220.0m) }, chart)
+            -> JournalEntry { date = Date("2026-08-03"), source = InvoiceNo("INV-2026-000042"),
+                postings =
+                    [ Posting { account = AccountCode("4300"), side = Debit, amount = Amount(200.0m) }
+                    , Posting { account = AccountCode("2170"), side = Debit, amount = Amount(20.0m) }
+                    , Posting { account = AccountCode("1310"), side = Credit, amount = Amount(220.0m) } ] }
+    | "an agreed discount is posted to the same accounts" :
+        (CreditNote { ...priceErrorNote, reason = AgreedDiscount,
+                      net = Amount(50.0m), tax = Amount(5.0m), gross = Amount(55.0m) }, chart)
+            -> JournalEntry { date = Date("2026-08-03"), source = InvoiceNo("INV-2026-000042"),
+                postings =
+                    [ Posting { account = AccountCode("4300"), side = Debit, amount = Amount(50.0m) }
+                    , Posting { account = AccountCode("2170"), side = Debit, amount = Amount(5.0m) }
+                    , Posting { account = AccountCode("1310"), side = Credit, amount = Amount(55.0m) } ] }
 
 example balanceOff
     | "one invoice, and the two sides agree" :
@@ -237,3 +264,18 @@ example balanceOff
     | "an empty journal balances at nothing" :
         ([]) -> TrialBalance { balances = [], debitTotal = Amount(0.0m),
                                creditTotal = Amount(0.0m) }
+    | "an account the entries cancel out is left off the trial balance" :
+        ([ JournalEntry { date = Date("2026-07-25"), source = InvoiceNo("INV-2026-000042"),
+            postings =
+                [ Posting { account = AccountCode("1310"), side = Debit, amount = Amount(346.0m) }
+                , Posting { account = AccountCode("4100"), side = Credit, amount = Amount(315.0m) }
+                , Posting { account = AccountCode("2170"), side = Credit, amount = Amount(31.0m) } ] }
+         , JournalEntry { date = Date("2026-08-20"), source = InvoiceNo("INV-2026-000042"),
+            postings =
+                [ Posting { account = AccountCode("1110"), side = Debit, amount = Amount(346.0m) }
+                , Posting { account = AccountCode("1310"), side = Credit, amount = Amount(346.0m) } ] } ])
+            -> TrialBalance { balances =
+                [ DebitBalance { account = AccountCode("1110"), amount = Amount(346.0m) }
+                , CreditBalance { account = AccountCode("2170"), amount = Amount(31.0m) }
+                , CreditBalance { account = AccountCode("4100"), amount = Amount(315.0m) } ],
+                debitTotal = Amount(346.0m), creditTotal = Amount(346.0m) }

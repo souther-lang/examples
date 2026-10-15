@@ -99,6 +99,9 @@ example explode
     | "a bought part explodes to itself" :
         (Component { sku = Sku("bolt"), quantity = 1, parts = [] }, 5)
             -> Requirement { need = [ (Sku("bolt"), 5) ], purchased = [ Sku("bolt") ] }
+    | "a part the parent takes two of is needed twice per kit" :
+        (Component { sku = Sku("chair"), quantity = 2, parts = [] }, 3)
+            -> Requirement { need = [ (Sku("chair"), 6) ], purchased = [ Sku("chair") ] }
 
 // === bomDepth: how many levels there are ===
 // The number that decides the order requirements are netted in, and the one figure a flat structure
@@ -140,7 +143,7 @@ behavior buildableFrom : (kit: Component, onHand: Map<Sku, Int>) -> Buildable
 let supportedBy (perKit: Map<Sku, Int>, onHand: Map<Sku, Int>, sku: Sku): Int = {
     let need = Map.get(sku, perKit) |> Option.withDefault(1)
     let have = Map.get(sku, onHand) |> Option.withDefault(0)
-    have / need
+    Rational.toInt(DOWN, have / need)
 }
 
 // Two skus can support the same number of kits, and then which one is named is a decision. Leaving

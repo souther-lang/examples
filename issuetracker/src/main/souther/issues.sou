@@ -105,7 +105,18 @@ let crashOnSave = Issue { id = IssueId("i-1"), title = "crash on save",
     labels = Set.fromList([ Label("bug"), Label("ui") ]), assignee = Assignee("kawasima") }
 
 fake createIssue
+    | (Issue { id = IssueId("i-2"), title = "whitespace", labels = [ Label("ui") ], assignee = None }) -> Issue { id = IssueId("i-2"), title = "whitespace", labels = [ Label("ui") ], assignee = None }
+    | (Issue { id = IssueId("i-3"), title = "one label", labels = [ Label("x") ], assignee = None }) -> Issue { id = IssueId("i-3"), title = "one label", labels = [ Label("x") ], assignee = None }
     | _ -> crashOnSave
+
+example createIssue
+    | "the database answers the issue as stored" :
+        (Issue { id = IssueId("i-1"), title = "crash on save", labels = [ Label("bug"), Label("ui") ],
+            assignee = Assignee("kawasima") })
+        -> crashOnSave
+    | "an unassigned issue is inserted all the same" :
+        (Issue { id = IssueId("i-2"), title = "whitespace", labels = [ Label("ui") ], assignee = None })
+        -> Issue { id = IssueId("i-2"), title = "whitespace", labels = [ Label("ui") ], assignee = None }
 
 example openIssue
     | "case and spacing collapse into one label, and the issue is stored" :
@@ -115,6 +126,9 @@ example openIssue
     | "blank pieces leave no labels, so nothing is written" :
         (NewIssue { id = IssueId("i-2"), title = "whitespace", labels = " , ", assignee = None })
         -> NoLabels
+    | "a single one-character label is enough, and the issue is stored" :
+        (NewIssue { id = IssueId("i-3"), title = "one label", labels = "x", assignee = None })
+        -> Issue { id = IssueId("i-3"), title = "one label", labels = [ Label("x") ], assignee = None }
 
 // === attachLabel / detachLabel: read the issue, change its label set, write it back ===
 // Set insert / remove on the labels field, with constructor spread reusing every other field. Both
@@ -157,7 +171,22 @@ fake findIssue
 fake storeLabels
     | (crashOnSave) -> crashOnSave
     | (Issue { ...crashOnSave, labels = [] }) -> Issue { ...crashOnSave, labels = [] }
+    | (Issue { id = IssueId("i-2"), title = "whitespace", labels = [ Label("ui") ], assignee = None }) -> Issue { id = IssueId("i-2"), title = "whitespace", labels = [ Label("ui") ], assignee = None }
     | _ -> Issue { id = IssueId("i-0"), title = "unstored", labels = [], assignee = None }
+
+example findIssue
+    | "a stored issue is read back by its id" :
+        (IssueId("i-1")) -> Issue { ...crashOnSave, labels = [ Label("bug") ] }
+    | "an id the database does not hold is not found" : (IssueId("nope")) -> IssueNotFound
+
+example storeLabels
+    | "the issue is written and answered as stored" :
+        (crashOnSave) -> crashOnSave
+    | "an issue whose labels were all removed is written with an empty set" :
+        (Issue { ...crashOnSave, labels = [] }) -> Issue { ...crashOnSave, labels = [] }
+    | "an unassigned issue is written and answered as stored" :
+        (Issue { id = IssueId("i-2"), title = "whitespace", labels = [ Label("ui") ], assignee = None })
+        -> Issue { id = IssueId("i-2"), title = "whitespace", labels = [ Label("ui") ], assignee = None }
 
 example attachLabel
     | "a new label joins the set and is written back" :
@@ -373,3 +402,51 @@ example groupByAssignee
         (Board { issues =
             [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ], assignee = None } ] })
         -> Workload { byAssignee = [] }
+
+// === rows for the assigned side of the optional assignee ===
+// Every row above leaves the assignee out, so what the same rules do for an issue somebody holds was
+// never asked. The ids here are one character, the shortest IssueId admits.
+example sharedLabels
+    | "assigned issues share labels the same way" :
+        (crashOnSave,
+         Issue { id = IssueId("x"), title = "x", labels = [ Label("bug") ], assignee = Assignee("x") })
+        -> LabelSet { labels = [ Label("bug") ] }
+
+example topLabels
+    | "an assigned issue's labels are ranked too" :
+        (Board { issues =
+            [ Issue { id = IssueId("x"), title = "x", labels = [ Label("bug") ],
+                assignee = Assignee("x") } ] }, 1)
+        -> LabelRanking { labels = [ "bug" ] }
+
+example busyLabels
+    | "an assigned issue's labels are counted too" :
+        (Board { issues =
+            [ Issue { id = IssueId("x"), title = "x", labels = [ Label("bug") ],
+                assignee = Assignee("x") } ] }, 1)
+        -> LabelUsage { counts = [ ("bug", 1) ] }
+
+// A label is at least one character, and the shortest one is counted and ranked like any other.
+example countByLabel
+    | "a one-character label is counted" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("x") ], assignee = None } ] })
+        -> LabelCounts { counts = [ ("x", 1) ] }
+
+example topLabels
+    | "a one-character label ranks, and the label used twice leads it" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("x"), Label("bug") ], assignee = None }
+            , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("bug") ], assignee = None } ] }, 2)
+        -> LabelRanking { labels = [ "bug", "x" ] }
+    | "asking for none gives none" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ], assignee = None } ] }, 0)
+        -> LabelRanking { labels = [ ] }
+
+example busyLabels
+    | "a one-character label carried by two issues is busy" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("x") ], assignee = None }
+            , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("x") ], assignee = None } ] }, 2)
+        -> LabelUsage { counts = [ ("x", 2) ] }

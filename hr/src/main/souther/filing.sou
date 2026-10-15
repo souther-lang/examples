@@ -96,7 +96,8 @@ data NotificationKind =
 // Why: the three ways of deciding a standard monthly remuneration produce three different forms, which
 // is the reason example.socialinsurance keeps the basis on the determination rather than inferring it
 // from the effective month. A fourth way of deciding a grade would be a compile error here.
-behavior notificationForDetermination : (basis: DeterminationBasis) -> NotificationKind
+behavior notificationForDetermination : (basis: DeterminationBasis)
+        -> CoverageAcquisition | RegularDeterminationFiling | OccasionalRevisionFiling
 
 let notificationForDetermination (basis) =
     match basis with
@@ -314,6 +315,20 @@ example deadlineFor
         (RegularDeterminationFiling, Date("2026-04-01")) -> Date("2026-07-10")
     | "the revision is filed promptly, and no provision names a day" :
         (OccasionalRevisionFiling, Date("2026-04-01")) -> NoStatutoryDeadline
+    | "a loss is due five days after it" :
+        (CoverageLoss, Date("2026-09-30")) -> Date("2026-10-05")
+    | "a change of dependants is due five days after it" :
+        (DependantChange, Date("2026-05-10")) -> Date("2026-05-15")
+    | "a change of name is due five days after it" :
+        (NameChange, Date("2026-11-28")) -> Date("2026-12-03")
+    | "a change of address is due five days after it, across the end of a year" :
+        (AddressChange, Date("2026-12-29")) -> Date("2027-01-03")
+    | "the employment-insurance form for a December joiner is due on 10 January" :
+        (EmploymentInsuranceAcquisition, Date("2026-12-15")) -> Date("2027-01-10")
+    | "a separation certificate for somebody leaving on New Year's Eve is due on 11 January" :
+        (SeparationCertificate, Date("2026-12-31")) -> Date("2027-01-11")
+    | "the regular determination is still due on 10 July of the year when the event falls in June" :
+        (RegularDeterminationFiling, Date("2026-06-30")) -> Date("2026-07-10")
 
 example judgeFilingTimeliness
     | "the day before the deadline is in time" :
@@ -323,6 +338,9 @@ example judgeFilingTimeliness
     | "the day after it is two days late by the time it is filed on the eighth" :
         (Date("2026-04-06"), Date("2026-04-08"))
         -> Overdue { deadline = Date("2026-04-06"), filedOn = Date("2026-04-08"), daysLate = 2 }
+    | "filed a day after the deadline is one day late" :
+        (Date("2026-04-06"), Date("2026-04-07"))
+        -> Overdue { deadline = Date("2026-04-06"), filedOn = Date("2026-04-07"), daysLate = 1 }
 
 example separationCodeFor
     | "a dismissal is 1A" : (Dismissal) -> SeparationCode("1A")
@@ -336,6 +354,9 @@ example separationCodeFor
     | "resigning is 4D and reaching the retirement age is 5E" :
         (MandatoryRetirement) -> SeparationCode("5E")
     | "a death is notified by the loss form alone" : (Death) -> NoSeparationCertificate
+    | "resigning is 4D" : (VoluntaryResignation) -> SeparationCode("4D")
+    | "a dismissal for misconduct is coded 1A like a dismissal, though the benefit rules put it elsewhere" :
+        (DismissalForMisconduct) -> SeparationCode("1A")
 
 example submit
     | "a draft submitted the day it was prepared" :
@@ -343,6 +364,35 @@ example submit
         -> Submitted { ...acquisitionDraft, submittedOn = Date("2026-04-02") }
     | "a submission dated before the draft existed is reported rather than stored" :
         (acquisitionDraft, Date("2026-04-01")) -> SubmissionBeforePreparation
+    | "a CoverageLoss draft is submitted on the day it was prepared" :
+        (Drafted { ...acquisitionDraft, kind = CoverageLoss }, Date("2026-04-02"))
+        -> Submitted { ...acquisitionDraft, kind = CoverageLoss, submittedOn = Date("2026-04-02") }
+    | "a RegularDeterminationFiling draft is submitted on the day it was prepared" :
+        (Drafted { ...acquisitionDraft, kind = RegularDeterminationFiling }, Date("2026-04-02"))
+        -> Submitted { ...acquisitionDraft, kind = RegularDeterminationFiling, submittedOn = Date("2026-04-02") }
+    | "a OccasionalRevisionFiling draft is submitted on the day it was prepared" :
+        (Drafted { ...acquisitionDraft, kind = OccasionalRevisionFiling }, Date("2026-04-02"))
+        -> Submitted { ...acquisitionDraft, kind = OccasionalRevisionFiling, submittedOn = Date("2026-04-02") }
+    | "a DependantChange draft is submitted on the day it was prepared" :
+        (Drafted { ...acquisitionDraft, kind = DependantChange }, Date("2026-04-02"))
+        -> Submitted { ...acquisitionDraft, kind = DependantChange, submittedOn = Date("2026-04-02") }
+    | "a NameChange draft is submitted on the day it was prepared" :
+        (Drafted { ...acquisitionDraft, kind = NameChange }, Date("2026-04-02"))
+        -> Submitted { ...acquisitionDraft, kind = NameChange, submittedOn = Date("2026-04-02") }
+    | "a AddressChange draft is submitted on the day it was prepared" :
+        (Drafted { ...acquisitionDraft, kind = AddressChange }, Date("2026-04-02"))
+        -> Submitted { ...acquisitionDraft, kind = AddressChange, submittedOn = Date("2026-04-02") }
+    | "a EmploymentInsuranceAcquisition draft is submitted on the day it was prepared" :
+        (Drafted { ...acquisitionDraft, kind = EmploymentInsuranceAcquisition }, Date("2026-04-02"))
+        -> Submitted { ...acquisitionDraft, kind = EmploymentInsuranceAcquisition, submittedOn = Date("2026-04-02") }
+    | "a SeparationCertificate draft is submitted on the day it was prepared" :
+        (Drafted { ...acquisitionDraft, kind = SeparationCertificate }, Date("2026-04-02"))
+        -> Submitted { ...acquisitionDraft, kind = SeparationCertificate, submittedOn = Date("2026-04-02") }
+    | "submitted three days after it was prepared" :
+        (acquisitionDraft, Date("2026-04-05"))
+        -> Submitted { ...acquisitionDraft, submittedOn = Date("2026-04-05") }
+    | "a submission years before the draft is reported as well" :
+        (acquisitionDraft, Date("2019-04-01")) -> SubmissionBeforePreparation
 
 let returnedFiling = Returned
     { ...acquisitionDraft
@@ -359,3 +409,213 @@ example correct
     | "a returned filing goes back to a draft, and the receipt number does not come with it" :
         (returnedFiling, Date("2026-04-11"))
         -> Drafted { ...acquisitionDraft, preparedOn = Date("2026-04-11") }
+    | "a returned CoverageLoss filing goes back to a CoverageLoss draft prepared on the correction day" :
+        (Returned { ...returnedFiling, kind = CoverageLoss }, Date("2026-04-11"))
+        -> Drafted { ...acquisitionDraft, kind = CoverageLoss, preparedOn = Date("2026-04-11") }
+    | "a returned RegularDeterminationFiling filing goes back to a RegularDeterminationFiling draft prepared on the correction day" :
+        (Returned { ...returnedFiling, kind = RegularDeterminationFiling }, Date("2026-04-11"))
+        -> Drafted { ...acquisitionDraft, kind = RegularDeterminationFiling, preparedOn = Date("2026-04-11") }
+    | "a returned OccasionalRevisionFiling filing goes back to a OccasionalRevisionFiling draft prepared on the correction day" :
+        (Returned { ...returnedFiling, kind = OccasionalRevisionFiling }, Date("2026-04-11"))
+        -> Drafted { ...acquisitionDraft, kind = OccasionalRevisionFiling, preparedOn = Date("2026-04-11") }
+    | "a returned DependantChange filing goes back to a DependantChange draft prepared on the correction day" :
+        (Returned { ...returnedFiling, kind = DependantChange }, Date("2026-04-11"))
+        -> Drafted { ...acquisitionDraft, kind = DependantChange, preparedOn = Date("2026-04-11") }
+    | "a returned NameChange filing goes back to a NameChange draft prepared on the correction day" :
+        (Returned { ...returnedFiling, kind = NameChange }, Date("2026-04-11"))
+        -> Drafted { ...acquisitionDraft, kind = NameChange, preparedOn = Date("2026-04-11") }
+    | "a returned AddressChange filing goes back to a AddressChange draft prepared on the correction day" :
+        (Returned { ...returnedFiling, kind = AddressChange }, Date("2026-04-11"))
+        -> Drafted { ...acquisitionDraft, kind = AddressChange, preparedOn = Date("2026-04-11") }
+    | "a returned EmploymentInsuranceAcquisition filing goes back to a EmploymentInsuranceAcquisition draft prepared on the correction day" :
+        (Returned { ...returnedFiling, kind = EmploymentInsuranceAcquisition }, Date("2026-04-11"))
+        -> Drafted { ...acquisitionDraft, kind = EmploymentInsuranceAcquisition, preparedOn = Date("2026-04-11") }
+    | "a returned SeparationCertificate filing goes back to a SeparationCertificate draft prepared on the correction day" :
+        (Returned { ...returnedFiling, kind = SeparationCertificate }, Date("2026-04-11"))
+        -> Drafted { ...acquisitionDraft, kind = SeparationCertificate, preparedOn = Date("2026-04-11") }
+    | "the reason it was returned for, InconsistentWithRecord, is not carried into the draft" :
+        (Returned { ...returnedFiling, reason = InconsistentWithRecord }, Date("2026-04-12"))
+        -> Drafted { ...acquisitionDraft, preparedOn = Date("2026-04-12") }
+    | "the reason it was returned for, WrongOffice, is not carried into the draft" :
+        (Returned { ...returnedFiling, reason = WrongOffice }, Date("2026-04-12"))
+        -> Drafted { ...acquisitionDraft, preparedOn = Date("2026-04-12") }
+
+let submittedFiling = Submitted { ...acquisitionDraft, submittedOn = Date("2026-04-03") }
+
+let reviewedFiling = Reviewed
+    { ...submittedFiling
+    , reviewedOn = Date("2026-04-03")
+    , reviewer = EmployeeId("000009")
+    }
+
+let filedFiling = Filed
+    { ...reviewedFiling
+    , filedOn = Date("2026-04-04")
+    , receipt = ReceiptNumber("1234567890123456")
+    }
+
+example prepare
+    | "a CoverageAcquisition notification starts as a draft carrying the day it was prepared" :
+        (CoverageAcquisition, EmployeeId("000001"), Date("2026-04-01"), Date("2026-04-02"))
+        -> Drafted { ...acquisitionDraft, kind = CoverageAcquisition }
+    | "a CoverageLoss notification starts as a draft carrying the day it was prepared" :
+        (CoverageLoss, EmployeeId("000001"), Date("2026-04-01"), Date("2026-04-02"))
+        -> Drafted { ...acquisitionDraft, kind = CoverageLoss }
+    | "a RegularDeterminationFiling notification starts as a draft carrying the day it was prepared" :
+        (RegularDeterminationFiling, EmployeeId("000001"), Date("2026-04-01"), Date("2026-04-02"))
+        -> Drafted { ...acquisitionDraft, kind = RegularDeterminationFiling }
+    | "a OccasionalRevisionFiling notification starts as a draft carrying the day it was prepared" :
+        (OccasionalRevisionFiling, EmployeeId("000001"), Date("2026-04-01"), Date("2026-04-02"))
+        -> Drafted { ...acquisitionDraft, kind = OccasionalRevisionFiling }
+    | "a DependantChange notification starts as a draft carrying the day it was prepared" :
+        (DependantChange, EmployeeId("000001"), Date("2026-04-01"), Date("2026-04-02"))
+        -> Drafted { ...acquisitionDraft, kind = DependantChange }
+    | "a NameChange notification starts as a draft carrying the day it was prepared" :
+        (NameChange, EmployeeId("000001"), Date("2026-04-01"), Date("2026-04-02"))
+        -> Drafted { ...acquisitionDraft, kind = NameChange }
+    | "a AddressChange notification starts as a draft carrying the day it was prepared" :
+        (AddressChange, EmployeeId("000001"), Date("2026-04-01"), Date("2026-04-02"))
+        -> Drafted { ...acquisitionDraft, kind = AddressChange }
+    | "a EmploymentInsuranceAcquisition notification starts as a draft carrying the day it was prepared" :
+        (EmploymentInsuranceAcquisition, EmployeeId("000001"), Date("2026-04-01"), Date("2026-04-02"))
+        -> Drafted { ...acquisitionDraft, kind = EmploymentInsuranceAcquisition }
+    | "a SeparationCertificate notification starts as a draft carrying the day it was prepared" :
+        (SeparationCertificate, EmployeeId("000001"), Date("2026-04-01"), Date("2026-04-02"))
+        -> Drafted { ...acquisitionDraft, kind = SeparationCertificate }
+    | "the employee, the event and the preparation are what the draft holds" :
+        (NameChange, EmployeeId("000042"), Date("2026-08-31"), Date("2026-09-01"))
+        -> Drafted { kind = NameChange
+                   , subject = EmployeeId("000042")
+                   , eventOn = Date("2026-08-31")
+                   , preparedOn = Date("2026-09-01")
+                   }
+
+example review
+    | "a CoverageLoss filing is reviewed on the day it was submitted" :
+        (Submitted { ...submittedFiling, kind = CoverageLoss }, EmployeeId("000009"), Date("2026-04-03"))
+        -> Reviewed { ...reviewedFiling, kind = CoverageLoss }
+    | "a RegularDeterminationFiling filing is reviewed on the day it was submitted" :
+        (Submitted { ...submittedFiling, kind = RegularDeterminationFiling }, EmployeeId("000009"), Date("2026-04-03"))
+        -> Reviewed { ...reviewedFiling, kind = RegularDeterminationFiling }
+    | "a OccasionalRevisionFiling filing is reviewed on the day it was submitted" :
+        (Submitted { ...submittedFiling, kind = OccasionalRevisionFiling }, EmployeeId("000009"), Date("2026-04-03"))
+        -> Reviewed { ...reviewedFiling, kind = OccasionalRevisionFiling }
+    | "a DependantChange filing is reviewed on the day it was submitted" :
+        (Submitted { ...submittedFiling, kind = DependantChange }, EmployeeId("000009"), Date("2026-04-03"))
+        -> Reviewed { ...reviewedFiling, kind = DependantChange }
+    | "a NameChange filing is reviewed on the day it was submitted" :
+        (Submitted { ...submittedFiling, kind = NameChange }, EmployeeId("000009"), Date("2026-04-03"))
+        -> Reviewed { ...reviewedFiling, kind = NameChange }
+    | "a AddressChange filing is reviewed on the day it was submitted" :
+        (Submitted { ...submittedFiling, kind = AddressChange }, EmployeeId("000009"), Date("2026-04-03"))
+        -> Reviewed { ...reviewedFiling, kind = AddressChange }
+    | "a EmploymentInsuranceAcquisition filing is reviewed on the day it was submitted" :
+        (Submitted { ...submittedFiling, kind = EmploymentInsuranceAcquisition }, EmployeeId("000009"), Date("2026-04-03"))
+        -> Reviewed { ...reviewedFiling, kind = EmploymentInsuranceAcquisition }
+    | "a SeparationCertificate filing is reviewed on the day it was submitted" :
+        (Submitted { ...submittedFiling, kind = SeparationCertificate }, EmployeeId("000009"), Date("2026-04-03"))
+        -> Reviewed { ...reviewedFiling, kind = SeparationCertificate }
+    | "reviewed by somebody else two days later" :
+        (submittedFiling, EmployeeId("000010"), Date("2026-04-05"))
+        -> Reviewed { ...submittedFiling, reviewedOn = Date("2026-04-05"), reviewer = EmployeeId("000010") }
+    | "a review the day before the submission is reported rather than stored" :
+        (submittedFiling, EmployeeId("000009"), Date("2026-04-02")) -> ReviewBeforeSubmission
+    | "a review years before the submission is reported as well" :
+        (submittedFiling, EmployeeId("000009"), Date("2019-04-01")) -> ReviewBeforeSubmission
+
+example transmit
+    | "a CoverageLoss filing is transmitted on the day it was reviewed" :
+        (Reviewed { ...reviewedFiling, kind = CoverageLoss }, ReceiptNumber("1234567890123456"), Date("2026-04-03"))
+        -> Filed { ...reviewedFiling, kind = CoverageLoss, filedOn = Date("2026-04-03"), receipt = ReceiptNumber("1234567890123456") }
+    | "a RegularDeterminationFiling filing is transmitted on the day it was reviewed" :
+        (Reviewed { ...reviewedFiling, kind = RegularDeterminationFiling }, ReceiptNumber("1234567890123456"), Date("2026-04-03"))
+        -> Filed { ...reviewedFiling, kind = RegularDeterminationFiling, filedOn = Date("2026-04-03"), receipt = ReceiptNumber("1234567890123456") }
+    | "a OccasionalRevisionFiling filing is transmitted on the day it was reviewed" :
+        (Reviewed { ...reviewedFiling, kind = OccasionalRevisionFiling }, ReceiptNumber("1234567890123456"), Date("2026-04-03"))
+        -> Filed { ...reviewedFiling, kind = OccasionalRevisionFiling, filedOn = Date("2026-04-03"), receipt = ReceiptNumber("1234567890123456") }
+    | "a DependantChange filing is transmitted on the day it was reviewed" :
+        (Reviewed { ...reviewedFiling, kind = DependantChange }, ReceiptNumber("1234567890123456"), Date("2026-04-03"))
+        -> Filed { ...reviewedFiling, kind = DependantChange, filedOn = Date("2026-04-03"), receipt = ReceiptNumber("1234567890123456") }
+    | "a NameChange filing is transmitted on the day it was reviewed" :
+        (Reviewed { ...reviewedFiling, kind = NameChange }, ReceiptNumber("1234567890123456"), Date("2026-04-03"))
+        -> Filed { ...reviewedFiling, kind = NameChange, filedOn = Date("2026-04-03"), receipt = ReceiptNumber("1234567890123456") }
+    | "a AddressChange filing is transmitted on the day it was reviewed" :
+        (Reviewed { ...reviewedFiling, kind = AddressChange }, ReceiptNumber("1234567890123456"), Date("2026-04-03"))
+        -> Filed { ...reviewedFiling, kind = AddressChange, filedOn = Date("2026-04-03"), receipt = ReceiptNumber("1234567890123456") }
+    | "a EmploymentInsuranceAcquisition filing is transmitted on the day it was reviewed" :
+        (Reviewed { ...reviewedFiling, kind = EmploymentInsuranceAcquisition }, ReceiptNumber("1234567890123456"), Date("2026-04-03"))
+        -> Filed { ...reviewedFiling, kind = EmploymentInsuranceAcquisition, filedOn = Date("2026-04-03"), receipt = ReceiptNumber("1234567890123456") }
+    | "a SeparationCertificate filing is transmitted on the day it was reviewed" :
+        (Reviewed { ...reviewedFiling, kind = SeparationCertificate }, ReceiptNumber("1234567890123456"), Date("2026-04-03"))
+        -> Filed { ...reviewedFiling, kind = SeparationCertificate, filedOn = Date("2026-04-03"), receipt = ReceiptNumber("1234567890123456") }
+    | "transmitted two days after the review, with the receipt number the gateway returned" :
+        (reviewedFiling, ReceiptNumber("6543210987654321"), Date("2026-04-05"))
+        -> Filed { ...reviewedFiling, filedOn = Date("2026-04-05"), receipt = ReceiptNumber("6543210987654321") }
+    | "a transmission the day before the review is reported rather than stored" :
+        (reviewedFiling, ReceiptNumber("1234567890123456"), Date("2026-04-02")) -> TransmissionBeforeReview
+    | "a transmission years before the review is reported as well" :
+        (reviewedFiling, ReceiptNumber("1234567890123456"), Date("2019-04-01")) -> TransmissionBeforeReview
+
+example accept
+    | "a CoverageLoss filing is accepted with the document the authority issued" :
+        (Filed { ...filedFiling, kind = CoverageLoss }, DocumentId("A"), Date("2026-04-10"))
+        -> Accepted { ...filedFiling, kind = CoverageLoss, acceptedOn = Date("2026-04-10"), document = DocumentId("A") }
+    | "a RegularDeterminationFiling filing is accepted with the document the authority issued" :
+        (Filed { ...filedFiling, kind = RegularDeterminationFiling }, DocumentId("A"), Date("2026-04-10"))
+        -> Accepted { ...filedFiling, kind = RegularDeterminationFiling, acceptedOn = Date("2026-04-10"), document = DocumentId("A") }
+    | "a OccasionalRevisionFiling filing is accepted with the document the authority issued" :
+        (Filed { ...filedFiling, kind = OccasionalRevisionFiling }, DocumentId("A"), Date("2026-04-10"))
+        -> Accepted { ...filedFiling, kind = OccasionalRevisionFiling, acceptedOn = Date("2026-04-10"), document = DocumentId("A") }
+    | "a DependantChange filing is accepted with the document the authority issued" :
+        (Filed { ...filedFiling, kind = DependantChange }, DocumentId("A"), Date("2026-04-10"))
+        -> Accepted { ...filedFiling, kind = DependantChange, acceptedOn = Date("2026-04-10"), document = DocumentId("A") }
+    | "a NameChange filing is accepted with the document the authority issued" :
+        (Filed { ...filedFiling, kind = NameChange }, DocumentId("A"), Date("2026-04-10"))
+        -> Accepted { ...filedFiling, kind = NameChange, acceptedOn = Date("2026-04-10"), document = DocumentId("A") }
+    | "a AddressChange filing is accepted with the document the authority issued" :
+        (Filed { ...filedFiling, kind = AddressChange }, DocumentId("A"), Date("2026-04-10"))
+        -> Accepted { ...filedFiling, kind = AddressChange, acceptedOn = Date("2026-04-10"), document = DocumentId("A") }
+    | "a EmploymentInsuranceAcquisition filing is accepted with the document the authority issued" :
+        (Filed { ...filedFiling, kind = EmploymentInsuranceAcquisition }, DocumentId("A"), Date("2026-04-10"))
+        -> Accepted { ...filedFiling, kind = EmploymentInsuranceAcquisition, acceptedOn = Date("2026-04-10"), document = DocumentId("A") }
+    | "a SeparationCertificate filing is accepted with the document the authority issued" :
+        (Filed { ...filedFiling, kind = SeparationCertificate }, DocumentId("A"), Date("2026-04-10"))
+        -> Accepted { ...filedFiling, kind = SeparationCertificate, acceptedOn = Date("2026-04-10"), document = DocumentId("A") }
+    | "an acceptance carries the document identifier as the authority wrote it" :
+        (filedFiling, DocumentId("DOC-2026-0001"), Date("2026-04-06"))
+        -> Accepted { ...filedFiling, acceptedOn = Date("2026-04-06"), document = DocumentId("DOC-2026-0001") }
+
+example returnForCorrection
+    | "a CoverageLoss filing is returned for a missing document" :
+        (Filed { ...filedFiling, kind = CoverageLoss }, MissingDocument, Date("2026-04-10"))
+        -> Returned { ...filedFiling, kind = CoverageLoss, returnedOn = Date("2026-04-10"), reason = MissingDocument }
+    | "a RegularDeterminationFiling filing is returned for a missing document" :
+        (Filed { ...filedFiling, kind = RegularDeterminationFiling }, MissingDocument, Date("2026-04-10"))
+        -> Returned { ...filedFiling, kind = RegularDeterminationFiling, returnedOn = Date("2026-04-10"), reason = MissingDocument }
+    | "a OccasionalRevisionFiling filing is returned for a missing document" :
+        (Filed { ...filedFiling, kind = OccasionalRevisionFiling }, MissingDocument, Date("2026-04-10"))
+        -> Returned { ...filedFiling, kind = OccasionalRevisionFiling, returnedOn = Date("2026-04-10"), reason = MissingDocument }
+    | "a DependantChange filing is returned for a missing document" :
+        (Filed { ...filedFiling, kind = DependantChange }, MissingDocument, Date("2026-04-10"))
+        -> Returned { ...filedFiling, kind = DependantChange, returnedOn = Date("2026-04-10"), reason = MissingDocument }
+    | "a NameChange filing is returned for a missing document" :
+        (Filed { ...filedFiling, kind = NameChange }, MissingDocument, Date("2026-04-10"))
+        -> Returned { ...filedFiling, kind = NameChange, returnedOn = Date("2026-04-10"), reason = MissingDocument }
+    | "a AddressChange filing is returned for a missing document" :
+        (Filed { ...filedFiling, kind = AddressChange }, MissingDocument, Date("2026-04-10"))
+        -> Returned { ...filedFiling, kind = AddressChange, returnedOn = Date("2026-04-10"), reason = MissingDocument }
+    | "a EmploymentInsuranceAcquisition filing is returned for a missing document" :
+        (Filed { ...filedFiling, kind = EmploymentInsuranceAcquisition }, MissingDocument, Date("2026-04-10"))
+        -> Returned { ...filedFiling, kind = EmploymentInsuranceAcquisition, returnedOn = Date("2026-04-10"), reason = MissingDocument }
+    | "a SeparationCertificate filing is returned for a missing document" :
+        (Filed { ...filedFiling, kind = SeparationCertificate }, MissingDocument, Date("2026-04-10"))
+        -> Returned { ...filedFiling, kind = SeparationCertificate, returnedOn = Date("2026-04-10"), reason = MissingDocument }
+    | "a filing returned as InconsistentWithRecord keeps that reason" :
+        (filedFiling, InconsistentWithRecord, Date("2026-04-10"))
+        -> Returned { ...filedFiling, returnedOn = Date("2026-04-10"), reason = InconsistentWithRecord }
+    | "a filing returned as WrongOffice keeps that reason" :
+        (filedFiling, WrongOffice, Date("2026-04-10"))
+        -> Returned { ...filedFiling, returnedOn = Date("2026-04-10"), reason = WrongOffice }
+    | "a filing returned for a missing document" :
+        (filedFiling, MissingDocument, Date("2026-04-06"))
+        -> Returned { ...filedFiling, returnedOn = Date("2026-04-06"), reason = MissingDocument }

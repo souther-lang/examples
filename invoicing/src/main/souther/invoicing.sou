@@ -27,3 +27,8 @@ example issue
         -> Invoice
             { currency = Currency("JPY")
             , line = Line { description = "consulting", amount = Amount(1200) } }
+    | "金額0円・説明1文字の行も、そのまま請求書になる" :
+        (Line { description = "x", amount = Amount(0) }, Currency("xxx"))
+        -> Invoice
+            { currency = Currency("xxx")
+            , line = Line { description = "x", amount = Amount(0) } }
