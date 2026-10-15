@@ -674,6 +674,8 @@ example yearEndTaxFor
         (TaxableIncome(3000000), Yen(0)) -> Yen(206700)
     | "no taxable income is no tax" :
         (TaxableIncome(0), Yen(0)) -> Yen(0)
+    | "a credit against no tax at all leaves nothing, and does not go negative" :
+        (TaxableIncome(0), Yen(70951)) -> Yen(0)
     | "a credit on a larger tax" :
         (TaxableIncome(9000000), Yen(100000)) -> Yen(1362000)
 

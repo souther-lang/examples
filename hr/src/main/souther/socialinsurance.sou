@@ -934,6 +934,12 @@ example judgeOccasionalRevision
     | "an unchanged fixed wage, a short month and a grade that did not move are all reported, in that order" :
         (currentGrade22, Yen(300000), ThreeMonthWindow { first = aprilRecord, second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01")), paidBaseDays = PaidBaseDays(10) }, third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")) } })
         -> RevisionNotRequired { reasons = [ FixedWageUnchanged, PaidDaysBelowSeventeen { month = ContributionMonth(Date("2026-05-01")), days = PaidBaseDays(10) }, GradeDifferenceBelowTwo { current = HealthGrade(22), computed = HealthGrade(22) } ] }
+    | "a fixed wage a yen above the previous one has changed, so only the short month and the grade are reported" :
+        (currentGrade22, Yen(299999), ThreeMonthWindow { first = aprilRecord, second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01")), paidBaseDays = PaidBaseDays(10) }, third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")) } })
+        -> RevisionNotRequired { reasons = [ PaidDaysBelowSeventeen { month = ContributionMonth(Date("2026-05-01")), days = PaidBaseDays(10) }, GradeDifferenceBelowTwo { current = HealthGrade(22), computed = HealthGrade(22) } ] }
+    | "a fixed wage a yen below the previous one has changed as well" :
+        (currentGrade22, Yen(300001), ThreeMonthWindow { first = aprilRecord, second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01")), paidBaseDays = PaidBaseDays(10) }, third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")) } })
+        -> RevisionNotRequired { reasons = [ PaidDaysBelowSeventeen { month = ContributionMonth(Date("2026-05-01")), days = PaidBaseDays(10) }, GradeDifferenceBelowTwo { current = HealthGrade(22), computed = HealthGrade(22) } ] }
     | "a revision to the lowest grade carries pension grade 1" :
         (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...pay300k, baseSalary = Yen(10000) }))
         -> GradeDecision { basis = OccasionalRevision, standard = Yen(58000), health = HealthGrade(1), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2026-07-01")) }
