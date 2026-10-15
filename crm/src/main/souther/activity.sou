@@ -733,6 +733,10 @@ example nextStepFor
         (acmeDiscovered, Recency { lastOn = Date("2000-01-01"), daysSince = 6 }, Date("2000-01-01"))
         -> NextStep { description = Subject("Send the business case against the recorded needs")
                     , dueOn = Date("2000-01-02") }
+    | "a deal in discovery with 7 days since the last touch" :
+        (acmeDiscovered, Recency { lastOn = Date("2000-01-01"), daysSince = 7 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Send the business case against the recorded needs")
+                    , dueOn = Date("2000-01-01") }
     | "a deal in discovery with 8 days since the last touch" :
         (acmeDiscovered, Recency { lastOn = Date("2000-01-01"), daysSince = 8 }, Date("2000-01-01"))
         -> Overdue
@@ -762,6 +766,10 @@ example nextStepFor
         (acmeIdentified, Recency { lastOn = Date("2000-01-01"), daysSince = 4 }, Date("2000-01-01"))
         -> NextStep { description = Subject("Meet the sponsor and ask what would stop this")
                     , dueOn = Date("2000-01-02") }
+    | "a deal with identified decision makers with 5 days since the last touch" :
+        (acmeIdentified, Recency { lastOn = Date("2000-01-01"), daysSince = 5 }, Date("2000-01-01"))
+        -> NextStep { description = Subject("Meet the sponsor and ask what would stop this")
+                    , dueOn = Date("2000-01-01") }
     | "a deal with identified decision makers with 6 days since the last touch" :
         (acmeIdentified, Recency { lastOn = Date("2000-01-01"), daysSince = 6 }, Date("2000-01-01"))
         -> Overdue
