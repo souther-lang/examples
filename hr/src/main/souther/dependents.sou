@@ -544,6 +544,565 @@ example qualifyAsInsuranceDependant
     | "before her birthday in the year, the attained age is one less than the difference of the years" :
         (hanako, spouseAtHome, AnnualRevenue(1), AnnualRevenue(3), Date("2026-03-01"))
         -> InsuranceDependant { appliedCeiling = AnnualRevenue(1300000) }
+    | "attained -1, revenue 1299999, born -999999999-02-02 and asked on -999999999-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1299999),
+            AnnualRevenue(0),
+            Date("-999999999-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1299999) } ] }
+    | "attained -1, revenue 1300001, born -999999999-02-02 and asked on -999999999-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1300001),
+            AnnualRevenue(0),
+            Date("-999999999-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverCeiling { ceiling = AnnualRevenue(1300000), revenue = AnnualRevenue(1300001) }, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1300001) } ] }
+    | "attained 60, disabled, revenue 1800000, born -999999999-01-02 and asked on -999999939-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1800000),
+            AnnualRevenue(0),
+            Date("-999999939-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverCeiling { ceiling = AnnualRevenue(1800000), revenue = AnnualRevenue(1800000) }, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1800000) } ] }
+    | "attained 60, disabled, revenue 1799999, born -999999999-01-02 and asked on -999999939-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1799999),
+            AnnualRevenue(0),
+            Date("-999999939-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1799999) } ] }
+    | "attained 60, disabled, revenue 1800001, born -999999999-01-02 and asked on -999999939-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1800001),
+            AnnualRevenue(0),
+            Date("-999999939-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverCeiling { ceiling = AnnualRevenue(1800000), revenue = AnnualRevenue(1800001) }, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1800001) } ] }
+    | "attained 60, disabled, revenue 1799998, born -999999999-01-02 and asked on -999999939-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1799998),
+            AnnualRevenue(0),
+            Date("-999999939-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1799998) } ] }
+    | "attained 74, disabled, revenue 0, born -999999999-01-03 and asked on -999999924-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-03"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("-999999924-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "attained 75, disabled, revenue 0, born -999999999-01-02 and asked on -999999924-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("-999999924-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ CoveredByLatterStageMedical, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "attained 75, disabled, revenue 0, born -999999999-01-02 and asked on -999999924-01-02"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("-999999924-01-02")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ CoveredByLatterStageMedical, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "attained 74, disabled, revenue 0, born -999999999-01-02 and asked on -999999925-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("-999999925-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "attained 73, disabled, revenue 0, born -999999999-01-02 and asked on -999999926-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("-999999926-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "attained 76, disabled, revenue 0, born -999999999-02-02 and asked on -999999922-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("-999999922-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ CoveredByLatterStageMedical, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "attained 59, revenue 1300000, born -999999999-01-03 and asked on -999999939-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-03"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1300000),
+            AnnualRevenue(0),
+            Date("-999999939-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverCeiling { ceiling = AnnualRevenue(1300000), revenue = AnnualRevenue(1300000) }, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1300000) } ] }
+    | "attained 60, revenue 1300000, born -999999999-01-02 and asked on -999999939-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1300000),
+            AnnualRevenue(0),
+            Date("-999999939-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1300000) } ] }
+    | "attained 59, revenue 1300000, born -999999999-01-04 and asked on -999999939-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-04"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1300000),
+            AnnualRevenue(0),
+            Date("-999999939-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverCeiling { ceiling = AnnualRevenue(1300000), revenue = AnnualRevenue(1300000) }, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1300000) } ] }
+    | "attained 60, revenue 1300000, born -999999999-01-02 and asked on -999999939-01-02"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1300000),
+            AnnualRevenue(0),
+            Date("-999999939-01-02")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1300000) } ] }
+    | "attained 59, revenue 1300000, born -999999999-01-02 and asked on -999999940-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1300000),
+            AnnualRevenue(0),
+            Date("-999999940-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverCeiling { ceiling = AnnualRevenue(1300000), revenue = AnnualRevenue(1300000) }, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1300000) } ] }
+    | "attained 60, revenue 1300000, born -999999999-02-02 and asked on -999999938-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1300000),
+            AnnualRevenue(0),
+            Date("-999999938-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1300000) } ] }
+    | "attained 61, revenue 1300000, born -999999999-02-02 and asked on -999999937-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1300000),
+            AnnualRevenue(0),
+            Date("-999999937-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1300000) } ] }
+    | "attained 75, disabled, revenue 0, born -999999999-01-04 and asked on -999999924-01-03"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-04"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("-999999924-01-03")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ CoveredByLatterStageMedical, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "attained 74, disabled, revenue 0, born -999999999-01-04 and asked on -999999924-01-02"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-04"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("-999999924-01-02")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "attained 74, disabled, revenue 0, born -999999999-02-03 and asked on -999999924-02-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-03"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("-999999924-02-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "attained 75, disabled, revenue 0, born -999999999-02-02 and asked on -999999924-02-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("-999999924-02-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ CoveredByLatterStageMedical, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "attained 60, revenue 1300000, born -999999999-01-04 and asked on -999999939-01-03"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-04"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1300000),
+            AnnualRevenue(0),
+            Date("-999999939-01-03")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1300000) } ] }
+    | "attained 59, revenue 1300000, born -999999999-01-04 and asked on -999999939-01-02"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-04"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1300000),
+            AnnualRevenue(0),
+            Date("-999999939-01-02")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverCeiling { ceiling = AnnualRevenue(1300000), revenue = AnnualRevenue(1300000) }, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1300000) } ] }
+    | "attained 60, revenue 1300000, born -999999999-02-02 and asked on -999999939-02-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1300000),
+            AnnualRevenue(0),
+            Date("-999999939-02-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1300000) } ] }
+    | "attained 59, revenue 1300000, born -999999999-02-03 and asked on -999999939-02-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-03"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1300000),
+            AnnualRevenue(0),
+            Date("-999999939-02-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverCeiling { ceiling = AnnualRevenue(1300000), revenue = AnnualRevenue(1300000) }, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1300000) } ] }
+    | "attained 60, revenue 1300000, born -999999998-02-02 and asked on -999999937-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999998-02-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1300000),
+            AnnualRevenue(0),
+            Date("-999999937-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1300000) } ] }
+    | "attained 75, revenue 0, born -999999998-01-02 and asked on -999999923-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999998-01-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("-999999923-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ CoveredByLatterStageMedical, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "attained 60, revenue 0, born -999999998-01-02 and asked on -999999938-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999998-01-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("-999999938-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "attained 0, revenue 0, born -999999938-01-02 and asked on -999999938-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999938-01-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("-999999938-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "attained 0, revenue 0, born -999999877-01-02 and asked on -999999877-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999877-01-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("-999999877-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "attained 59, revenue 0, born -999999998-02-02 and asked on -999999938-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999998-02-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("-999999938-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "attained -1, revenue 0, born -999999938-02-02 and asked on -999999938-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999938-02-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("-999999938-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "attained -1, revenue 0, born -999999877-02-02 and asked on -999999877-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999877-02-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(0),
+            Date("-999999877-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(0) } ] }
+    | "attained 60, revenue 0 against 6000000, born -999999998-01-02 and asked on -999999938-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999998-01-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(6000000),
+            Date("-999999938-01-01")
+        )
+        -> InsuranceDependant { appliedCeiling = AnnualRevenue(1800000) }
+    | "attained -1, revenue 0 against 6000000, born -999999938-02-02 and asked on -999999938-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999938-02-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(6000000),
+            Date("-999999938-01-01")
+        )
+        -> InsuranceDependant { appliedCeiling = AnnualRevenue(1300000) }
+    | "attained -1, revenue 0 against 6000000, born -999999877-02-02 and asked on -999999877-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999877-02-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(0),
+            AnnualRevenue(6000000),
+            Date("-999999877-01-01")
+        )
+        -> InsuranceDependant { appliedCeiling = AnnualRevenue(1300000) }
+    | "attained 60, revenue 1799999, born -999999998-01-02 and asked on -999999938-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999998-01-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1799999),
+            AnnualRevenue(0),
+            Date("-999999938-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1799999) } ] }
+    | "attained 60, revenue 1800001, born -999999998-01-02 and asked on -999999938-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999998-01-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1800001),
+            AnnualRevenue(0),
+            Date("-999999938-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverCeiling { ceiling = AnnualRevenue(1800000), revenue = AnnualRevenue(1800001) }, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1800001) } ] }
+    | "attained 60, revenue 1800000, born -999999998-01-02 and asked on -999999938-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999998-01-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1800000),
+            AnnualRevenue(0),
+            Date("-999999938-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverCeiling { ceiling = AnnualRevenue(1800000), revenue = AnnualRevenue(1800000) }, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1800000) } ] }
+    | "attained -1, revenue 1300000, born -999999938-02-02 and asked on -999999938-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999938-02-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1300000),
+            AnnualRevenue(0),
+            Date("-999999938-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverCeiling { ceiling = AnnualRevenue(1300000), revenue = AnnualRevenue(1300000) }, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1300000) } ] }
+    | "attained -1, revenue 1300000, born -999999877-02-02 and asked on -999999877-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999877-02-02"),
+                disability = NotDisabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            AnnualRevenue(1300000),
+            AnnualRevenue(0),
+            Date("-999999877-01-01")
+        )
+        -> InsuranceDependencyBlocked { reasons = [ RevenueOverCeiling { ceiling = AnnualRevenue(1300000), revenue = AnnualRevenue(1300000) }, RevenueOverHalfOfInsured { insuredRevenue = AnnualRevenue(0), revenue = AnnualRevenue(1300000) } ] }
 
 example classifyTaxDependant
     | "a child of twenty-one with no income is a specified dependant" :
@@ -707,3 +1266,357 @@ example classifyTaxDependant
     | "in March, before his September birthday, he has not yet attained twenty-one" :
         (taro, childAtHome, TotalIncome(0), Date("2026-03-01"))
         -> TaxDependant { category = SpecifiedDependant }
+    | "attained 15, spouse, born -999999999-01-03 and asked on -999999983-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-03"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            TotalIncome(0),
+            Date("-999999983-01-01")
+        )
+        -> TaxDependencyBlocked { reasons = [ SpouseIsDeductedSeparately, UnderSixteen ] }
+    | "attained 16, spouse, born -999999999-01-02 and asked on -999999983-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            TotalIncome(0),
+            Date("-999999983-01-01")
+        )
+        -> TaxDependencyBlocked { reasons = [ SpouseIsDeductedSeparately ] }
+    | "attained 15, spouse, born -999999999-01-04 and asked on -999999983-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-04"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            TotalIncome(0),
+            Date("-999999983-01-01")
+        )
+        -> TaxDependencyBlocked { reasons = [ SpouseIsDeductedSeparately, UnderSixteen ] }
+    | "attained 16, spouse, born -999999999-01-02 and asked on -999999983-01-02"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            TotalIncome(0),
+            Date("-999999983-01-02")
+        )
+        -> TaxDependencyBlocked { reasons = [ SpouseIsDeductedSeparately ] }
+    | "attained 14, spouse, born -999999999-01-02 and asked on -999999985-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            TotalIncome(0),
+            Date("-999999985-01-01")
+        )
+        -> TaxDependencyBlocked { reasons = [ SpouseIsDeductedSeparately, UnderSixteen ] }
+    | "attained 16, spouse, born -999999999-02-02 and asked on -999999982-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            TotalIncome(0),
+            Date("-999999982-01-01")
+        )
+        -> TaxDependencyBlocked { reasons = [ SpouseIsDeductedSeparately ] }
+    | "attained 17, spouse, born -999999999-02-02 and asked on -999999981-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            TotalIncome(0),
+            Date("-999999981-01-01")
+        )
+        -> TaxDependencyBlocked { reasons = [ SpouseIsDeductedSeparately ] }
+    | "attained 69, child living apart, born -999999999-01-03 and asked on -999999929-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-03"),
+                disability = Disabled
+            },
+            RelativeTie {
+                relationship = Child,
+                cohabitation = LivingApart { annualRemittance = Yen(1) }
+            },
+            TotalIncome(0),
+            Date("-999999929-01-01")
+        )
+        -> TaxDependant { category = GeneralDependant }
+    | "attained 70, child living apart, born -999999999-01-02 and asked on -999999929-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie {
+                relationship = Child,
+                cohabitation = LivingApart { annualRemittance = Yen(1) }
+            },
+            TotalIncome(0),
+            Date("-999999929-01-01")
+        )
+        -> TaxDependant { category = ElderlyDependant }
+    | "attained 69, child living apart, born -999999999-01-04 and asked on -999999929-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-04"),
+                disability = Disabled
+            },
+            RelativeTie {
+                relationship = Child,
+                cohabitation = LivingApart { annualRemittance = Yen(1) }
+            },
+            TotalIncome(0),
+            Date("-999999929-01-01")
+        )
+        -> TaxDependant { category = GeneralDependant }
+    | "attained 70, child living apart, born -999999999-01-02 and asked on -999999929-01-02"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie {
+                relationship = Child,
+                cohabitation = LivingApart { annualRemittance = Yen(1) }
+            },
+            TotalIncome(0),
+            Date("-999999929-01-02")
+        )
+        -> TaxDependant { category = ElderlyDependant }
+    | "attained 69, child living apart, born -999999999-01-02 and asked on -999999930-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie {
+                relationship = Child,
+                cohabitation = LivingApart { annualRemittance = Yen(1) }
+            },
+            TotalIncome(0),
+            Date("-999999930-01-01")
+        )
+        -> TaxDependant { category = GeneralDependant }
+    | "attained 70, child living apart, born -999999999-02-02 and asked on -999999928-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-02"),
+                disability = Disabled
+            },
+            RelativeTie {
+                relationship = Child,
+                cohabitation = LivingApart { annualRemittance = Yen(1) }
+            },
+            TotalIncome(0),
+            Date("-999999928-01-01")
+        )
+        -> TaxDependant { category = ElderlyDependant }
+    | "attained 71, child living apart, born -999999999-02-02 and asked on -999999927-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-02"),
+                disability = Disabled
+            },
+            RelativeTie {
+                relationship = Child,
+                cohabitation = LivingApart { annualRemittance = Yen(1) }
+            },
+            TotalIncome(0),
+            Date("-999999927-01-01")
+        )
+        -> TaxDependant { category = ElderlyDependant }
+    | "attained 19, child living apart, born -999999999-01-02 and asked on -999999980-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie {
+                relationship = Child,
+                cohabitation = LivingApart { annualRemittance = Yen(1) }
+            },
+            TotalIncome(0),
+            Date("-999999980-01-01")
+        )
+        -> TaxDependant { category = SpecifiedDependant }
+    | "attained 19, child living apart, born -999999999-01-02 and asked on -999999980-01-02"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie {
+                relationship = Child,
+                cohabitation = LivingApart { annualRemittance = Yen(1) }
+            },
+            TotalIncome(0),
+            Date("-999999980-01-02")
+        )
+        -> TaxDependant { category = SpecifiedDependant }
+    | "attained 18, child living apart, born -999999999-01-02 and asked on -999999981-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie {
+                relationship = Child,
+                cohabitation = LivingApart { annualRemittance = Yen(1) }
+            },
+            TotalIncome(0),
+            Date("-999999981-01-01")
+        )
+        -> TaxDependant { category = GeneralDependant }
+    | "attained 17, child living apart, born -999999999-01-02 and asked on -999999982-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie {
+                relationship = Child,
+                cohabitation = LivingApart { annualRemittance = Yen(1) }
+            },
+            TotalIncome(0),
+            Date("-999999982-01-01")
+        )
+        -> TaxDependant { category = GeneralDependant }
+    | "attained 23, child living apart, born -999999999-01-02 and asked on -999999976-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie {
+                relationship = Child,
+                cohabitation = LivingApart { annualRemittance = Yen(1) }
+            },
+            TotalIncome(0),
+            Date("-999999976-01-01")
+        )
+        -> TaxDependant { category = GeneralDependant }
+    | "attained 23, child living apart, born -999999999-01-02 and asked on -999999976-01-02"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie {
+                relationship = Child,
+                cohabitation = LivingApart { annualRemittance = Yen(1) }
+            },
+            TotalIncome(0),
+            Date("-999999976-01-02")
+        )
+        -> TaxDependant { category = GeneralDependant }
+    | "attained 22, child living apart, born -999999999-01-02 and asked on -999999977-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-02"),
+                disability = Disabled
+            },
+            RelativeTie {
+                relationship = Child,
+                cohabitation = LivingApart { annualRemittance = Yen(1) }
+            },
+            TotalIncome(0),
+            Date("-999999977-01-01")
+        )
+        -> TaxDependant { category = SpecifiedDependant }
+    | "attained 16, spouse, born -999999999-01-04 and asked on -999999983-01-03"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-04"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            TotalIncome(0),
+            Date("-999999983-01-03")
+        )
+        -> TaxDependencyBlocked { reasons = [ SpouseIsDeductedSeparately ] }
+    | "attained 15, spouse, born -999999999-01-04 and asked on -999999983-01-02"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-01-04"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            TotalIncome(0),
+            Date("-999999983-01-02")
+        )
+        -> TaxDependencyBlocked { reasons = [ SpouseIsDeductedSeparately, UnderSixteen ] }
+    | "attained 15, spouse, born -999999999-02-03 and asked on -999999983-02-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-03"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            TotalIncome(0),
+            Date("-999999983-02-01")
+        )
+        -> TaxDependencyBlocked { reasons = [ SpouseIsDeductedSeparately, UnderSixteen ] }
+    | "attained 16, spouse, born -999999999-02-02 and asked on -999999983-02-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            TotalIncome(0),
+            Date("-999999983-02-01")
+        )
+        -> TaxDependencyBlocked { reasons = [ SpouseIsDeductedSeparately ] }
+    | "attained -1, spouse, born 2000-01-04 and asked on 2000-01-02"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("2000-01-04"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Spouse, cohabitation = LivingTogether },
+            TotalIncome(0),
+            Date("2000-01-02")
+        )
+        -> TaxDependencyBlocked { reasons = [ SpouseIsDeductedSeparately, UnderSixteen ] }
