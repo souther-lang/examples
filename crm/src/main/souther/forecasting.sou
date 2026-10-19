@@ -668,6 +668,9 @@ example quotaGap
     | "a quota of a few cents is still a quota" :
         (q3Forecast, Quota(0.50m), FiscalPeriod("FY26-Q3"))
         -> OnTrack { attainment = Attainment(999) }
+    | "a quarter whose deals add up to nothing is short by the whole quota, at nought" :
+        (decForecast, Quota(1.00m), FiscalPeriod("FY00-Q4"))
+        -> ShortOfQuota { gap = Amount(1.00m), attainment = Attainment(0) }
 
 // The same question with the quota read rather than passed: read, compute, answer. This is the shape every
 // behavior in this project that touches the outside world has, and the only reason quotaGap exists beside it is

@@ -1144,6 +1144,9 @@ example closeWon
     | "and a higher floor closes exactly at that floor too" :
         (NegotiationReview { ...acmeInNegotiation, floorAmount = Amount(4200001.00m) }, Date("2026-09-20"), Amount(4200001.00m))
         -> ClosedWon { ...acmeInNegotiation, closedOn = Date("2026-09-20"), wonAmount = Amount(4200001.00m) }
+    | "a negotiation with a floor of nothing closes at any amount" :
+        (NegotiationReview { ...acmeInNegotiation, floorAmount = Amount(0.00m) }, Date("2026-09-20"), Amount(4500000.00m))
+        -> ClosedWon { ...acmeInNegotiation, closedOn = Date("2026-09-20"), wonAmount = Amount(4500000.00m) }
 
 // Every open stage spreads OpportunityCommon, so the sum carries that part and the loss is written once
 // rather than per stage. What a win/loss review reads first is the stage the deal was lost at, and it is

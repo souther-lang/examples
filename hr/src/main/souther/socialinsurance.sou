@@ -1122,6 +1122,18 @@ example judgeOccasionalRevision
     | "a revision to the highest grade carries pension grade 32" :
         (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...pay300k, baseSalary = Yen(1360000) }))
         -> GradeDecision { basis = OccasionalRevision, standard = Yen(1390000), health = HealthGrade(50), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "three empty months with a variable allowance of 188,999 yen average just under the grade 2 bound, and every block is reported" :
+        (GradeDecision { basis = OnAcquisition, standard = Yen(0), health = HealthGrade(1), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2000-01-01")) },
+         Yen(0),
+         ThreeMonthWindow {
+             first = MonthlyPayRecord { month = ContributionMonth(Date("2000-01-01")), paidBaseDays = PaidBaseDays(0), remuneration = MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) } },
+             second = MonthlyPayRecord { month = ContributionMonth(Date("2000-01-01")), paidBaseDays = PaidBaseDays(0), remuneration = MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) } },
+             third = MonthlyPayRecord { month = ContributionMonth(Date("2000-01-01")), paidBaseDays = PaidBaseDays(0), remuneration = MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(188999) } } })
+        -> RevisionNotRequired { reasons = [ FixedWageUnchanged
+                                           , PaidDaysBelowSeventeen { month = ContributionMonth(Date("2000-01-01")), days = PaidBaseDays(0) }
+                                           , PaidDaysBelowSeventeen { month = ContributionMonth(Date("2000-01-01")), days = PaidBaseDays(0) }
+                                           , PaidDaysBelowSeventeen { month = ContributionMonth(Date("2000-01-01")), days = PaidBaseDays(0) }
+                                           , GradeDifferenceBelowTwo { current = HealthGrade(1), computed = HealthGrade(1) } ] }
 
 fake contributionRatesOf
     | (PrefectureCode("13"), Date("2026-07-01"))

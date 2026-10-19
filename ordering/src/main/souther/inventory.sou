@@ -289,6 +289,10 @@ example toCases
         (Eaches(0), PackSize(12)) -> Shippable { cases = Cases(0) }
     | "a pack size of one never leaves a remainder" :
         (Eaches(7), PackSize(1)) -> Shippable { cases = Cases(7) }
+    | "nothing to ship under a pack size of one is no cases" :
+        (Eaches(0), PackSize(1)) -> Shippable { cases = Cases(0) }
+    | "fewer units than a case leaves all of them over" :
+        (Eaches(2), PackSize(3)) -> PartialCase { leftover = Eaches(2) }
 
 // === putAway: a passed item onto a shelf location ===
 // A shelf location (aisle-bay-level, e.g. A-03-12). An inspected-and-passed barcode is put away to the
