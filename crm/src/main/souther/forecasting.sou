@@ -157,6 +157,18 @@ example periodOf
     | "a date two months before the start month is in the last quarter of the year that began the spring before" :
         (Date("2026-01-15"), 4)
         -> FiscalPeriod("FY25-Q4")
+    | "December is the last month of a year that starts in January" :
+        (Date("2000-12-01"), 1)
+        -> FiscalPeriod("FY00-Q4")
+    | "December is still the last quarter of a year that started in February" :
+        (Date("2000-12-01"), 2)
+        -> FiscalPeriod("FY00-Q4")
+    | "a month nought is refused whatever the date" :
+        (Date("2000-12-01"), 0)
+        -> InvalidFiscalYearStart
+    | "a thirteenth month is refused whatever the date" :
+        (Date("2000-12-01"), 13)
+        -> InvalidFiscalYearStart
 
 // === Reading a deal ===
 // An imported behavior that depends on nothing is called by name, and categoryRollupOf below does exactly
@@ -256,6 +268,45 @@ let weightedForecast (owner, opps, fiscalYearStartMonth, rates) = {
              , dealCount = List.length(opps)
              }
 }
+
+// One deal in each open stage, worth nothing and closing at the end of the year: the amount is out of the
+// way, so what a row shows is the stage and the month the fiscal year starts in.
+// The deal is opened earlier in the same year, because a deal cannot close before it opened.
+let decProspecting = Prospecting
+    { ...acme, amount = Amount(0.00m), closeDate = Date("2000-12-01"), openedOn = Date("2000-01-01") }
+let decQualification = Qualification
+    { ...acmeQualified, amount = Amount(0.00m), closeDate = Date("2000-12-01"), openedOn = Date("2000-01-01") }
+let decNeedsAnalysis = NeedsAnalysis
+    { ...acmeDiscovered, amount = Amount(0.00m), closeDate = Date("2000-12-01"), openedOn = Date("2000-01-01") }
+let decValueProposition = ValueProposition
+    { ...acmeValued, amount = Amount(0.00m), closeDate = Date("2000-12-01"), openedOn = Date("2000-01-01") }
+let decIdDecisionMakers = IdDecisionMakers
+    { ...acmeIdentified, amount = Amount(0.00m), closeDate = Date("2000-12-01"), openedOn = Date("2000-01-01") }
+let decPerceptionAnalysis = PerceptionAnalysis
+    { ...acmeChampioned, amount = Amount(0.00m), closeDate = Date("2000-12-01"), openedOn = Date("2000-01-01") }
+let decProposalPriceQuote = ProposalPriceQuote
+    { ...acmeQuoted, amount = Amount(0.00m), closeDate = Date("2000-12-01"), openedOn = Date("2000-01-01") }
+// The floor is at or below the ask, so a deal worth nothing has a floor of nothing.
+let decNegotiationReview = NegotiationReview
+    { ...acmeInNegotiation, amount = Amount(0.00m), closeDate = Date("2000-12-01"), openedOn = Date("2000-01-01")
+    , floorAmount = Amount(0.00m) }
+
+// What a forecast of one deal worth nothing in December looks like when the fiscal year starts in January.
+let decForecast = Forecast
+    { owner = UserId("u-001")
+    , currency = CurrencyCode("JPY")
+    , periods = [ FiscalPeriod("FY00-Q4") ]
+    , byPeriod = Map.fromList([ (FiscalPeriod("FY00-Q4"), Amount(0.00m)) ])
+    , total = Amount(0.00m)
+    , dealCount = 1
+    }
+
+// The same deal closing in January instead, which is the first quarter of a year that starts in January.
+let janForecast = Forecast
+    { ...decForecast
+    , periods = [ FiscalPeriod("FY00-Q1") ]
+    , byPeriod = Map.fromList([ (FiscalPeriod("FY00-Q1"), Amount(0.00m)) ])
+    }
 
 example weightedForecast
     | "a deal in the first stage weighs a tenth of itself, in the quarter it closes in" :
@@ -408,6 +459,127 @@ example weightedForecast
             , total = Amount(200000.00m)
             , dealCount = 2
             }
+    // A deal worth nothing weighs nothing in every stage, and December is the last quarter of a year that
+    // starts in January. Month nought and month thirteen are refused before any deal is read.
+    | "a prospecting deal weighs nothing, in the last quarter of a calendar year" :
+        (UserId("u-001"), [ decProspecting ], 1, yenRates)
+        -> decForecast
+    | "a qualification deal weighs nothing, in the last quarter of a calendar year" :
+        (UserId("u-001"), [ decQualification ], 1, yenRates)
+        -> decForecast
+    | "a needs analysis deal weighs nothing, in the last quarter of a calendar year" :
+        (UserId("u-001"), [ decNeedsAnalysis ], 1, yenRates)
+        -> decForecast
+    | "a value proposition deal weighs nothing, in the last quarter of a calendar year" :
+        (UserId("u-001"), [ decValueProposition ], 1, yenRates)
+        -> decForecast
+    | "a decision-maker identification deal weighs nothing, in the last quarter of a calendar year" :
+        (UserId("u-001"), [ decIdDecisionMakers ], 1, yenRates)
+        -> decForecast
+    | "a perception analysis deal weighs nothing, in the last quarter of a calendar year" :
+        (UserId("u-001"), [ decPerceptionAnalysis ], 1, yenRates)
+        -> decForecast
+    | "a proposal deal weighs nothing, in the last quarter of a calendar year" :
+        (UserId("u-001"), [ decProposalPriceQuote ], 1, yenRates)
+        -> decForecast
+    | "a negotiation deal weighs nothing, in the last quarter of a calendar year" :
+        (UserId("u-001"), [ decNegotiationReview ], 1, yenRates)
+        -> decForecast
+    // December is still the last quarter when the year starts in February, and January is the first
+    // quarter of a calendar year, in every stage.
+    | "a prospecting deal closing in December is in the last quarter of a year that starts in February" :
+        (UserId("u-001"), [ decProspecting ], 2, yenRates)
+        -> decForecast
+    | "a qualification deal closing in December is in the last quarter of a year that starts in February" :
+        (UserId("u-001"), [ decQualification ], 2, yenRates)
+        -> decForecast
+    | "a needs analysis deal closing in December is in the last quarter of a year that starts in February" :
+        (UserId("u-001"), [ decNeedsAnalysis ], 2, yenRates)
+        -> decForecast
+    | "a value proposition deal closing in December is in the last quarter of a year that starts in February" :
+        (UserId("u-001"), [ decValueProposition ], 2, yenRates)
+        -> decForecast
+    | "a decision-maker identification deal closing in December is in the last quarter of a year that starts in February" :
+        (UserId("u-001"), [ decIdDecisionMakers ], 2, yenRates)
+        -> decForecast
+    | "a perception analysis deal closing in December is in the last quarter of a year that starts in February" :
+        (UserId("u-001"), [ decPerceptionAnalysis ], 2, yenRates)
+        -> decForecast
+    | "a proposal deal closing in December is in the last quarter of a year that starts in February" :
+        (UserId("u-001"), [ decProposalPriceQuote ], 2, yenRates)
+        -> decForecast
+    | "a negotiation deal closing in December is in the last quarter of a year that starts in February" :
+        (UserId("u-001"), [ decNegotiationReview ], 2, yenRates)
+        -> decForecast
+    | "a qualification deal closing in January is in the first quarter of a calendar year" :
+        (UserId("u-001"), [ Qualification { ...decQualification, closeDate = Date("2000-01-01") } ], 1, yenRates)
+        -> janForecast
+    | "a needs analysis deal closing in January is in the first quarter of a calendar year" :
+        (UserId("u-001"), [ NeedsAnalysis { ...decNeedsAnalysis, closeDate = Date("2000-01-01") } ], 1, yenRates)
+        -> janForecast
+    | "a value proposition deal closing in January is in the first quarter of a calendar year" :
+        (UserId("u-001"), [ ValueProposition { ...decValueProposition, closeDate = Date("2000-01-01") } ], 1, yenRates)
+        -> janForecast
+    | "a decision-maker identification deal closing in January is in the first quarter of a calendar year" :
+        (UserId("u-001"), [ IdDecisionMakers { ...decIdDecisionMakers, closeDate = Date("2000-01-01") } ], 1, yenRates)
+        -> janForecast
+    | "a perception analysis deal closing in January is in the first quarter of a calendar year" :
+        (UserId("u-001"), [ PerceptionAnalysis { ...decPerceptionAnalysis, closeDate = Date("2000-01-01") } ], 1, yenRates)
+        -> janForecast
+    | "a proposal deal closing in January is in the first quarter of a calendar year" :
+        (UserId("u-001"), [ ProposalPriceQuote { ...decProposalPriceQuote, closeDate = Date("2000-01-01") } ], 1, yenRates)
+        -> janForecast
+    | "a negotiation deal closing in January is in the first quarter of a calendar year" :
+        (UserId("u-001"), [ NegotiationReview { ...decNegotiationReview, closeDate = Date("2000-01-01") } ], 1, yenRates)
+        -> janForecast
+    | "a prospecting deal is refused with month nought" :
+        (UserId("u-001"), [ decProspecting ], 0, yenRates)
+        -> InvalidFiscalYearStart
+    | "a qualification deal is refused with month nought" :
+        (UserId("u-001"), [ decQualification ], 0, yenRates)
+        -> InvalidFiscalYearStart
+    | "a needs analysis deal is refused with month nought" :
+        (UserId("u-001"), [ decNeedsAnalysis ], 0, yenRates)
+        -> InvalidFiscalYearStart
+    | "a value proposition deal is refused with month nought" :
+        (UserId("u-001"), [ decValueProposition ], 0, yenRates)
+        -> InvalidFiscalYearStart
+    | "a decision-maker identification deal is refused with month nought" :
+        (UserId("u-001"), [ decIdDecisionMakers ], 0, yenRates)
+        -> InvalidFiscalYearStart
+    | "a perception analysis deal is refused with month nought" :
+        (UserId("u-001"), [ decPerceptionAnalysis ], 0, yenRates)
+        -> InvalidFiscalYearStart
+    | "a proposal deal is refused with month nought" :
+        (UserId("u-001"), [ decProposalPriceQuote ], 0, yenRates)
+        -> InvalidFiscalYearStart
+    | "a negotiation deal is refused with month nought" :
+        (UserId("u-001"), [ decNegotiationReview ], 0, yenRates)
+        -> InvalidFiscalYearStart
+    | "a prospecting deal is refused with month thirteen" :
+        (UserId("u-001"), [ decProspecting ], 13, yenRates)
+        -> InvalidFiscalYearStart
+    | "a qualification deal is refused with month thirteen" :
+        (UserId("u-001"), [ decQualification ], 13, yenRates)
+        -> InvalidFiscalYearStart
+    | "a needs analysis deal is refused with month thirteen" :
+        (UserId("u-001"), [ decNeedsAnalysis ], 13, yenRates)
+        -> InvalidFiscalYearStart
+    | "a value proposition deal is refused with month thirteen" :
+        (UserId("u-001"), [ decValueProposition ], 13, yenRates)
+        -> InvalidFiscalYearStart
+    | "a decision-maker identification deal is refused with month thirteen" :
+        (UserId("u-001"), [ decIdDecisionMakers ], 13, yenRates)
+        -> InvalidFiscalYearStart
+    | "a perception analysis deal is refused with month thirteen" :
+        (UserId("u-001"), [ decPerceptionAnalysis ], 13, yenRates)
+        -> InvalidFiscalYearStart
+    | "a proposal deal is refused with month thirteen" :
+        (UserId("u-001"), [ decProposalPriceQuote ], 13, yenRates)
+        -> InvalidFiscalYearStart
+    | "a negotiation deal is refused with month thirteen" :
+        (UserId("u-001"), [ decNegotiationReview ], 13, yenRates)
+        -> InvalidFiscalYearStart
 
 // === categoryRollup ===
 // The forecast categories are what a sales manager reads before the numbers: pipeline is everything, best case
@@ -550,6 +722,9 @@ example quotaGap
     | "a quota of a few cents is still a quota" :
         (q3Forecast, Quota(0.50m), FiscalPeriod("FY26-Q3"))
         -> OnTrack { attainment = Attainment(999) }
+    | "a quarter whose deals add up to nothing is short by the whole quota, at nought" :
+        (decForecast, Quota(1.00m), FiscalPeriod("FY00-Q4"))
+        -> ShortOfQuota { gap = Amount(1.00m), attainment = Attainment(0) }
 
 // The same question with the quota read rather than passed: read, compute, answer. This is the shape every
 // behavior in this project that touches the outside world has, and the only reason quotaGap exists beside it is

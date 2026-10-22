@@ -419,6 +419,16 @@ example settle
         , Payment { invoiceNo = InvoiceNo("INV-2026-000042"), paidOn = Date("2026-08-19"),
                     amount = Amount(0.0m) })
             -> PartPaid { invoiceNo = InvoiceNo("INV-2026-000042"), outstanding = Amount(346.0m) }
+    | "an invoice for nothing paid with nothing is settled, however early" :
+        (Invoice { ...julyInvoice, gross = Amount(0m) }
+        , Payment { invoiceNo = InvoiceNo("INV-0000-000000"), paidOn = Date("1970-01-01"),
+                    amount = Amount(0m) })
+            -> Settled { invoiceNo = InvoiceNo("INV-2026-000042"), daysEarly = 20689 }
+    | "anything paid against an invoice for nothing is all refund" :
+        (Invoice { ...julyInvoice, gross = Amount(0m) }
+        , Payment { invoiceNo = InvoiceNo("INV-0000-000000"), paidOn = Date("1970-01-01"),
+                    amount = Amount(1m) })
+            -> Overpaid { invoiceNo = InvoiceNo("INV-2026-000042"), refundDue = Amount(1m) }
 
 // === ageing: the ledger read by how late it is ===
 // Collections works from buckets, so the report states each one rather than a list the caller has to

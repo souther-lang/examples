@@ -131,6 +131,20 @@ example convertLead
         -> ConversionBlocked
             { reasons = [ BudgetNotConfirmed
                         , CloseDateInPast { requested = Date("2026-06-01") } ] }
+    | "a close date the day before the conversion is blocked" :
+        (acmeQualifiedLead,
+         ConversionRequest { ...conversionRequest, convertedOn = Date("2026-07-20")
+                           , intent = OpportunityRequested { amount = Amount(500000.00m)
+                                                           , closeDate = Date("2026-07-19") } },
+         noAccounts, noContacts)
+        -> ConversionBlocked { reasons = [ CloseDateInPast { requested = Date("2026-07-19") } ] }
+    | "a close date on the day of the conversion is not in the past" :
+        (acmeQualifiedLead,
+         ConversionRequest { ...conversionRequest, convertedOn = Date("2026-07-20")
+                           , intent = OpportunityRequested { amount = Amount(500000.00m)
+                                                           , closeDate = Date("2026-07-20") } },
+         noAccounts, noContacts)
+        -> LeadConverted
     | "an account already on this domain blocks the conversion and names the account" :
         (QualifiedLead { ...acmeQualifiedLead
                        , reach = EmailOnly { email = EmailAddress("h@beta.example.com") } },

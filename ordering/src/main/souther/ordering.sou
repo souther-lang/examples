@@ -135,6 +135,26 @@ example report
             [ LineItem { sku = Sku("pen"), quantity = 1, unitPrice = 1000, weightGrams = 10 } ]
             , total = 1000 })
         -> SalesReport { total = 1000, distinctSkus = [ "pen" ], lineCount = 1, highValueLines = 1 }
+    | "a line with no quantity and no price is worth nothing" :
+        (RecordedOrder { orderId = OrderId("x"), items =
+            [ LineItem { sku = Sku("x"), quantity = 0, unitPrice = 0, weightGrams = 0 } ]
+            , total = 0 })
+        -> SalesReport { total = 0, distinctSkus = [ "x" ], lineCount = 1, highValueLines = 0 }
+    | "a priced line with no quantity is worth nothing" :
+        (RecordedOrder { orderId = OrderId("x"), items =
+            [ LineItem { sku = Sku("x"), quantity = 0, unitPrice = 1, weightGrams = 0 } ]
+            , total = 0 })
+        -> SalesReport { total = 0, distinctSkus = [ "x" ], lineCount = 1, highValueLines = 0 }
+    | "a free line with a quantity is worth nothing" :
+        (RecordedOrder { orderId = OrderId("x"), items =
+            [ LineItem { sku = Sku("x"), quantity = 1, unitPrice = 0, weightGrams = 0 } ]
+            , total = 0 })
+        -> SalesReport { total = 0, distinctSkus = [ "x" ], lineCount = 1, highValueLines = 0 }
+    | "a line one short of the high-value threshold is not high value" :
+        (RecordedOrder { orderId = OrderId("x"), items =
+            [ LineItem { sku = Sku("x"), quantity = 1, unitPrice = 999, weightGrams = 0 } ]
+            , total = 999 })
+        -> SalesReport { total = 999, distinctSkus = [ "x" ], lineCount = 1, highValueLines = 0 }
 
 example recordOrder
     | "order.highValue=true"  : (PricedCart { items = [], total = 0, highValue = true })
