@@ -450,3 +450,18 @@ example busyLabels
             [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("x") ], assignee = None }
             , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("x") ], assignee = None } ] }, 2)
         -> LabelUsage { counts = [ ("x", 2) ] }
+    | "a threshold of nought keeps every label" :
+        (Board { issues =
+            [ Issue { id = IssueId("x"), title = "x", labels = [ Label("x") ], assignee = None } ] }, 0)
+        -> LabelUsage { counts = [ ("x", 1) ] }
+    | "a label carried exactly as often as the threshold is busy" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("x") ], assignee = None }
+            , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("x") ], assignee = None }
+            , Issue { id = IssueId("i-3"), title = "c", labels = [ Label("x") ], assignee = None } ] }, 3)
+        -> LabelUsage { counts = [ ("x", 3) ] }
+    | "one issue short of the threshold is not" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("x") ], assignee = None }
+            , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("x") ], assignee = None } ] }, 3)
+        -> LabelUsage { counts = [] }

@@ -1106,6 +1106,9 @@ example openNegotiation
     | "and a larger ask can be matched too" :
         (ProposalPriceQuote { ...acmeQuoted, amount = Amount(4800001.00m) }, Date("2026-09-01"), Amount(4800001.00m))
         -> NegotiationReview { ...acmeInNegotiation, amount = Amount(4800001.00m), floorAmount = Amount(4800001.00m) }
+    | "a walk-away price of nothing opens the negotiation too" :
+        (acmeQuoted, Date("1970-01-01"), Amount(0m))
+        -> NegotiationReview { ...acmeQuoted, openedNegotiationOn = Date("1970-01-01"), floorAmount = Amount(0m) }
 
 // A deal is won out of a proposal or out of a negotiation, and the difference is exactly what the two
 // states carry: a NegotiationReview has a walk-away price, a ProposalPriceQuote does not. So the discount
