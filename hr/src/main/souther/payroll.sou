@@ -416,3 +416,5 @@ example taxableAmount
         (MonthlyRemuneration { baseSalary = Yen(100000), scheduledAllowances = Yen(30000), commutingAllowance = Yen(0), excludedAllowances = Yen(7000), variableAllowances = Yen(3000) }, Yen(0), Yen(140000)) -> Yen(0)
     | "every kind of pay and an uplift with an over-ceiling commuting allowance, spent by exactly the premium" :
         (MonthlyRemuneration { baseSalary = Yen(20000), scheduledAllowances = Yen(3000), commutingAllowance = Yen(150001), excludedAllowances = Yen(1000), variableAllowances = Yen(500) }, Yen(700), Yen(25201)) -> Yen(0)
+    | "a premium of a single yen comes off a commuting allowance under the ceiling" :
+        (pay300k, Yen(0), Yen(1)) -> Yen(284999)

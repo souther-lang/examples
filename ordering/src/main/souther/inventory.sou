@@ -208,6 +208,12 @@ example stockFrom
             -> WentNegative { sku = Sku("apple"), shortBy = 0 - 2 }
     | "no movements is an empty snapshot, not an absent one" :
         ([]) -> StockSnapshot { rows = [] }
+    | "a single unit issued from nothing is one short" :
+        ([ Issue { sku = Sku("x"), quantity = Eaches(1) } ])
+            -> WentNegative { sku = Sku("x"), shortBy = 0 - 1 }
+    | "a receipt of nothing leaves the sku at nought, which is not below it" :
+        ([ Receipt { sku = Sku("x"), quantity = Eaches(0) } ])
+            -> StockSnapshot { rows = [ StockLine { sku = Sku("x"), quantity = Eaches(0) } ] }
 
 // === inspectBarcode: barcode read verification ===
 // On receiving, a barcode (JAN / EAN-13) is scanned. If the check digit does not match, the read is

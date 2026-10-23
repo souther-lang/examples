@@ -1620,3 +1620,63 @@ example classifyTaxDependant
             Date("2000-01-02")
         )
         -> TaxDependencyBlocked { reasons = [ SpouseIsDeductedSeparately, UnderSixteen ] }
+    | "attained 18, a disabled child living apart on a remittance, born -999999999-02-02 and asked on -999999980-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Child, cohabitation = LivingApart { annualRemittance = Yen(1) } },
+            TotalIncome(0),
+            Date("-999999980-01-01")
+        )
+        -> TaxDependant { category = GeneralDependant }
+    | "attained 19, a disabled child living apart on a remittance, born -999999999-02-02 and asked on -999999979-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Child, cohabitation = LivingApart { annualRemittance = Yen(1) } },
+            TotalIncome(0),
+            Date("-999999979-01-01")
+        )
+        -> TaxDependant { category = SpecifiedDependant }
+    | "attained 22, a disabled child living apart on a remittance, born -999999999-02-02 and asked on -999999976-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Child, cohabitation = LivingApart { annualRemittance = Yen(1) } },
+            TotalIncome(0),
+            Date("-999999976-01-01")
+        )
+        -> TaxDependant { category = SpecifiedDependant }
+    | "attained 23, a disabled child living apart on a remittance, born -999999999-02-02 and asked on -999999975-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Child, cohabitation = LivingApart { annualRemittance = Yen(1) } },
+            TotalIncome(0),
+            Date("-999999975-01-01")
+        )
+        -> TaxDependant { category = GeneralDependant }
+    | "attained 24, a disabled child living apart on a remittance, born -999999999-02-02 and asked on -999999974-01-01"
+        : (
+            DependantPerson {
+                name = PersonalName { name = PersonName("x"), kana = KanaName(" ") },
+                birthday = Date("-999999999-02-02"),
+                disability = Disabled
+            },
+            RelativeTie { relationship = Child, cohabitation = LivingApart { annualRemittance = Yen(1) } },
+            TotalIncome(0),
+            Date("-999999974-01-01")
+        )
+        -> TaxDependant { category = GeneralDependant }

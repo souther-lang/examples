@@ -963,6 +963,116 @@ example judgeCoverage
             Date("1875-01-01")
         )
         -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "attained 74, born -999999999-01-04 and asked on -999999924-01-01"
+        : (
+            EmploymentTerms {
+                officeId = OfficeId("00-000000"),
+                employmentType = FullTime,
+                weeklyHours = WeeklyScheduledHours(0m),
+                contract = Indefinite,
+                student = DaytimeStudent
+            },
+            MonthlyRemuneration {
+                baseSalary = Yen(0),
+                scheduledAllowances = Yen(0),
+                commutingAllowance = Yen(0),
+                excludedAllowances = Yen(0),
+                variableAllowances = Yen(0)
+            },
+            Office { id = OfficeId("00-000000"), prefecture = PrefectureCode("01"), insuredCount = 0 },
+            WeeklyScheduledHours(0m),
+            Date("-999999999-01-04"),
+            Date("-999999924-01-01")
+        )
+        -> Covered { route = RegularRoute, scope = HealthOnly }
+    | "attained 75, born -999999999-01-02 and asked on -999999924-01-02"
+        : (
+            EmploymentTerms {
+                officeId = OfficeId("00-000000"),
+                employmentType = FullTime,
+                weeklyHours = WeeklyScheduledHours(0m),
+                contract = Indefinite,
+                student = DaytimeStudent
+            },
+            MonthlyRemuneration {
+                baseSalary = Yen(0),
+                scheduledAllowances = Yen(0),
+                commutingAllowance = Yen(0),
+                excludedAllowances = Yen(0),
+                variableAllowances = Yen(0)
+            },
+            Office { id = OfficeId("00-000000"), prefecture = PrefectureCode("01"), insuredCount = 0 },
+            WeeklyScheduledHours(0m),
+            Date("-999999999-01-02"),
+            Date("-999999924-01-02")
+        )
+        -> CoverageNotRequired { reasons = [ AttainedSeventyFive ] }
+    | "attained 70, twenty hours short of three quarters of 27.67 and every short-time condition met at its floor"
+        : (
+            EmploymentTerms {
+                officeId = OfficeId("00-000000"),
+                employmentType = ContractEmployee,
+                weeklyHours = WeeklyScheduledHours(20m),
+                contract = Indefinite,
+                student = NotDaytimeStudent
+            },
+            MonthlyRemuneration {
+                baseSalary = Yen(0),
+                scheduledAllowances = Yen(88000),
+                commutingAllowance = Yen(0),
+                excludedAllowances = Yen(0),
+                variableAllowances = Yen(0)
+            },
+            Office { id = OfficeId("00-000000"), prefecture = PrefectureCode("01"), insuredCount = 51 },
+            WeeklyScheduledHours(27.6666666666666666666666666666666666m),
+            Date("-999999999-01-02"),
+            Date("-999999929-01-01")
+        )
+        -> Covered { route = ShortTimeRoute, scope = HealthOnly }
+    | "attained 75, born -999999999-01-04 and asked on -999999924-01-03"
+        : (
+            EmploymentTerms {
+                officeId = OfficeId("00-000000"),
+                employmentType = FullTime,
+                weeklyHours = WeeklyScheduledHours(0m),
+                contract = Indefinite,
+                student = DaytimeStudent
+            },
+            MonthlyRemuneration {
+                baseSalary = Yen(0),
+                scheduledAllowances = Yen(0),
+                commutingAllowance = Yen(0),
+                excludedAllowances = Yen(0),
+                variableAllowances = Yen(0)
+            },
+            Office { id = OfficeId("00-000000"), prefecture = PrefectureCode("01"), insuredCount = 0 },
+            WeeklyScheduledHours(0m),
+            Date("-999999999-01-04"),
+            Date("-999999924-01-03")
+        )
+        -> CoverageNotRequired { reasons = [ AttainedSeventyFive ] }
+    | "attained 74, born -999999999-01-04 and asked on -999999924-01-02"
+        : (
+            EmploymentTerms {
+                officeId = OfficeId("00-000000"),
+                employmentType = FullTime,
+                weeklyHours = WeeklyScheduledHours(0m),
+                contract = Indefinite,
+                student = DaytimeStudent
+            },
+            MonthlyRemuneration {
+                baseSalary = Yen(0),
+                scheduledAllowances = Yen(0),
+                commutingAllowance = Yen(0),
+                excludedAllowances = Yen(0),
+                variableAllowances = Yen(0)
+            },
+            Office { id = OfficeId("00-000000"), prefecture = PrefectureCode("01"), insuredCount = 0 },
+            WeeklyScheduledHours(0m),
+            Date("-999999999-01-04"),
+            Date("-999999924-01-02")
+        )
+        -> Covered { route = RegularRoute, scope = HealthOnly }
 
 // The pair a day apart. Both people worked the same March; one of them pays for it.
 example finalContributionMonth
@@ -1030,6 +1140,12 @@ example decideRegularly
     | "three months of sixteen paid days leave no month to average" :
         (ThreeMonthWindow { first = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-04-01")), paidBaseDays = PaidBaseDays(16), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(260000) } }, second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01")), paidBaseDays = PaidBaseDays(16), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(260000) } }, third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")), paidBaseDays = PaidBaseDays(16), remuneration = MonthlyRemuneration { ...pay300k, baseSalary = Yen(260000) } } })
         -> NoPayableMonth
+    | "one month of eighteen paid days and nothing paid in it is grade 1 from September" :
+        (ThreeMonthWindow {
+             first = MonthlyPayRecord { month = ContributionMonth(Date("2000-01-01")), paidBaseDays = PaidBaseDays(18), remuneration = MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) } },
+             second = MonthlyPayRecord { month = ContributionMonth(Date("2000-01-01")), paidBaseDays = PaidBaseDays(0), remuneration = MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) } },
+             third = MonthlyPayRecord { month = ContributionMonth(Date("2000-01-01")), paidBaseDays = PaidBaseDays(0), remuneration = MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) } } })
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(58000), health = HealthGrade(1), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2000-09-01")) }
 
 let currentGrade22 = GradeDecision
     { basis = RegularDetermination
@@ -2328,6 +2444,309 @@ example acquireCoverage
     | "baseSalary 1,320,002, variableAllowances 34,998: 1,355,000 yen in all, health grade 50, pension grade 32" :
         (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(1320002), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(34998) }, Date("2000-01-01"))
         -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(1390000), health = HealthGrade(50), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "baseSalary 130,000: 130,000 yen in all, health grade 10, pension grade 7" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(130000), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(134000), health = HealthGrade(10), pension = PensionGrade(7), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "baseSalary 370,000: 370,000 yen in all, health grade 26, pension grade 23" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(370000), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(380000), health = HealthGrade(26), pension = PensionGrade(23), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 101,000: 101,000 yen in all, health grade 6, pension grade 3" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(101000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(104000), health = HealthGrade(6), pension = PensionGrade(3), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 107,000: 107,000 yen in all, health grade 7, pension grade 4" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(107000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(110000), health = HealthGrade(7), pension = PensionGrade(4), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 114,000: 114,000 yen in all, health grade 8, pension grade 5" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(114000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(118000), health = HealthGrade(8), pension = PensionGrade(5), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 130,000: 130,000 yen in all, health grade 10, pension grade 7" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(130000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(134000), health = HealthGrade(10), pension = PensionGrade(7), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 138,000: 138,000 yen in all, health grade 11, pension grade 8" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(138000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(142000), health = HealthGrade(11), pension = PensionGrade(8), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 146,000: 146,000 yen in all, health grade 12, pension grade 9" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(146000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(150000), health = HealthGrade(12), pension = PensionGrade(9), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 165,000: 165,000 yen in all, health grade 14, pension grade 11" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(165000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(170000), health = HealthGrade(14), pension = PensionGrade(11), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 175,000: 175,000 yen in all, health grade 15, pension grade 12" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(175000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(180000), health = HealthGrade(15), pension = PensionGrade(12), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 195,000: 195,000 yen in all, health grade 17, pension grade 14" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(195000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(200000), health = HealthGrade(17), pension = PensionGrade(14), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 250,000: 250,000 yen in all, health grade 20, pension grade 17" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(250000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(260000), health = HealthGrade(20), pension = PensionGrade(17), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 270,000: 270,000 yen in all, health grade 21, pension grade 18" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(270000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(280000), health = HealthGrade(21), pension = PensionGrade(18), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 290,000: 290,000 yen in all, health grade 22, pension grade 19" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(290000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(300000), health = HealthGrade(22), pension = PensionGrade(19), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 310,000: 310,000 yen in all, health grade 23, pension grade 20" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(310000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(320000), health = HealthGrade(23), pension = PensionGrade(20), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 330,000: 330,000 yen in all, health grade 24, pension grade 21" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(330000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(340000), health = HealthGrade(24), pension = PensionGrade(21), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 350,000: 350,000 yen in all, health grade 25, pension grade 22" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(350000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(360000), health = HealthGrade(25), pension = PensionGrade(22), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 370,000: 370,000 yen in all, health grade 26, pension grade 23" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(370000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(380000), health = HealthGrade(26), pension = PensionGrade(23), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 395,000: 395,000 yen in all, health grade 27, pension grade 24" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(395000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(410000), health = HealthGrade(27), pension = PensionGrade(24), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 425,000: 425,000 yen in all, health grade 28, pension grade 25" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(425000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(440000), health = HealthGrade(28), pension = PensionGrade(25), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 455,000: 455,000 yen in all, health grade 29, pension grade 26" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(455000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(470000), health = HealthGrade(29), pension = PensionGrade(26), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 485,000: 485,000 yen in all, health grade 30, pension grade 27" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(485000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(500000), health = HealthGrade(30), pension = PensionGrade(27), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 515,000: 515,000 yen in all, health grade 31, pension grade 28" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(515000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(530000), health = HealthGrade(31), pension = PensionGrade(28), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 545,000: 545,000 yen in all, health grade 32, pension grade 29" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(545000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(560000), health = HealthGrade(32), pension = PensionGrade(29), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 575,000: 575,000 yen in all, health grade 33, pension grade 30" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(575000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(590000), health = HealthGrade(33), pension = PensionGrade(30), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 605,000: 605,000 yen in all, health grade 34, pension grade 31" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(605000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(620000), health = HealthGrade(34), pension = PensionGrade(31), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 635,000: 635,000 yen in all, health grade 35, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(635000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(650000), health = HealthGrade(35), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 665,000: 665,000 yen in all, health grade 36, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(665000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(680000), health = HealthGrade(36), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 695,000: 695,000 yen in all, health grade 37, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(695000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(710000), health = HealthGrade(37), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 730,000: 730,000 yen in all, health grade 38, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(730000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(750000), health = HealthGrade(38), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 770,000: 770,000 yen in all, health grade 39, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(770000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(790000), health = HealthGrade(39), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 810,000: 810,000 yen in all, health grade 40, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(810000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(830000), health = HealthGrade(40), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 855,000: 855,000 yen in all, health grade 41, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(855000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(880000), health = HealthGrade(41), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 905,000: 905,000 yen in all, health grade 42, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(905000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(930000), health = HealthGrade(42), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 955,000: 955,000 yen in all, health grade 43, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(955000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(980000), health = HealthGrade(43), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 1,005,000: 1,005,000 yen in all, health grade 44, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(1005000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(1030000), health = HealthGrade(44), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 1,115,000: 1,115,000 yen in all, health grade 46, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(1115000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(1150000), health = HealthGrade(46), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 1,175,000: 1,175,000 yen in all, health grade 47, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(1175000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(1210000), health = HealthGrade(47), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "scheduledAllowances 1,355,000: 1,355,000 yen in all, health grade 50, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(1355000), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(1390000), health = HealthGrade(50), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 63,000: 63,000 yen in all, health grade 2, pension grade 1" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(63000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(68000), health = HealthGrade(2), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 73,000: 73,000 yen in all, health grade 3, pension grade 1" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(73000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(78000), health = HealthGrade(3), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 83,000: 83,000 yen in all, health grade 4, pension grade 1" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(83000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(88000), health = HealthGrade(4), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 93,000: 93,000 yen in all, health grade 5, pension grade 2" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(93000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(98000), health = HealthGrade(5), pension = PensionGrade(2), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 107,000: 107,000 yen in all, health grade 7, pension grade 4" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(107000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(110000), health = HealthGrade(7), pension = PensionGrade(4), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 114,000: 114,000 yen in all, health grade 8, pension grade 5" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(114000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(118000), health = HealthGrade(8), pension = PensionGrade(5), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 122,000: 122,000 yen in all, health grade 9, pension grade 6" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(122000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(126000), health = HealthGrade(9), pension = PensionGrade(6), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 130,000: 130,000 yen in all, health grade 10, pension grade 7" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(130000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(134000), health = HealthGrade(10), pension = PensionGrade(7), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 138,000: 138,000 yen in all, health grade 11, pension grade 8" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(138000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(142000), health = HealthGrade(11), pension = PensionGrade(8), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 146,000: 146,000 yen in all, health grade 12, pension grade 9" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(146000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(150000), health = HealthGrade(12), pension = PensionGrade(9), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 155,000: 155,000 yen in all, health grade 13, pension grade 10" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(155000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(160000), health = HealthGrade(13), pension = PensionGrade(10), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 175,000: 175,000 yen in all, health grade 15, pension grade 12" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(175000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(180000), health = HealthGrade(15), pension = PensionGrade(12), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 185,000: 185,000 yen in all, health grade 16, pension grade 13" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(185000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(190000), health = HealthGrade(16), pension = PensionGrade(13), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 195,000: 195,000 yen in all, health grade 17, pension grade 14" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(195000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(200000), health = HealthGrade(17), pension = PensionGrade(14), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 230,000: 230,000 yen in all, health grade 19, pension grade 16" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(230000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(240000), health = HealthGrade(19), pension = PensionGrade(16), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 250,000: 250,000 yen in all, health grade 20, pension grade 17" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(250000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(260000), health = HealthGrade(20), pension = PensionGrade(17), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 290,000: 290,000 yen in all, health grade 22, pension grade 19" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(290000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(300000), health = HealthGrade(22), pension = PensionGrade(19), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 310,000: 310,000 yen in all, health grade 23, pension grade 20" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(310000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(320000), health = HealthGrade(23), pension = PensionGrade(20), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 350,000: 350,000 yen in all, health grade 25, pension grade 22" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(350000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(360000), health = HealthGrade(25), pension = PensionGrade(22), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 370,000: 370,000 yen in all, health grade 26, pension grade 23" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(370000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(380000), health = HealthGrade(26), pension = PensionGrade(23), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 455,000: 455,000 yen in all, health grade 29, pension grade 26" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(455000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(470000), health = HealthGrade(29), pension = PensionGrade(26), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 515,000: 515,000 yen in all, health grade 31, pension grade 28" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(515000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(530000), health = HealthGrade(31), pension = PensionGrade(28), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 635,000: 635,000 yen in all, health grade 35, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(635000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(650000), health = HealthGrade(35), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "commutingAllowance 1,355,000: 1,355,000 yen in all, health grade 50, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(1355000), excludedAllowances = Yen(0), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(1390000), health = HealthGrade(50), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 101,000: 101,000 yen in all, health grade 6, pension grade 3" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(101000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(104000), health = HealthGrade(6), pension = PensionGrade(3), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 107,000: 107,000 yen in all, health grade 7, pension grade 4" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(107000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(110000), health = HealthGrade(7), pension = PensionGrade(4), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 114,000: 114,000 yen in all, health grade 8, pension grade 5" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(114000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(118000), health = HealthGrade(8), pension = PensionGrade(5), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 130,000: 130,000 yen in all, health grade 10, pension grade 7" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(130000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(134000), health = HealthGrade(10), pension = PensionGrade(7), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 138,000: 138,000 yen in all, health grade 11, pension grade 8" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(138000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(142000), health = HealthGrade(11), pension = PensionGrade(8), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 146,000: 146,000 yen in all, health grade 12, pension grade 9" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(146000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(150000), health = HealthGrade(12), pension = PensionGrade(9), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 165,000: 165,000 yen in all, health grade 14, pension grade 11" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(165000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(170000), health = HealthGrade(14), pension = PensionGrade(11), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 175,000: 175,000 yen in all, health grade 15, pension grade 12" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(175000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(180000), health = HealthGrade(15), pension = PensionGrade(12), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 195,000: 195,000 yen in all, health grade 17, pension grade 14" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(195000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(200000), health = HealthGrade(17), pension = PensionGrade(14), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 250,000: 250,000 yen in all, health grade 20, pension grade 17" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(250000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(260000), health = HealthGrade(20), pension = PensionGrade(17), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 270,000: 270,000 yen in all, health grade 21, pension grade 18" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(270000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(280000), health = HealthGrade(21), pension = PensionGrade(18), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 290,000: 290,000 yen in all, health grade 22, pension grade 19" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(290000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(300000), health = HealthGrade(22), pension = PensionGrade(19), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 310,000: 310,000 yen in all, health grade 23, pension grade 20" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(310000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(320000), health = HealthGrade(23), pension = PensionGrade(20), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 330,000: 330,000 yen in all, health grade 24, pension grade 21" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(330000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(340000), health = HealthGrade(24), pension = PensionGrade(21), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 350,000: 350,000 yen in all, health grade 25, pension grade 22" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(350000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(360000), health = HealthGrade(25), pension = PensionGrade(22), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 370,000: 370,000 yen in all, health grade 26, pension grade 23" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(370000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(380000), health = HealthGrade(26), pension = PensionGrade(23), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 395,000: 395,000 yen in all, health grade 27, pension grade 24" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(395000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(410000), health = HealthGrade(27), pension = PensionGrade(24), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 425,000: 425,000 yen in all, health grade 28, pension grade 25" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(425000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(440000), health = HealthGrade(28), pension = PensionGrade(25), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 455,000: 455,000 yen in all, health grade 29, pension grade 26" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(455000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(470000), health = HealthGrade(29), pension = PensionGrade(26), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 485,000: 485,000 yen in all, health grade 30, pension grade 27" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(485000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(500000), health = HealthGrade(30), pension = PensionGrade(27), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 515,000: 515,000 yen in all, health grade 31, pension grade 28" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(515000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(530000), health = HealthGrade(31), pension = PensionGrade(28), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 545,000: 545,000 yen in all, health grade 32, pension grade 29" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(545000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(560000), health = HealthGrade(32), pension = PensionGrade(29), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 575,000: 575,000 yen in all, health grade 33, pension grade 30" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(575000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(590000), health = HealthGrade(33), pension = PensionGrade(30), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 605,000: 605,000 yen in all, health grade 34, pension grade 31" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(605000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(620000), health = HealthGrade(34), pension = PensionGrade(31), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 635,000: 635,000 yen in all, health grade 35, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(635000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(650000), health = HealthGrade(35), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 665,000: 665,000 yen in all, health grade 36, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(665000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(680000), health = HealthGrade(36), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 695,000: 695,000 yen in all, health grade 37, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(695000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(710000), health = HealthGrade(37), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 730,000: 730,000 yen in all, health grade 38, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(730000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(750000), health = HealthGrade(38), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 770,000: 770,000 yen in all, health grade 39, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(770000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(790000), health = HealthGrade(39), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 810,000: 810,000 yen in all, health grade 40, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(810000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(830000), health = HealthGrade(40), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 855,000: 855,000 yen in all, health grade 41, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(855000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(880000), health = HealthGrade(41), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 905,000: 905,000 yen in all, health grade 42, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(905000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(930000), health = HealthGrade(42), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 955,000: 955,000 yen in all, health grade 43, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(955000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(980000), health = HealthGrade(43), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 1,005,000: 1,005,000 yen in all, health grade 44, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(1005000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(1030000), health = HealthGrade(44), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 1,115,000: 1,115,000 yen in all, health grade 46, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(1115000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(1150000), health = HealthGrade(46), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 1,175,000: 1,175,000 yen in all, health grade 47, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(1175000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(1210000), health = HealthGrade(47), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 1,295,000: 1,295,000 yen in all, health grade 49, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(1295000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(1330000), health = HealthGrade(49), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
+    | "excludedAllowances 1,355,000: 1,355,000 yen in all, health grade 50, pension grade 32" :
+        (Covered { route = RegularRoute, scope = HealthAndPension }, MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(1355000), variableAllowances = Yen(0) }, Date("2000-01-01"))
+        -> Insured { acquiredOn = Date("2000-01-01"), scope = HealthAndPension, route = RegularRoute, decision = GradeDecision { basis = OnAcquisition, standard = Yen(1390000), health = HealthGrade(50), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2000-01-01")) } }
 
 example loseCoverage
     | "a grade decided on regular determination loses coverage the day after the separation" :
@@ -2430,6 +2849,18 @@ example judgeLongTermCareCategory
         -> OutsideLongTermCare
     | "attained -1, born 1945-02-02 and asked on 1945-01-01" :
         (Date("1945-02-02"), Date("1945-01-01"))
+        -> OutsideLongTermCare
+    | "attained 39, born -999999999-01-04 and asked on -999999959-01-01" :
+        (Date("-999999999-01-04"), Date("-999999959-01-01"))
+        -> OutsideLongTermCare
+    | "attained 40, born -999999999-01-02 and asked on -999999959-01-02" :
+        (Date("-999999999-01-02"), Date("-999999959-01-02"))
+        -> LongTermCareInsured
+    | "attained 64, born -999999999-01-04 and asked on -999999934-01-01" :
+        (Date("-999999999-01-04"), Date("-999999934-01-01"))
+        -> LongTermCareInsured
+    | "attained 65, born -999999999-01-02 and asked on -999999934-01-02" :
+        (Date("-999999999-01-02"), Date("-999999934-01-02"))
         -> OutsideLongTermCare
 
 example judgePremiumExemption
