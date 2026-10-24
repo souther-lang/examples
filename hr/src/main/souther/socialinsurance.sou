@@ -1155,6 +1155,13 @@ let regularWindow = ThreeMonthWindow
     , third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")) }
     }
 
+let flatWindow (baseSalary: Int): ThreeMonthWindow =
+    ThreeMonthWindow
+        { first = MonthlyPayRecord { ...aprilRecord, paidBaseDays = PaidBaseDays(31), remuneration = MonthlyRemuneration { baseSalary = Yen(baseSalary), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) } }
+        , second = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-05-01")), paidBaseDays = PaidBaseDays(31), remuneration = MonthlyRemuneration { baseSalary = Yen(baseSalary), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) } }
+        , third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")), paidBaseDays = PaidBaseDays(31), remuneration = MonthlyRemuneration { baseSalary = Yen(baseSalary), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) } }
+        }
+
 example decideRegularly
     | "three months of 300,000 grade at 300,000, and it holds from September" :
         (regularWindow)
@@ -1200,6 +1207,24 @@ example decideRegularly
              second = MonthlyPayRecord { month = ContributionMonth(Date("2000-01-01")), paidBaseDays = PaidBaseDays(0), remuneration = MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) } },
              third = MonthlyPayRecord { month = ContributionMonth(Date("2000-01-01")), paidBaseDays = PaidBaseDays(0), remuneration = MonthlyRemuneration { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) } } })
         -> GradeDecision { basis = RegularDetermination, standard = Yen(58000), health = HealthGrade(1), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2000-09-01")) }
+    | "an average of 101,000 is on the lower bound of grade 6" :
+        (flatWindow(101000))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(104000), health = HealthGrade(6), pension = PensionGrade(3), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 100,999 is one yen under it, so it is still grade 5" :
+        (flatWindow(100999))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(98000), health = HealthGrade(5), pension = PensionGrade(2), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 1,005,000 is on the lower bound of grade 44" :
+        (flatWindow(1005000))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(1030000), health = HealthGrade(44), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 1,004,999 is one yen under it, so it is still grade 43" :
+        (flatWindow(1004999))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(980000), health = HealthGrade(43), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 1,055,000 is on the lower bound of grade 45" :
+        (flatWindow(1055000))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(1090000), health = HealthGrade(45), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 1,054,999 is one yen under it, so it is still grade 44" :
+        (flatWindow(1054999))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(1030000), health = HealthGrade(44), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
 
 let currentGrade22 = GradeDecision
     { basis = RegularDetermination
