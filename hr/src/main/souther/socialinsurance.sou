@@ -1124,6 +1124,9 @@ example judgeCoverage
     | "88,000 of scheduled wage exactly is not under the floor, and the other short-time conditions hold" :
         (shortTimeTerms, MonthlyRemuneration { ...pay110k, baseSalary = Yen(83001), scheduledAllowances = Yen(4999) }, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
         -> Covered { route = ShortTimeRoute, scope = HealthAndPension }
+    | "seventy-one though the year says seventy-two, because the birthday is yet to come" :
+        (fullTimeTerms, pay300k, tokyoOffice, ordinaryWeek, Date("1954-10-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthOnly }
 
 // The pair a day apart. Both people worked the same March; one of them pays for it.
 example finalContributionMonth
