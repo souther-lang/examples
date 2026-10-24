@@ -787,7 +787,7 @@ example judgeCoverage
     | "50,000 yen of scheduled wage is far under the floor" :
         (shortTimeTerms, MonthlyRemuneration { ...pay110k, baseSalary = Yen(45000), scheduledAllowances = Yen(5000) }, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
         -> CoverageNotRequired { reasons = [ ScheduledWageBelowFloor { wage = Yen(50000), floor = Yen(88000) } ] }
-    | "attained 74, born -999999999-01-02 and asked on -999999925-01-01"
+    | "attained 74, born 2001-01-02 and asked on 2075-01-01"
         : (
             EmploymentTerms {
                 officeId = OfficeId("00-000000"),
@@ -805,11 +805,11 @@ example judgeCoverage
             },
             Office { id = OfficeId("00-000000"), prefecture = PrefectureCode("01"), insuredCount = 0 },
             WeeklyScheduledHours(0m),
-            Date("-999999999-01-02"),
-            Date("-999999925-01-01")
+            Date("2001-01-02"),
+            Date("2075-01-01")
         )
         -> Covered { route = RegularRoute, scope = HealthOnly }
-    | "attained 76, born -999999999-02-02 and asked on -999999922-01-01"
+    | "attained 76, born 2001-02-02 and asked on 2078-01-01"
         : (
             EmploymentTerms {
                 officeId = OfficeId("00-000000"),
@@ -827,8 +827,8 @@ example judgeCoverage
             },
             Office { id = OfficeId("00-000000"), prefecture = PrefectureCode("01"), insuredCount = 0 },
             WeeklyScheduledHours(0m),
-            Date("-999999999-02-02"),
-            Date("-999999922-01-01")
+            Date("2001-02-02"),
+            Date("2078-01-01")
         )
         -> CoverageNotRequired { reasons = [ AttainedSeventyFive ] }
     | "attained 0, born 2000-01-04 and asked on 2000-01-03"
@@ -963,7 +963,7 @@ example judgeCoverage
             Date("1875-01-01")
         )
         -> Covered { route = RegularRoute, scope = HealthAndPension }
-    | "attained 74, born -999999999-01-04 and asked on -999999924-01-01"
+    | "attained 74, born 2001-01-04 and asked on 2076-01-01"
         : (
             EmploymentTerms {
                 officeId = OfficeId("00-000000"),
@@ -981,11 +981,11 @@ example judgeCoverage
             },
             Office { id = OfficeId("00-000000"), prefecture = PrefectureCode("01"), insuredCount = 0 },
             WeeklyScheduledHours(0m),
-            Date("-999999999-01-04"),
-            Date("-999999924-01-01")
+            Date("2001-01-04"),
+            Date("2076-01-01")
         )
         -> Covered { route = RegularRoute, scope = HealthOnly }
-    | "attained 75, born -999999999-01-02 and asked on -999999924-01-02"
+    | "attained 75, born 2001-01-02 and asked on 2076-01-02"
         : (
             EmploymentTerms {
                 officeId = OfficeId("00-000000"),
@@ -1003,8 +1003,8 @@ example judgeCoverage
             },
             Office { id = OfficeId("00-000000"), prefecture = PrefectureCode("01"), insuredCount = 0 },
             WeeklyScheduledHours(0m),
-            Date("-999999999-01-02"),
-            Date("-999999924-01-02")
+            Date("2001-01-02"),
+            Date("2076-01-02")
         )
         -> CoverageNotRequired { reasons = [ AttainedSeventyFive ] }
     | "attained 70, twenty hours short of three quarters of 27.67 and every short-time condition met at its floor"
@@ -1025,11 +1025,11 @@ example judgeCoverage
             },
             Office { id = OfficeId("00-000000"), prefecture = PrefectureCode("01"), insuredCount = 51 },
             WeeklyScheduledHours(27.6666666666666666666666666666666666m),
-            Date("-999999999-01-02"),
-            Date("-999999929-01-01")
+            Date("2001-01-02"),
+            Date("2071-01-01")
         )
         -> Covered { route = ShortTimeRoute, scope = HealthOnly }
-    | "attained 75, born -999999999-01-04 and asked on -999999924-01-03"
+    | "attained 75, born 2001-01-04 and asked on 2076-01-03"
         : (
             EmploymentTerms {
                 officeId = OfficeId("00-000000"),
@@ -1047,11 +1047,11 @@ example judgeCoverage
             },
             Office { id = OfficeId("00-000000"), prefecture = PrefectureCode("01"), insuredCount = 0 },
             WeeklyScheduledHours(0m),
-            Date("-999999999-01-04"),
-            Date("-999999924-01-03")
+            Date("2001-01-04"),
+            Date("2076-01-03")
         )
         -> CoverageNotRequired { reasons = [ AttainedSeventyFive ] }
-    | "attained 74, born -999999999-01-04 and asked on -999999924-01-02"
+    | "attained 74, born 2001-01-04 and asked on 2076-01-02"
         : (
             EmploymentTerms {
                 officeId = OfficeId("00-000000"),
@@ -1069,10 +1069,61 @@ example judgeCoverage
             },
             Office { id = OfficeId("00-000000"), prefecture = PrefectureCode("01"), insuredCount = 0 },
             WeeklyScheduledHours(0m),
-            Date("-999999999-01-04"),
-            Date("-999999924-01-02")
+            Date("2001-01-04"),
+            Date("2076-01-02")
         )
         -> Covered { route = RegularRoute, scope = HealthOnly }
+    | "a contract employee scheduled for 126 hours is over three quarters of an ordinary forty" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = ContractEmployee, weeklyHours = WeeklyScheduledHours(126.0m) }, pay300k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "an executive scheduled for 126 hours is covered" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = Executive, weeklyHours = WeeklyScheduledHours(126.0m) }, pay300k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "an executive with no base salary is covered, the short-time conditions are not asked" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = Executive }, MonthlyRemuneration { ...pay300k, baseSalary = Yen(0) }, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "an executive with 88,000 of scheduled allowances is covered" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = Executive }, MonthlyRemuneration { ...pay300k, scheduledAllowances = Yen(88000) }, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "a contract employee against an ordinary week of nought hours is over three quarters of it" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = ContractEmployee }, pay300k, tokyoOffice, WeeklyScheduledHours(0m), Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "a part-timer of 24 hours against an ordinary week of nought hours is over three quarters of it" :
+        (shortTimeTerms, pay110k, tokyoOffice, WeeklyScheduledHours(0m), Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "an executive against an ordinary week of nought hours is covered" :
+        (EmploymentTerms { ...fullTimeTerms, employmentType = Executive }, pay300k, tokyoOffice, WeeklyScheduledHours(0m), Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "a daytime student scheduled for 126 hours is covered" :
+        (EmploymentTerms { ...fullTimeTerms, weeklyHours = WeeklyScheduledHours(126.0m), student = DaytimeStudent }, pay300k, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "a full-timer scheduled for 126 hours with no base salary is covered" :
+        (EmploymentTerms { ...fullTimeTerms, weeklyHours = WeeklyScheduledHours(126.0m) }, MonthlyRemuneration { ...pay300k, baseSalary = Yen(0) }, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "a full-timer scheduled for nought hours with 88,000 of scheduled allowances is turned away on the hours" :
+        (EmploymentTerms { ...fullTimeTerms, weeklyHours = WeeklyScheduledHours(0m) }, MonthlyRemuneration { ...pay300k, scheduledAllowances = Yen(88000) }, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired { reasons = [ WeeklyHoursBelowTwenty { hours = WeeklyScheduledHours(0m) } ] }
+    | "a full-timer scheduled for 126 hours with 88,000 of scheduled allowances is covered" :
+        (EmploymentTerms { ...fullTimeTerms, weeklyHours = WeeklyScheduledHours(126.0m) }, MonthlyRemuneration { ...pay300k, scheduledAllowances = Yen(88000) }, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "a part-timer scheduled for 126 hours in an office of thirty is covered, the office is not asked" :
+        (EmploymentTerms { ...shortTimeTerms, weeklyHours = WeeklyScheduledHours(126.0m) }, pay110k, smallOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "a full-timer scheduled for 126 hours against an ordinary week of nought hours is covered" :
+        (EmploymentTerms { ...fullTimeTerms, weeklyHours = WeeklyScheduledHours(126.0m) }, pay300k, tokyoOffice, WeeklyScheduledHours(0m), Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "a daytime student scheduled for 40 hours with 88,000 of scheduled allowances is covered" :
+        (EmploymentTerms { ...fullTimeTerms, student = DaytimeStudent }, MonthlyRemuneration { ...pay300k, scheduledAllowances = Yen(88000) }, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "a part-timer in an office of thirty with 88,000 of scheduled allowances is turned away on the office" :
+        (shortTimeTerms, MonthlyRemuneration { ...pay110k, scheduledAllowances = Yen(88000) }, smallOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> CoverageNotRequired
+    | "a full-timer with 88,000 of scheduled allowances against an ordinary week of nought hours is covered" :
+        (fullTimeTerms, MonthlyRemuneration { ...pay300k, scheduledAllowances = Yen(88000) }, tokyoOffice, WeeklyScheduledHours(0m), Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = RegularRoute, scope = HealthAndPension }
+    | "88,000 of scheduled wage exactly is not under the floor, and the other short-time conditions hold" :
+        (shortTimeTerms, MonthlyRemuneration { ...pay110k, baseSalary = Yen(83001), scheduledAllowances = Yen(4999) }, tokyoOffice, ordinaryWeek, Date("1990-04-01"), Date("2026-07-01"))
+        -> Covered { route = ShortTimeRoute, scope = HealthAndPension }
 
 // The pair a day apart. Both people worked the same March; one of them pays for it.
 example finalContributionMonth
@@ -2820,23 +2871,23 @@ example judgeLongTermCareCategory
         (Date("1961-08-01"), Date("2026-07-31")) -> OutsideLongTermCare
     | "and one day earlier she is still insured" :
         (Date("1961-08-01"), Date("2026-07-30")) -> LongTermCareInsured
-    | "attained 39, born -999999999-01-02 and asked on -999999960-01-01" :
-        (Date("-999999999-01-02"), Date("-999999960-01-01"))
+    | "attained 39, born 2001-01-02 and asked on 2040-01-01" :
+        (Date("2001-01-02"), Date("2040-01-01"))
         -> OutsideLongTermCare
-    | "attained 40, born -999999999-02-02 and asked on -999999958-01-01" :
-        (Date("-999999999-02-02"), Date("-999999958-01-01"))
+    | "attained 40, born 2001-02-02 and asked on 2042-01-01" :
+        (Date("2001-02-02"), Date("2042-01-01"))
         -> LongTermCareInsured
-    | "attained 41, born -999999999-02-02 and asked on -999999957-01-01" :
-        (Date("-999999999-02-02"), Date("-999999957-01-01"))
+    | "attained 41, born 2001-02-02 and asked on 2043-01-01" :
+        (Date("2001-02-02"), Date("2043-01-01"))
         -> LongTermCareInsured
-    | "attained 64, born -999999999-01-02 and asked on -999999935-01-01" :
-        (Date("-999999999-01-02"), Date("-999999935-01-01"))
+    | "attained 64, born 2001-01-02 and asked on 2065-01-01" :
+        (Date("2001-01-02"), Date("2065-01-01"))
         -> LongTermCareInsured
-    | "attained 65, born -999999999-02-02 and asked on -999999933-01-01" :
-        (Date("-999999999-02-02"), Date("-999999933-01-01"))
+    | "attained 65, born 2001-02-02 and asked on 2067-01-01" :
+        (Date("2001-02-02"), Date("2067-01-01"))
         -> OutsideLongTermCare
-    | "attained 66, born -999999999-02-02 and asked on -999999932-01-01" :
-        (Date("-999999999-02-02"), Date("-999999932-01-01"))
+    | "attained 66, born 2001-02-02 and asked on 2068-01-01" :
+        (Date("2001-02-02"), Date("2068-01-01"))
         -> OutsideLongTermCare
     | "attained -1, born 2000-01-03 and asked on 2000-01-01" :
         (Date("2000-01-03"), Date("2000-01-01"))
@@ -2850,18 +2901,20 @@ example judgeLongTermCareCategory
     | "attained -1, born 1945-02-02 and asked on 1945-01-01" :
         (Date("1945-02-02"), Date("1945-01-01"))
         -> OutsideLongTermCare
-    | "attained 39, born -999999999-01-04 and asked on -999999959-01-01" :
-        (Date("-999999999-01-04"), Date("-999999959-01-01"))
+    | "attained 39, born 2001-01-04 and asked on 2041-01-01" :
+        (Date("2001-01-04"), Date("2041-01-01"))
         -> OutsideLongTermCare
-    | "attained 40, born -999999999-01-02 and asked on -999999959-01-02" :
-        (Date("-999999999-01-02"), Date("-999999959-01-02"))
+    | "attained 40, born 2001-01-02 and asked on 2041-01-02" :
+        (Date("2001-01-02"), Date("2041-01-02"))
         -> LongTermCareInsured
-    | "attained 64, born -999999999-01-04 and asked on -999999934-01-01" :
-        (Date("-999999999-01-04"), Date("-999999934-01-01"))
+    | "attained 64, born 2001-01-04 and asked on 2066-01-01" :
+        (Date("2001-01-04"), Date("2066-01-01"))
         -> LongTermCareInsured
-    | "attained 65, born -999999999-01-02 and asked on -999999934-01-02" :
-        (Date("-999999999-01-02"), Date("-999999934-01-02"))
+    | "attained 65, born 2001-01-02 and asked on 2066-01-02" :
+        (Date("2001-01-02"), Date("2066-01-02"))
         -> OutsideLongTermCare
+    | (Date("2026-02-02"), Date("2092-01-01")) -> OutsideLongTermCare
+    | (Date("1999-02-02"), Date("2065-01-01")) -> OutsideLongTermCare
 
 example judgePremiumExemption
     | "a full-timer at work owes the premium" :

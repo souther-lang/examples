@@ -677,14 +677,14 @@ example judgeInsuredCategory
         (Date("1961-08-01"), Date("2026-07-30")) -> GeneralInsured
     | "somebody of eighty is an elderly insured person" :
         (Date("1946-01-15"), Date("2026-07-01")) -> ElderlyInsured
-    | "attained 64, born -999999999-01-02 and asked on -999999935-01-01" :
-        (Date("-999999999-01-02"), Date("-999999935-01-01"))
+    | "attained 64, born 2001-01-02 and asked on 2065-01-01" :
+        (Date("2001-01-02"), Date("2065-01-01"))
         -> GeneralInsured
-    | "attained 65, born -999999999-02-02 and asked on -999999933-01-01" :
-        (Date("-999999999-02-02"), Date("-999999933-01-01"))
+    | "attained 65, born 2001-02-02 and asked on 2067-01-01" :
+        (Date("2001-02-02"), Date("2067-01-01"))
         -> ElderlyInsured
-    | "attained 66, born -999999999-02-02 and asked on -999999932-01-01" :
-        (Date("-999999999-02-02"), Date("-999999932-01-01"))
+    | "attained 66, born 2001-02-02 and asked on 2068-01-01" :
+        (Date("2001-02-02"), Date("2068-01-01"))
         -> ElderlyInsured
     | "attained 65, born 1961-02-02 and asked on 2027-01-01" :
         (Date("1961-02-02"), Date("2027-01-01"))
@@ -701,11 +701,11 @@ example judgeInsuredCategory
     | "attained -1, born 1895-02-02 and asked on 1895-01-01" :
         (Date("1895-02-02"), Date("1895-01-01"))
         -> GeneralInsured
-    | "attained 64, born -999999999-01-04 and asked on -999999934-01-01" :
-        (Date("-999999999-01-04"), Date("-999999934-01-01"))
+    | "attained 64, born 2001-01-04 and asked on 2066-01-01" :
+        (Date("2001-01-04"), Date("2066-01-01"))
         -> GeneralInsured
-    | "attained 65, born -999999999-01-02 and asked on -999999934-01-02" :
-        (Date("-999999999-01-02"), Date("-999999934-01-02"))
+    | "attained 65, born 2001-01-02 and asked on 2066-01-02" :
+        (Date("2001-01-02"), Date("2066-01-02"))
         -> ElderlyInsured
 
 example bandOfAge
@@ -737,62 +737,62 @@ example bandOfAge
         (Date("1996-08-01"), Date("2026-07-31")) -> ThirtyToThirtyFour
     | "and a day earlier he is under thirty" :
         (Date("1996-08-01"), Date("2026-07-30")) -> UnderThirty
-    | "attained 30, born -999999999-02-02 and asked on -999999968-01-01" :
-        (Date("-999999999-02-02"), Date("-999999968-01-01"))
+    | "attained 30, born 2001-02-02 and asked on 2032-01-01" :
+        (Date("2001-02-02"), Date("2032-01-01"))
         -> ThirtyToThirtyFour
-    | "attained 31, born -999999999-02-02 and asked on -999999967-01-01" :
-        (Date("-999999999-02-02"), Date("-999999967-01-01"))
+    | "attained 31, born 2001-02-02 and asked on 2033-01-01" :
+        (Date("2001-02-02"), Date("2033-01-01"))
         -> ThirtyToThirtyFour
-    | "attained 33, born -999999999-01-02 and asked on -999999966-01-01" :
-        (Date("-999999999-01-02"), Date("-999999966-01-01"))
+    | "attained 33, born 2001-01-02 and asked on 2034-01-01" :
+        (Date("2001-01-02"), Date("2034-01-01"))
         -> ThirtyToThirtyFour
-    | "attained 34, born -999999999-02-02 and asked on -999999964-01-01" :
-        (Date("-999999999-02-02"), Date("-999999964-01-01"))
+    | "attained 34, born 2001-02-02 and asked on 2036-01-01" :
+        (Date("2001-02-02"), Date("2036-01-01"))
         -> ThirtyToThirtyFour
-    | "attained 35, born -999999999-02-02 and asked on -999999963-01-01" :
-        (Date("-999999999-02-02"), Date("-999999963-01-01"))
+    | "attained 35, born 2001-02-02 and asked on 2037-01-01" :
+        (Date("2001-02-02"), Date("2037-01-01"))
         -> ThirtyFiveToFortyFour
-    | "attained 36, born -999999999-02-02 and asked on -999999962-01-01" :
-        (Date("-999999999-02-02"), Date("-999999962-01-01"))
+    | "attained 36, born 2001-02-02 and asked on 2038-01-01" :
+        (Date("2001-02-02"), Date("2038-01-01"))
         -> ThirtyFiveToFortyFour
-    | "attained 43, born -999999999-01-02 and asked on -999999956-01-01" :
-        (Date("-999999999-01-02"), Date("-999999956-01-01"))
+    | "attained 43, born 2001-01-02 and asked on 2044-01-01" :
+        (Date("2001-01-02"), Date("2044-01-01"))
         -> ThirtyFiveToFortyFour
-    | "attained 44, born -999999999-02-02 and asked on -999999954-01-01" :
-        (Date("-999999999-02-02"), Date("-999999954-01-01"))
+    | "attained 44, born 2001-02-02 and asked on 2046-01-01" :
+        (Date("2001-02-02"), Date("2046-01-01"))
         -> ThirtyFiveToFortyFour
-    | "attained 45, born -999999999-02-02 and asked on -999999953-01-01" :
-        (Date("-999999999-02-02"), Date("-999999953-01-01"))
+    | "attained 45, born 2001-02-02 and asked on 2047-01-01" :
+        (Date("2001-02-02"), Date("2047-01-01"))
         -> FortyFiveToFiftyNine
-    | "attained 46, born -999999999-02-02 and asked on -999999952-01-01" :
-        (Date("-999999999-02-02"), Date("-999999952-01-01"))
+    | "attained 46, born 2001-02-02 and asked on 2048-01-01" :
+        (Date("2001-02-02"), Date("2048-01-01"))
         -> FortyFiveToFiftyNine
-    | "attained 58, born -999999999-01-02 and asked on -999999941-01-01" :
-        (Date("-999999999-01-02"), Date("-999999941-01-01"))
+    | "attained 58, born 2001-01-02 and asked on 2059-01-01" :
+        (Date("2001-01-02"), Date("2059-01-01"))
         -> FortyFiveToFiftyNine
-    | "attained 59, born -999999999-02-02 and asked on -999999939-01-01" :
-        (Date("-999999999-02-02"), Date("-999999939-01-01"))
+    | "attained 59, born 2001-02-02 and asked on 2061-01-01" :
+        (Date("2001-02-02"), Date("2061-01-01"))
         -> FortyFiveToFiftyNine
-    | "attained 60, born -999999999-02-02 and asked on -999999938-01-01" :
-        (Date("-999999999-02-02"), Date("-999999938-01-01"))
+    | "attained 60, born 2001-02-02 and asked on 2062-01-01" :
+        (Date("2001-02-02"), Date("2062-01-01"))
         -> SixtyToSixtyFour
-    | "attained 61, born -999999999-02-02 and asked on -999999937-01-01" :
-        (Date("-999999999-02-02"), Date("-999999937-01-01"))
+    | "attained 61, born 2001-02-02 and asked on 2063-01-01" :
+        (Date("2001-02-02"), Date("2063-01-01"))
         -> SixtyToSixtyFour
-    | "attained 63, born -999999999-01-02 and asked on -999999936-01-01" :
-        (Date("-999999999-01-02"), Date("-999999936-01-01"))
+    | "attained 63, born 2001-01-02 and asked on 2064-01-01" :
+        (Date("2001-01-02"), Date("2064-01-01"))
         -> SixtyToSixtyFour
-    | "attained 64, born -999999999-02-02 and asked on -999999934-01-01" :
-        (Date("-999999999-02-02"), Date("-999999934-01-01"))
+    | "attained 64, born 2001-02-02 and asked on 2066-01-01" :
+        (Date("2001-02-02"), Date("2066-01-01"))
         -> SixtyToSixtyFour
-    | "attained 65, born -999999999-02-02 and asked on -999999933-01-01" :
-        (Date("-999999999-02-02"), Date("-999999933-01-01"))
+    | "attained 65, born 2001-02-02 and asked on 2067-01-01" :
+        (Date("2001-02-02"), Date("2067-01-01"))
         -> ElderlyJobSeeker
-    | "attained 66, born -999999999-02-02 and asked on -999999932-01-01" :
-        (Date("-999999999-02-02"), Date("-999999932-01-01"))
+    | "attained 66, born 2001-02-02 and asked on 2068-01-01" :
+        (Date("2001-02-02"), Date("2068-01-01"))
         -> ElderlyJobSeeker
-    | "attained 29, born -999999999-01-02 and asked on -999999970-01-01" :
-        (Date("-999999999-01-02"), Date("-999999970-01-01"))
+    | "attained 29, born 2001-01-02 and asked on 2030-01-01" :
+        (Date("2001-01-02"), Date("2030-01-01"))
         -> UnderThirty
     | "attained -1, born 2000-01-03 and asked on 2000-01-01" :
         (Date("2000-01-03"), Date("2000-01-01"))
@@ -806,36 +806,54 @@ example bandOfAge
     | "attained -1, born 1965-02-02 and asked on 1965-01-01" :
         (Date("1965-02-02"), Date("1965-01-01"))
         -> UnderThirty
-    | "attained 29, born -999999999-01-04 and asked on -999999969-01-01" :
-        (Date("-999999999-01-04"), Date("-999999969-01-01"))
+    | "attained 29, born 2001-01-04 and asked on 2031-01-01" :
+        (Date("2001-01-04"), Date("2031-01-01"))
         -> UnderThirty
-    | "attained 34, born -999999999-01-03 and asked on -999999964-01-01" :
-        (Date("-999999999-01-03"), Date("-999999964-01-01"))
+    | "attained 34, born 2001-01-03 and asked on 2036-01-01" :
+        (Date("2001-01-03"), Date("2036-01-01"))
         -> ThirtyToThirtyFour
-    | "attained 35, born -999999999-01-02 and asked on -999999964-01-01" :
-        (Date("-999999999-01-02"), Date("-999999964-01-01"))
+    | "attained 35, born 2001-01-02 and asked on 2036-01-01" :
+        (Date("2001-01-02"), Date("2036-01-01"))
         -> ThirtyFiveToFortyFour
-    | "attained 44, born -999999999-01-03 and asked on -999999954-01-01" :
-        (Date("-999999999-01-03"), Date("-999999954-01-01"))
+    | "attained 44, born 2001-01-03 and asked on 2046-01-01" :
+        (Date("2001-01-03"), Date("2046-01-01"))
         -> ThirtyFiveToFortyFour
-    | "attained 45, born -999999999-01-02 and asked on -999999954-01-01" :
-        (Date("-999999999-01-02"), Date("-999999954-01-01"))
+    | "attained 45, born 2001-01-02 and asked on 2046-01-01" :
+        (Date("2001-01-02"), Date("2046-01-01"))
         -> FortyFiveToFiftyNine
-    | "attained 59, born -999999999-01-03 and asked on -999999939-01-01" :
-        (Date("-999999999-01-03"), Date("-999999939-01-01"))
+    | "attained 59, born 2001-01-03 and asked on 2061-01-01" :
+        (Date("2001-01-03"), Date("2061-01-01"))
         -> FortyFiveToFiftyNine
-    | "attained 60, born -999999999-01-02 and asked on -999999939-01-01" :
-        (Date("-999999999-01-02"), Date("-999999939-01-01"))
+    | "attained 60, born 2001-01-02 and asked on 2061-01-01" :
+        (Date("2001-01-02"), Date("2061-01-01"))
         -> SixtyToSixtyFour
-    | "attained 64, born -999999999-01-03 and asked on -999999934-01-01" :
-        (Date("-999999999-01-03"), Date("-999999934-01-01"))
+    | "attained 64, born 2001-01-03 and asked on 2066-01-01" :
+        (Date("2001-01-03"), Date("2066-01-01"))
         -> SixtyToSixtyFour
-    | "attained 65, born -999999999-01-02 and asked on -999999934-01-01" :
-        (Date("-999999999-01-02"), Date("-999999934-01-01"))
+    | "attained 65, born 2001-01-02 and asked on 2066-01-01" :
+        (Date("2001-01-02"), Date("2066-01-01"))
         -> ElderlyJobSeeker
-    | "attained 30, born -999999999-01-02 and asked on -999999969-01-01" :
-        (Date("-999999999-01-02"), Date("-999999969-01-01"))
+    | "attained 30, born 2001-01-02 and asked on 2031-01-01" :
+        (Date("2001-01-02"), Date("2031-01-01"))
         -> ThirtyToThirtyFour
+    | (Date("1991-01-04"), Date("2026-01-03")) -> ThirtyFiveToFortyFour
+    | (Date("1991-01-04"), Date("2026-01-02")) -> ThirtyToThirtyFour
+    | (Date("1991-02-03"), Date("2026-02-01")) -> ThirtyToThirtyFour
+    | (Date("1991-02-02"), Date("2026-02-01")) -> ThirtyFiveToFortyFour
+    | (Date("1981-01-04"), Date("2026-01-03")) -> FortyFiveToFiftyNine
+    | (Date("1981-01-04"), Date("2026-01-02")) -> ThirtyFiveToFortyFour
+    | (Date("1981-02-03"), Date("2026-02-01")) -> ThirtyFiveToFortyFour
+    | (Date("1981-02-02"), Date("2026-02-01")) -> FortyFiveToFiftyNine
+    | (Date("1966-01-04"), Date("2026-01-03")) -> SixtyToSixtyFour
+    | (Date("1966-01-04"), Date("2026-01-02")) -> FortyFiveToFiftyNine
+    | (Date("1966-02-03"), Date("2026-02-01")) -> FortyFiveToFiftyNine
+    | (Date("1966-02-02"), Date("2026-02-01")) -> SixtyToSixtyFour
+    | (Date("1961-01-04"), Date("2026-01-03")) -> ElderlyJobSeeker
+    | (Date("1961-01-04"), Date("2026-01-02")) -> SixtyToSixtyFour
+    | (Date("1961-02-03"), Date("2026-02-01")) -> SixtyToSixtyFour
+    | (Date("1961-02-02"), Date("2026-02-01")) -> ElderlyJobSeeker
+    | (Date("2026-02-02"), Date("2092-01-01")) -> ElderlyJobSeeker
+    | (Date("1999-02-02"), Date("2065-01-01")) -> ElderlyJobSeeker
 
 example bandOfInsuredPeriod
     | "0 months is UnderOneYear" :
