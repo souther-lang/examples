@@ -1162,6 +1162,18 @@ let flatWindow (baseSalary: Int): ThreeMonthWindow =
         , third = MonthlyPayRecord { ...aprilRecord, month = ContributionMonth(Date("2026-06-01")), paidBaseDays = PaidBaseDays(31), remuneration = MonthlyRemuneration { baseSalary = Yen(baseSalary), scheduledAllowances = Yen(0), commutingAllowance = Yen(0), excludedAllowances = Yen(0), variableAllowances = Yen(0) } }
         }
 
+// Nothing paid in a month, to name the one field a row pays.
+let nothingPaid = MonthlyRemuneration
+    { baseSalary = Yen(0), scheduledAllowances = Yen(0), commutingAllowance = Yen(0)
+    , excludedAllowances = Yen(0), variableAllowances = Yen(0) }
+
+// Three months in which June alone is paid differently: a total one yen short of three equal months
+// averages one yen under them once it is truncated.
+let windowShortInJune (pay: MonthlyRemuneration, june: MonthlyRemuneration): ThreeMonthWindow = {
+    let even = evenWindow(pay)
+    ThreeMonthWindow { ...even, third = MonthlyPayRecord { ...even.third, remuneration = june } }
+}
+
 example decideRegularly
     | "three months of 300,000 grade at 300,000, and it holds from September" :
         (regularWindow)
@@ -1225,6 +1237,288 @@ example decideRegularly
     | "an average of 1,054,999 is one yen under it, so it is still grade 44" :
         (flatWindow(1054999))
         -> GradeDecision { basis = RegularDetermination, standard = Yen(1030000), health = HealthGrade(44), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 63,000 paid as basic salary is on the lower bound of grade 2" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(63000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(68000), health = HealthGrade(2), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 63,000 paid as basic salary averages 62,999, so it is still grade 1" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(63000) }, MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(62999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(58000), health = HealthGrade(1), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 73,000 paid as scheduled allowances is on the lower bound of grade 3" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(73000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(78000), health = HealthGrade(3), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 73,000 paid as scheduled allowances averages 72,999, so it is still grade 2" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(73000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(72999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(68000), health = HealthGrade(2), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 83,000 paid as a commuting allowance is on the lower bound of grade 4" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(83000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(88000), health = HealthGrade(4), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 83,000 paid as a commuting allowance averages 82,999, so it is still grade 3" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(83000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(82999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(78000), health = HealthGrade(3), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 93,000 paid as family and housing allowances is on the lower bound of grade 5" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(93000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(98000), health = HealthGrade(5), pension = PensionGrade(2), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 93,000 paid as family and housing allowances averages 92,999, so it is still grade 4" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(93000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(92999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(88000), health = HealthGrade(4), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 101,000 paid as overtime pay averages 100,999, so it is still grade 5" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(101000) }, MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(100999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(98000), health = HealthGrade(5), pension = PensionGrade(2), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 107,000 paid as basic salary is on the lower bound of grade 7" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(107000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(110000), health = HealthGrade(7), pension = PensionGrade(4), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 107,000 paid as basic salary averages 106,999, so it is still grade 6" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(107000) }, MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(106999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(104000), health = HealthGrade(6), pension = PensionGrade(3), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 114,000 paid as scheduled allowances is on the lower bound of grade 8" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(114000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(118000), health = HealthGrade(8), pension = PensionGrade(5), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 114,000 paid as scheduled allowances averages 113,999, so it is still grade 7" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(114000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(113999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(110000), health = HealthGrade(7), pension = PensionGrade(4), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 122,000 paid as a commuting allowance is on the lower bound of grade 9" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(122000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(126000), health = HealthGrade(9), pension = PensionGrade(6), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 122,000 paid as a commuting allowance averages 121,999, so it is still grade 8" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(122000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(121999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(118000), health = HealthGrade(8), pension = PensionGrade(5), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 130,000 paid as family and housing allowances is on the lower bound of grade 10" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(130000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(134000), health = HealthGrade(10), pension = PensionGrade(7), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 130,000 paid as family and housing allowances averages 129,999, so it is still grade 9" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(130000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(129999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(126000), health = HealthGrade(9), pension = PensionGrade(6), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 138,000 paid as overtime pay is on the lower bound of grade 11" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(138000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(142000), health = HealthGrade(11), pension = PensionGrade(8), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 138,000 paid as overtime pay averages 137,999, so it is still grade 10" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(138000) }, MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(137999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(134000), health = HealthGrade(10), pension = PensionGrade(7), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 146,000 paid as basic salary is on the lower bound of grade 12" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(146000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(150000), health = HealthGrade(12), pension = PensionGrade(9), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 146,000 paid as basic salary averages 145,999, so it is still grade 11" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(146000) }, MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(145999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(142000), health = HealthGrade(11), pension = PensionGrade(8), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 155,000 paid as scheduled allowances is on the lower bound of grade 13" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(155000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(160000), health = HealthGrade(13), pension = PensionGrade(10), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 155,000 paid as scheduled allowances averages 154,999, so it is still grade 12" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(155000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(154999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(150000), health = HealthGrade(12), pension = PensionGrade(9), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 165,000 paid as a commuting allowance is on the lower bound of grade 14" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(165000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(170000), health = HealthGrade(14), pension = PensionGrade(11), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 165,000 paid as a commuting allowance averages 164,999, so it is still grade 13" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(165000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(164999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(160000), health = HealthGrade(13), pension = PensionGrade(10), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 175,000 paid as family and housing allowances is on the lower bound of grade 15" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(175000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(180000), health = HealthGrade(15), pension = PensionGrade(12), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 175,000 paid as family and housing allowances averages 174,999, so it is still grade 14" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(175000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(174999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(170000), health = HealthGrade(14), pension = PensionGrade(11), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 185,000 paid as overtime pay is on the lower bound of grade 16" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(185000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(190000), health = HealthGrade(16), pension = PensionGrade(13), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 185,000 paid as overtime pay averages 184,999, so it is still grade 15" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(185000) }, MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(184999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(180000), health = HealthGrade(15), pension = PensionGrade(12), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 195,000 paid as basic salary is on the lower bound of grade 17" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(195000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(200000), health = HealthGrade(17), pension = PensionGrade(14), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 195,000 paid as basic salary averages 194,999, so it is still grade 16" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(195000) }, MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(194999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(190000), health = HealthGrade(16), pension = PensionGrade(13), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 210,000 paid as scheduled allowances is on the lower bound of grade 18" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(210000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(220000), health = HealthGrade(18), pension = PensionGrade(15), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 210,000 paid as scheduled allowances averages 209,999, so it is still grade 17" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(210000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(209999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(200000), health = HealthGrade(17), pension = PensionGrade(14), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 230,000 paid as a commuting allowance is on the lower bound of grade 19" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(230000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(240000), health = HealthGrade(19), pension = PensionGrade(16), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 230,000 paid as a commuting allowance averages 229,999, so it is still grade 18" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(230000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(229999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(220000), health = HealthGrade(18), pension = PensionGrade(15), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 250,000 paid as family and housing allowances is on the lower bound of grade 20" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(250000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(260000), health = HealthGrade(20), pension = PensionGrade(17), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 250,000 paid as family and housing allowances averages 249,999, so it is still grade 19" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(250000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(249999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(240000), health = HealthGrade(19), pension = PensionGrade(16), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 270,000 paid as overtime pay is on the lower bound of grade 21" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(270000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(280000), health = HealthGrade(21), pension = PensionGrade(18), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 270,000 paid as overtime pay averages 269,999, so it is still grade 20" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(270000) }, MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(269999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(260000), health = HealthGrade(20), pension = PensionGrade(17), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 290,000 paid as basic salary is on the lower bound of grade 22" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(290000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(300000), health = HealthGrade(22), pension = PensionGrade(19), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 310,000 paid as scheduled allowances is on the lower bound of grade 23" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(310000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(320000), health = HealthGrade(23), pension = PensionGrade(20), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 310,000 paid as scheduled allowances averages 309,999, so it is still grade 22" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(310000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(309999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(300000), health = HealthGrade(22), pension = PensionGrade(19), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 330,000 paid as a commuting allowance is on the lower bound of grade 24" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(330000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(340000), health = HealthGrade(24), pension = PensionGrade(21), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 330,000 paid as a commuting allowance averages 329,999, so it is still grade 23" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(330000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(329999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(320000), health = HealthGrade(23), pension = PensionGrade(20), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 350,000 paid as family and housing allowances is on the lower bound of grade 25" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(350000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(360000), health = HealthGrade(25), pension = PensionGrade(22), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 350,000 paid as family and housing allowances averages 349,999, so it is still grade 24" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(350000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(349999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(340000), health = HealthGrade(24), pension = PensionGrade(21), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 370,000 paid as overtime pay is on the lower bound of grade 26" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(370000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(380000), health = HealthGrade(26), pension = PensionGrade(23), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 370,000 paid as overtime pay averages 369,999, so it is still grade 25" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(370000) }, MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(369999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(360000), health = HealthGrade(25), pension = PensionGrade(22), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 395,000 paid as basic salary is on the lower bound of grade 27" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(395000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(410000), health = HealthGrade(27), pension = PensionGrade(24), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 395,000 paid as basic salary averages 394,999, so it is still grade 26" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(395000) }, MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(394999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(380000), health = HealthGrade(26), pension = PensionGrade(23), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 425,000 paid as scheduled allowances is on the lower bound of grade 28" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(425000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(440000), health = HealthGrade(28), pension = PensionGrade(25), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 425,000 paid as scheduled allowances averages 424,999, so it is still grade 27" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(425000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(424999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(410000), health = HealthGrade(27), pension = PensionGrade(24), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 455,000 paid as a commuting allowance is on the lower bound of grade 29" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(455000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(470000), health = HealthGrade(29), pension = PensionGrade(26), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 455,000 paid as a commuting allowance averages 454,999, so it is still grade 28" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(455000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(454999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(440000), health = HealthGrade(28), pension = PensionGrade(25), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 485,000 paid as family and housing allowances is on the lower bound of grade 30" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(485000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(500000), health = HealthGrade(30), pension = PensionGrade(27), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 485,000 paid as family and housing allowances averages 484,999, so it is still grade 29" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(485000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(484999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(470000), health = HealthGrade(29), pension = PensionGrade(26), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 515,000 paid as overtime pay is on the lower bound of grade 31" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(515000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(530000), health = HealthGrade(31), pension = PensionGrade(28), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 515,000 paid as overtime pay averages 514,999, so it is still grade 30" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(515000) }, MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(514999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(500000), health = HealthGrade(30), pension = PensionGrade(27), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 545,000 paid as basic salary is on the lower bound of grade 32" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(545000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(560000), health = HealthGrade(32), pension = PensionGrade(29), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 545,000 paid as basic salary averages 544,999, so it is still grade 31" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(545000) }, MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(544999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(530000), health = HealthGrade(31), pension = PensionGrade(28), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 575,000 paid as scheduled allowances is on the lower bound of grade 33" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(575000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(590000), health = HealthGrade(33), pension = PensionGrade(30), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 575,000 paid as scheduled allowances averages 574,999, so it is still grade 32" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(575000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(574999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(560000), health = HealthGrade(32), pension = PensionGrade(29), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 605,000 paid as a commuting allowance is on the lower bound of grade 34" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(605000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(620000), health = HealthGrade(34), pension = PensionGrade(31), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 605,000 paid as a commuting allowance averages 604,999, so it is still grade 33" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(605000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(604999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(590000), health = HealthGrade(33), pension = PensionGrade(30), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 635,000 paid as family and housing allowances is on the lower bound of grade 35" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(635000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(650000), health = HealthGrade(35), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 635,000 paid as family and housing allowances averages 634,999, so it is still grade 34" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(635000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(634999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(620000), health = HealthGrade(34), pension = PensionGrade(31), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 665,000 paid as overtime pay is on the lower bound of grade 36" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(665000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(680000), health = HealthGrade(36), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 665,000 paid as overtime pay averages 664,999, so it is still grade 35" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(665000) }, MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(664999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(650000), health = HealthGrade(35), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 695,000 paid as basic salary is on the lower bound of grade 37" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(695000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(710000), health = HealthGrade(37), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 695,000 paid as basic salary averages 694,999, so it is still grade 36" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(695000) }, MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(694999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(680000), health = HealthGrade(36), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 730,000 paid as scheduled allowances is on the lower bound of grade 38" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(730000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(750000), health = HealthGrade(38), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 730,000 paid as scheduled allowances averages 729,999, so it is still grade 37" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(730000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(729999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(710000), health = HealthGrade(37), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 770,000 paid as a commuting allowance is on the lower bound of grade 39" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(770000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(790000), health = HealthGrade(39), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 770,000 paid as a commuting allowance averages 769,999, so it is still grade 38" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(770000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(769999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(750000), health = HealthGrade(38), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 810,000 paid as family and housing allowances is on the lower bound of grade 40" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(810000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(830000), health = HealthGrade(40), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 810,000 paid as family and housing allowances averages 809,999, so it is still grade 39" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(810000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(809999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(790000), health = HealthGrade(39), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 855,000 paid as overtime pay is on the lower bound of grade 41" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(855000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(880000), health = HealthGrade(41), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 855,000 paid as overtime pay averages 854,999, so it is still grade 40" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(855000) }, MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(854999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(830000), health = HealthGrade(40), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 905,000 paid as basic salary is on the lower bound of grade 42" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(905000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(930000), health = HealthGrade(42), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 905,000 paid as basic salary averages 904,999, so it is still grade 41" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(905000) }, MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(904999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(880000), health = HealthGrade(41), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 955,000 paid as scheduled allowances is on the lower bound of grade 43" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(955000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(980000), health = HealthGrade(43), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 955,000 paid as scheduled allowances averages 954,999, so it is still grade 42" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(955000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(954999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(930000), health = HealthGrade(42), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 1,005,000 paid as a commuting allowance averages 1,004,999, so it is still grade 43" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(1005000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(1004999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(980000), health = HealthGrade(43), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 1,055,000 paid as family and housing allowances averages 1,054,999, so it is still grade 44" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(1055000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(1054999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(1030000), health = HealthGrade(44), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 1,115,000 paid as overtime pay is on the lower bound of grade 46" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(1115000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(1150000), health = HealthGrade(46), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 1,115,000 paid as overtime pay averages 1,114,999, so it is still grade 45" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(1115000) }, MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(1114999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(1090000), health = HealthGrade(45), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 1,175,000 paid as basic salary is on the lower bound of grade 47" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(1175000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(1210000), health = HealthGrade(47), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 1,175,000 paid as basic salary averages 1,174,999, so it is still grade 46" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(1175000) }, MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(1174999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(1150000), health = HealthGrade(46), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 1,235,000 paid as scheduled allowances is on the lower bound of grade 48" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(1235000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(1270000), health = HealthGrade(48), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 1,235,000 paid as scheduled allowances averages 1,234,999, so it is still grade 47" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(1235000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(1234999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(1210000), health = HealthGrade(47), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 1,295,000 paid as a commuting allowance is on the lower bound of grade 49" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(1295000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(1330000), health = HealthGrade(49), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 1,295,000 paid as a commuting allowance averages 1,294,999, so it is still grade 48" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(1295000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(1294999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(1270000), health = HealthGrade(48), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "an average of 1,355,000 paid as family and housing allowances is on the lower bound of grade 50" :
+        (evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(1355000) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(1390000), health = HealthGrade(50), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
+    | "a June one yen short of 1,355,000 paid as family and housing allowances averages 1,354,999, so it is still grade 49" :
+        (windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(1355000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(1354999) }))
+        -> GradeDecision { basis = RegularDetermination, standard = Yen(1330000), health = HealthGrade(49), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-09-01")) }
 
 let currentGrade22 = GradeDecision
     { basis = RegularDetermination
@@ -1329,6 +1623,291 @@ example judgeOccasionalRevision
                                            , PaidDaysBelowSeventeen { month = ContributionMonth(Date("2000-01-01")), days = PaidBaseDays(0) }
                                            , PaidDaysBelowSeventeen { month = ContributionMonth(Date("2000-01-01")), days = PaidBaseDays(0) }
                                            , GradeDifferenceBelowTwo { current = HealthGrade(1), computed = HealthGrade(1) } ] }
+    | "an average of 63,000 paid as basic salary is grade 2, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(63000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(68000), health = HealthGrade(2), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 73,000 paid as scheduled allowances is grade 3, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(73000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(78000), health = HealthGrade(3), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 73,000 paid as scheduled allowances averages 72,999, grade 2, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(73000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(72999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(68000), health = HealthGrade(2), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 83,000 paid as a commuting allowance is grade 4, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(83000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(88000), health = HealthGrade(4), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 83,000 paid as a commuting allowance averages 82,999, grade 3, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(83000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(82999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(78000), health = HealthGrade(3), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 93,000 paid as family and housing allowances is grade 5, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(93000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(98000), health = HealthGrade(5), pension = PensionGrade(2), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 93,000 paid as family and housing allowances averages 92,999, grade 4, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(93000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(92999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(88000), health = HealthGrade(4), pension = PensionGrade(1), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 101,000 paid as overtime pay is grade 6, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(101000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(104000), health = HealthGrade(6), pension = PensionGrade(3), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 101,000 paid as overtime pay averages 100,999, grade 5, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(101000) }, MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(100999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(98000), health = HealthGrade(5), pension = PensionGrade(2), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 107,000 paid as basic salary is grade 7, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(107000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(110000), health = HealthGrade(7), pension = PensionGrade(4), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 107,000 paid as basic salary averages 106,999, grade 6, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(107000) }, MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(106999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(104000), health = HealthGrade(6), pension = PensionGrade(3), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 114,000 paid as scheduled allowances is grade 8, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(114000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(118000), health = HealthGrade(8), pension = PensionGrade(5), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 114,000 paid as scheduled allowances averages 113,999, grade 7, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(114000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(113999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(110000), health = HealthGrade(7), pension = PensionGrade(4), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 122,000 paid as a commuting allowance is grade 9, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(122000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(126000), health = HealthGrade(9), pension = PensionGrade(6), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 122,000 paid as a commuting allowance averages 121,999, grade 8, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(122000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(121999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(118000), health = HealthGrade(8), pension = PensionGrade(5), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 130,000 paid as family and housing allowances is grade 10, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(130000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(134000), health = HealthGrade(10), pension = PensionGrade(7), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 130,000 paid as family and housing allowances averages 129,999, grade 9, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(130000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(129999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(126000), health = HealthGrade(9), pension = PensionGrade(6), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 138,000 paid as overtime pay is grade 11, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(138000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(142000), health = HealthGrade(11), pension = PensionGrade(8), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 138,000 paid as overtime pay averages 137,999, grade 10, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(138000) }, MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(137999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(134000), health = HealthGrade(10), pension = PensionGrade(7), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 146,000 paid as basic salary is grade 12, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(146000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(150000), health = HealthGrade(12), pension = PensionGrade(9), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 146,000 paid as basic salary averages 145,999, grade 11, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(146000) }, MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(145999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(142000), health = HealthGrade(11), pension = PensionGrade(8), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 155,000 paid as scheduled allowances is grade 13, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(155000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(160000), health = HealthGrade(13), pension = PensionGrade(10), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 155,000 paid as scheduled allowances averages 154,999, grade 12, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(155000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(154999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(150000), health = HealthGrade(12), pension = PensionGrade(9), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 165,000 paid as a commuting allowance is grade 14, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(165000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(170000), health = HealthGrade(14), pension = PensionGrade(11), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 165,000 paid as a commuting allowance averages 164,999, grade 13, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(165000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(164999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(160000), health = HealthGrade(13), pension = PensionGrade(10), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 175,000 paid as family and housing allowances is grade 15, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(175000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(180000), health = HealthGrade(15), pension = PensionGrade(12), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 175,000 paid as family and housing allowances averages 174,999, grade 14, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(175000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(174999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(170000), health = HealthGrade(14), pension = PensionGrade(11), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 185,000 paid as overtime pay is grade 16, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(185000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(190000), health = HealthGrade(16), pension = PensionGrade(13), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 185,000 paid as overtime pay averages 184,999, grade 15, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(185000) }, MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(184999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(180000), health = HealthGrade(15), pension = PensionGrade(12), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 195,000 paid as basic salary is grade 17, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(195000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(200000), health = HealthGrade(17), pension = PensionGrade(14), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 195,000 paid as basic salary averages 194,999, grade 16, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(195000) }, MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(194999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(190000), health = HealthGrade(16), pension = PensionGrade(13), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 210,000 paid as scheduled allowances is grade 18, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(210000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(220000), health = HealthGrade(18), pension = PensionGrade(15), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 210,000 paid as scheduled allowances averages 209,999, grade 17, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(210000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(209999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(200000), health = HealthGrade(17), pension = PensionGrade(14), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 230,000 paid as a commuting allowance is grade 19, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(230000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(240000), health = HealthGrade(19), pension = PensionGrade(16), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 230,000 paid as a commuting allowance averages 229,999, grade 18, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(230000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(229999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(220000), health = HealthGrade(18), pension = PensionGrade(15), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 250,000 paid as family and housing allowances is grade 20, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(250000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(260000), health = HealthGrade(20), pension = PensionGrade(17), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 250,000 paid as family and housing allowances averages 249,999, grade 19, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(250000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(249999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(240000), health = HealthGrade(19), pension = PensionGrade(16), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 270,000 paid as overtime pay is grade 21, too close to grade 22 to revise" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(270000) }))
+        -> RevisionNotRequired { reasons = [ GradeDifferenceBelowTwo { current = HealthGrade(22), computed = HealthGrade(21) } ] }
+    | "a June one yen short of 270,000 paid as overtime pay averages 269,999, grade 20, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(270000) }, MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(269999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(260000), health = HealthGrade(20), pension = PensionGrade(17), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 290,000 paid as basic salary is grade 22, too close to grade 22 to revise" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(290000) }))
+        -> RevisionNotRequired { reasons = [ GradeDifferenceBelowTwo { current = HealthGrade(22), computed = HealthGrade(22) } ] }
+    | "a June one yen short of 290,000 paid as basic salary averages 289,999, grade 21, too close to grade 22 to revise" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(290000) }, MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(289999) }))
+        -> RevisionNotRequired { reasons = [ GradeDifferenceBelowTwo { current = HealthGrade(22), computed = HealthGrade(21) } ] }
+    | "a June one yen short of 310,000 paid as scheduled allowances averages 309,999, grade 22, too close to grade 22 to revise" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(310000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(309999) }))
+        -> RevisionNotRequired { reasons = [ GradeDifferenceBelowTwo { current = HealthGrade(22), computed = HealthGrade(22) } ] }
+    | "a June one yen short of 330,000 paid as a commuting allowance averages 329,999, grade 23, too close to grade 22 to revise" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(330000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(329999) }))
+        -> RevisionNotRequired { reasons = [ GradeDifferenceBelowTwo { current = HealthGrade(22), computed = HealthGrade(23) } ] }
+    | "an average of 350,000 paid as family and housing allowances is grade 25, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(350000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(360000), health = HealthGrade(25), pension = PensionGrade(22), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 350,000 paid as family and housing allowances averages 349,999, grade 24, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(350000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(349999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(340000), health = HealthGrade(24), pension = PensionGrade(21), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 370,000 paid as overtime pay is grade 26, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(370000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(380000), health = HealthGrade(26), pension = PensionGrade(23), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 370,000 paid as overtime pay averages 369,999, grade 25, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(370000) }, MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(369999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(360000), health = HealthGrade(25), pension = PensionGrade(22), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 395,000 paid as basic salary is grade 27, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(395000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(410000), health = HealthGrade(27), pension = PensionGrade(24), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 395,000 paid as basic salary averages 394,999, grade 26, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(395000) }, MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(394999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(380000), health = HealthGrade(26), pension = PensionGrade(23), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 425,000 paid as scheduled allowances is grade 28, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(425000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(440000), health = HealthGrade(28), pension = PensionGrade(25), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 425,000 paid as scheduled allowances averages 424,999, grade 27, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(425000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(424999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(410000), health = HealthGrade(27), pension = PensionGrade(24), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 455,000 paid as a commuting allowance is grade 29, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(455000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(470000), health = HealthGrade(29), pension = PensionGrade(26), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 455,000 paid as a commuting allowance averages 454,999, grade 28, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(455000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(454999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(440000), health = HealthGrade(28), pension = PensionGrade(25), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 485,000 paid as family and housing allowances is grade 30, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(485000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(500000), health = HealthGrade(30), pension = PensionGrade(27), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 485,000 paid as family and housing allowances averages 484,999, grade 29, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(485000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(484999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(470000), health = HealthGrade(29), pension = PensionGrade(26), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 515,000 paid as overtime pay is grade 31, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(515000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(530000), health = HealthGrade(31), pension = PensionGrade(28), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 515,000 paid as overtime pay averages 514,999, grade 30, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(515000) }, MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(514999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(500000), health = HealthGrade(30), pension = PensionGrade(27), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 545,000 paid as basic salary is grade 32, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(545000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(560000), health = HealthGrade(32), pension = PensionGrade(29), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 545,000 paid as basic salary averages 544,999, grade 31, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(545000) }, MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(544999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(530000), health = HealthGrade(31), pension = PensionGrade(28), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 575,000 paid as scheduled allowances is grade 33, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(575000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(590000), health = HealthGrade(33), pension = PensionGrade(30), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 575,000 paid as scheduled allowances averages 574,999, grade 32, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(575000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(574999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(560000), health = HealthGrade(32), pension = PensionGrade(29), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 605,000 paid as a commuting allowance is grade 34, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(605000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(620000), health = HealthGrade(34), pension = PensionGrade(31), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 605,000 paid as a commuting allowance averages 604,999, grade 33, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(605000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(604999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(590000), health = HealthGrade(33), pension = PensionGrade(30), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 635,000 paid as family and housing allowances is grade 35, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(635000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(650000), health = HealthGrade(35), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 635,000 paid as family and housing allowances averages 634,999, grade 34, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(635000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(634999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(620000), health = HealthGrade(34), pension = PensionGrade(31), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 665,000 paid as overtime pay is grade 36, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(665000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(680000), health = HealthGrade(36), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 665,000 paid as overtime pay averages 664,999, grade 35, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(665000) }, MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(664999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(650000), health = HealthGrade(35), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 695,000 paid as basic salary is grade 37, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(695000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(710000), health = HealthGrade(37), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 695,000 paid as basic salary averages 694,999, grade 36, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(695000) }, MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(694999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(680000), health = HealthGrade(36), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 730,000 paid as scheduled allowances is grade 38, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(730000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(750000), health = HealthGrade(38), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 730,000 paid as scheduled allowances averages 729,999, grade 37, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(730000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(729999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(710000), health = HealthGrade(37), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 770,000 paid as a commuting allowance is grade 39, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(770000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(790000), health = HealthGrade(39), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 770,000 paid as a commuting allowance averages 769,999, grade 38, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(770000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(769999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(750000), health = HealthGrade(38), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 810,000 paid as family and housing allowances is grade 40, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(810000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(830000), health = HealthGrade(40), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 810,000 paid as family and housing allowances averages 809,999, grade 39, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(810000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(809999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(790000), health = HealthGrade(39), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 855,000 paid as overtime pay is grade 41, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(855000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(880000), health = HealthGrade(41), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 855,000 paid as overtime pay averages 854,999, grade 40, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(855000) }, MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(854999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(830000), health = HealthGrade(40), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 905,000 paid as basic salary is grade 42, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(905000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(930000), health = HealthGrade(42), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 905,000 paid as basic salary averages 904,999, grade 41, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(905000) }, MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(904999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(880000), health = HealthGrade(41), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 955,000 paid as scheduled allowances is grade 43, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(955000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(980000), health = HealthGrade(43), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 955,000 paid as scheduled allowances averages 954,999, grade 42, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(955000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(954999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(930000), health = HealthGrade(42), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 1,005,000 paid as a commuting allowance is grade 44, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(1005000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(1030000), health = HealthGrade(44), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 1,005,000 paid as a commuting allowance averages 1,004,999, grade 43, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(1005000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(1004999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(980000), health = HealthGrade(43), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 1,055,000 paid as family and housing allowances is grade 45, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(1055000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(1090000), health = HealthGrade(45), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 1,055,000 paid as family and housing allowances averages 1,054,999, grade 44, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(1055000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(1054999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(1030000), health = HealthGrade(44), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 1,115,000 paid as overtime pay is grade 46, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(1115000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(1150000), health = HealthGrade(46), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 1,115,000 paid as overtime pay averages 1,114,999, grade 45, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(1115000) }, MonthlyRemuneration { ...nothingPaid, variableAllowances = Yen(1114999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(1090000), health = HealthGrade(45), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 1,175,000 paid as basic salary is grade 47, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(1175000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(1210000), health = HealthGrade(47), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 1,175,000 paid as basic salary averages 1,174,999, grade 46, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(1175000) }, MonthlyRemuneration { ...nothingPaid, baseSalary = Yen(1174999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(1150000), health = HealthGrade(46), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 1,235,000 paid as scheduled allowances is grade 48, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(1235000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(1270000), health = HealthGrade(48), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 1,235,000 paid as scheduled allowances averages 1,234,999, grade 47, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(1235000) }, MonthlyRemuneration { ...nothingPaid, scheduledAllowances = Yen(1234999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(1210000), health = HealthGrade(47), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 1,295,000 paid as a commuting allowance is grade 49, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(1295000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(1330000), health = HealthGrade(49), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 1,295,000 paid as a commuting allowance averages 1,294,999, grade 48, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(1295000) }, MonthlyRemuneration { ...nothingPaid, commutingAllowance = Yen(1294999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(1270000), health = HealthGrade(48), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "an average of 1,355,000 paid as family and housing allowances is grade 50, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), evenWindow(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(1355000) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(1390000), health = HealthGrade(50), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
+    | "a June one yen short of 1,355,000 paid as family and housing allowances averages 1,354,999, grade 49, which revises grade 22 from July" :
+        (currentGrade22, Yen(300000), windowShortInJune(MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(1355000) }, MonthlyRemuneration { ...nothingPaid, excludedAllowances = Yen(1354999) }))
+        -> GradeDecision { basis = OccasionalRevision, standard = Yen(1330000), health = HealthGrade(49), pension = PensionGrade(32), appliesFrom = ContributionMonth(Date("2026-07-01")) }
 
 fake contributionRatesOf
     | (PrefectureCode("13"), Date("2026-07-01"))
