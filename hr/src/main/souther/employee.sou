@@ -234,6 +234,19 @@ data MonthlyRemuneration =
                                   // 8.8 万円要件からも除かれる（労働基準法第37条第5項）
     , variableAllowances: Yen     // 残業手当など、月ごとに動くもの
     }
+    invariant baseSalary.value <= 1000000000000
+    invariant scheduledAllowances.value <= 1000000000000
+    invariant commutingAllowance.value <= 1000000000000
+    invariant excludedAllowances.value <= 1000000000000
+    invariant variableAllowances.value <= 1000000000000
+
+// Why each amount is bounded where it stands, and by a clause of its own: a month's pay is added up in
+// Int, and the sums built of it (a month's total, the average of three months) have to be shown not to
+// pass the ends of one. One trillion yen is far above any month's pay and far below the ends, so the
+// five amounts, or the fifteen of a window, add up to a number an Int holds. Neither a bound on the
+// total of a month nor one on Yen does this: the first is itself an addition in Int, which can pass the
+// ends it is meant to rule out, and the second would make every computation that builds a Yen show that
+// it fits. Joined by && the five would be one rule naming all of them, which ties them to each other.
 
 // 所定内賃金. Read twice: by the short-time-worker wage test of example.socialinsurance, and as the base
 // an overtime uplift is computed on (labour-standards §37(5) strips exactly the two fields below it).
@@ -507,6 +520,21 @@ example hire
         (Prospective { ...partTimeCommon, hireOn = Date("2024-04-01") }) -> partTimeEmployed
     | "an executive is hired on the terms the offer carried" :
         (Prospective { ...executiveCommon, hireOn = Date("2020-04-01") }) -> executiveEmployed
+    | "an offer whose baseSalary is the one trillion yen an amount may be is hired on it" :
+        (Prospective { ...satoCommon, remuneration = MonthlyRemuneration { ...satoPay, baseSalary = Yen(1000000000000) }, hireOn = Date("2026-04-01") })
+        -> Employed { ...satoCommon, remuneration = MonthlyRemuneration { ...satoPay, baseSalary = Yen(1000000000000) }, hiredOn = Date("2026-04-01") }
+    | "an offer whose scheduledAllowances are one trillion yen is hired on it" :
+        (Prospective { ...satoCommon, remuneration = MonthlyRemuneration { ...satoPay, scheduledAllowances = Yen(1000000000000) }, hireOn = Date("2026-04-01") })
+        -> Employed { ...satoCommon, remuneration = MonthlyRemuneration { ...satoPay, scheduledAllowances = Yen(1000000000000) }, hiredOn = Date("2026-04-01") }
+    | "an offer whose commutingAllowance is one trillion yen is hired on it" :
+        (Prospective { ...satoCommon, remuneration = MonthlyRemuneration { ...satoPay, commutingAllowance = Yen(1000000000000) }, hireOn = Date("2026-04-01") })
+        -> Employed { ...satoCommon, remuneration = MonthlyRemuneration { ...satoPay, commutingAllowance = Yen(1000000000000) }, hiredOn = Date("2026-04-01") }
+    | "an offer whose excludedAllowances are one trillion yen is hired on it" :
+        (Prospective { ...satoCommon, remuneration = MonthlyRemuneration { ...satoPay, excludedAllowances = Yen(1000000000000) }, hireOn = Date("2026-04-01") })
+        -> Employed { ...satoCommon, remuneration = MonthlyRemuneration { ...satoPay, excludedAllowances = Yen(1000000000000) }, hiredOn = Date("2026-04-01") }
+    | "an offer whose variableAllowances are one trillion yen is hired on it" :
+        (Prospective { ...satoCommon, remuneration = MonthlyRemuneration { ...satoPay, variableAllowances = Yen(1000000000000) }, hireOn = Date("2026-04-01") })
+        -> Employed { ...satoCommon, remuneration = MonthlyRemuneration { ...satoPay, variableAllowances = Yen(1000000000000) }, hiredOn = Date("2026-04-01") }
 
 example beginLeave
     | "a leave that starts after the hire is recorded with its kind and start" :
