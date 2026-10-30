@@ -362,6 +362,33 @@ example buildPaySlip
                                   ]
                    , net = Yen(0)
                    }
+    | "one yen short of the deductions is an excess, though the same deductions leave a net of nothing a yen higher" :
+        (PayMonth(Date("2026-07-01")),
+         Earnings { fixed = Yen(12999), uplift = Yen(0) },
+         [ StatutoryDeduction { kind = LongTermCarePremium, amount = Yen(1000) }
+         , StatutoryDeduction { kind = InhabitantTax, amount = Yen(12000) }
+         ])
+        -> DeductionsExceedGross
+    | "a gross made of an uplift alone and one yen short of the deductions is an excess as well" :
+        (PayMonth(Date("2026-11-01")),
+         Earnings { fixed = Yen(0), uplift = Yen(13000) },
+         [ StatutoryDeduction { kind = HealthInsurancePremium, amount = Yen(6500) }
+         , StatutoryDeduction { kind = HealthInsurancePremium, amount = Yen(6501) }
+         ])
+        -> DeductionsExceedGross
+    | "a gross made of an uplift alone and equal to the deductions leaves a net of nothing" :
+        (PayMonth(Date("2026-11-01")),
+         Earnings { fixed = Yen(0), uplift = Yen(13001) },
+         [ StatutoryDeduction { kind = HealthInsurancePremium, amount = Yen(6500) }
+         , StatutoryDeduction { kind = HealthInsurancePremium, amount = Yen(6501) }
+         ])
+        -> PaySlip { month = PayMonth(Date("2026-11-01"))
+                   , earnings = Earnings { fixed = Yen(0), uplift = Yen(13001) }
+                   , deductions = [ StatutoryDeduction { kind = HealthInsurancePremium, amount = Yen(6500) }
+                                  , StatutoryDeduction { kind = HealthInsurancePremium, amount = Yen(6501) }
+                                  ]
+                   , net = Yen(0)
+                   }
 
 example taxableAmount
     | "gross less the exempt commuting allowance and less this month's premiums" :
