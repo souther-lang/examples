@@ -1012,6 +1012,9 @@ example discountExposureOf
     | "a quote nobody has submitted has nobody holding its revenue" :
         ([ mixedQuote ])
         -> DiscountExposure { byRole = Map.empty, worst = DiscountRate(0.30m) }
+    | "the worst line is read wherever it stands" :
+        ([ mixedQuoteReversed ])
+        -> DiscountExposure { byRole = Map.empty, worst = DiscountRate(0.30m) }
     | "a quote at list is counted by what it waits on like any other, whatever state it is in" :
         ([ listQuote
          , Quote { ...listQuote, approval = AutoApproved }
