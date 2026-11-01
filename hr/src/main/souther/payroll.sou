@@ -208,6 +208,13 @@ data Earnings =
     { fixed: Yen       // 月額として決まっている支給（所定内賃金＋通勤手当＋その他手当）
     , uplift: Yen      // 割増賃金の合計
     }
+    invariant fixed.value <= 10000000000000
+    invariant uplift.value <= 10000000000000
+
+// Why each part is bounded where it stands: grossOf adds the two in Int, and the slip's net is that sum
+// less the deductions. Ten trillion yen is above anything a month's five amounts (one trillion each)
+// add up to and far below the ends of an Int. One clause for each part, for the reason
+// MonthlyRemuneration gives for its amounts.
 
 let grossOf (e: Earnings): Yen = e.fixed + e.uplift
 
@@ -388,6 +395,24 @@ example buildPaySlip
                                   , StatutoryDeduction { kind = HealthInsurancePremium, amount = Yen(6501) }
                                   ]
                    , net = Yen(0)
+                   }
+    | "a fixed part of ten trillion yen, the most it may be, is paid out less the deductions" :
+        (PayMonth(Date("2026-07-01")),
+         Earnings { fixed = Yen(10000000000000), uplift = Yen(0) },
+         [ shortDeduction ])
+        -> PaySlip { month = PayMonth(Date("2026-07-01"))
+                   , earnings = Earnings { fixed = Yen(10000000000000), uplift = Yen(0) }
+                   , deductions = [ shortDeduction ]
+                   , net = Yen(9999999999999)
+                   }
+    | "an uplift of ten trillion yen, the most it may be, is paid out less the deductions" :
+        (PayMonth(Date("2026-07-01")),
+         Earnings { fixed = Yen(0), uplift = Yen(10000000000000) },
+         [ shortDeduction ])
+        -> PaySlip { month = PayMonth(Date("2026-07-01"))
+                   , earnings = Earnings { fixed = Yen(0), uplift = Yen(10000000000000) }
+                   , deductions = [ shortDeduction ]
+                   , net = Yen(9999999999999)
                    }
 
 example taxableAmount
