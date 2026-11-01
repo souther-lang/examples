@@ -454,6 +454,9 @@ let rejectedQuote = Quote { ...vpQuote
 let managerQuote = quoteAt(DiscountRate(0.15m), Amount(8500.00m))
 let cfoQuote     = quoteAt(DiscountRate(0.40m), Amount(6000.00m))
 
+// A quote stated at list: nothing off, so nothing for anybody to sign, in whatever state it is held.
+let listQuote = quoteAt(DiscountRate(0.0m), Amount(10000.00m))
+
 let autoApprovedQuote = Quote { ...repQuote, approval = AutoApproved }
 
 // A quote waiting on somebody, at each of the three bands. `waitingOnManager`, below, is the VP's.
@@ -501,6 +504,9 @@ let dayPassQuote = Quote { ...listPriceQuote
 let freeQuoteBase = quoteAt(DiscountRate(0.0m), Amount(10000.00m))
 
 example approvalNeeded
+    | "a twentieth off is a rep's own call too" :
+        (quoteAt(DiscountRate(0.05m), Amount(9500.00m)))
+        -> WithinAuthority
     | "a tenth off is a rep's own call" :
         (quoteAt(DiscountRate(0.10m), Amount(9000.00m)))
         -> WithinAuthority
@@ -1006,6 +1012,14 @@ example discountExposureOf
     | "a quote nobody has submitted has nobody holding its revenue" :
         ([ mixedQuote ])
         -> DiscountExposure { byRole = Map.empty, worst = DiscountRate(0.30m) }
+    | "a quote at list is counted by what it waits on like any other, whatever state it is in" :
+        ([ listQuote
+         , Quote { ...listQuote, approval = AutoApproved }
+         , Quote { ...listQuote, approval = pendingManagerQuote.approval }
+         , Quote { ...listQuote, approval = approvedQuote.approval }
+         , Quote { ...listQuote, approval = rejectedQuote.approval } ])
+        -> DiscountExposure { byRole = Map.fromList([ (SalesManager, Amount(10000.00m)) ])
+                            , worst = DiscountRate(0.0m) }
     | "nothing is exposed behind nobody, and the worst discount of no quotes is none" :
         ([ ])
         -> DiscountExposure { byRole = Map.empty, worst = DiscountRate(0.0m) }
