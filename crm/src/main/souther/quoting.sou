@@ -672,6 +672,9 @@ example approvalChainFor
     | "the vice president has one person above, and a vice-president-level discount needs two" :
         (acmeOrg, UserId("u-vp"), RegionalVp)
         -> NoAuthorityAbove { submitter = UserId("u-vp"), needed = 2, available = 1 }
+    | "an org of one role whose holder is somebody else has no line up from the submitter" :
+        (RoleNode { role = RoleName("x"), holder = UserId("x"), reports = [] }, UserId("y"), SalesManager)
+        -> SubmitterNotInHierarchy { submitter = UserId("y") }
 
 let vpChain = ApprovalChain { role = RegionalVp,
                               approvers = [ UserId("u-manager"), UserId("u-vp") ] }
