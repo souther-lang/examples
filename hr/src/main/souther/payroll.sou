@@ -208,6 +208,13 @@ data Earnings =
     { fixed: Yen       // 月額として決まっている支給（所定内賃金＋通勤手当＋その他手当）
     , uplift: Yen      // 割増賃金の合計
     }
+    invariant fixed.value <= 10000000000000
+    invariant uplift.value <= 10000000000000
+
+// Why each part is bounded where it stands: grossOf adds the two in Int, and the slip's net is that sum
+// less the deductions. Ten trillion yen is above anything a month's five amounts (one trillion each)
+// add up to and far below the ends of an Int. One clause for each part, for the reason
+// MonthlyRemuneration gives for its amounts.
 
 let grossOf (e: Earnings): Yen = e.fixed + e.uplift
 
@@ -362,6 +369,51 @@ example buildPaySlip
                                   ]
                    , net = Yen(0)
                    }
+    | "one yen short of the deductions is an excess, though the same deductions leave a net of nothing a yen higher" :
+        (PayMonth(Date("2026-07-01")),
+         Earnings { fixed = Yen(12999), uplift = Yen(0) },
+         [ StatutoryDeduction { kind = LongTermCarePremium, amount = Yen(1000) }
+         , StatutoryDeduction { kind = InhabitantTax, amount = Yen(12000) }
+         ])
+        -> DeductionsExceedGross
+    | "a gross made of an uplift alone and one yen short of the deductions is an excess as well" :
+        (PayMonth(Date("2026-11-01")),
+         Earnings { fixed = Yen(0), uplift = Yen(13000) },
+         [ StatutoryDeduction { kind = HealthInsurancePremium, amount = Yen(6500) }
+         , StatutoryDeduction { kind = HealthInsurancePremium, amount = Yen(6501) }
+         ])
+        -> DeductionsExceedGross
+    | "a gross made of an uplift alone and equal to the deductions leaves a net of nothing" :
+        (PayMonth(Date("2026-11-01")),
+         Earnings { fixed = Yen(0), uplift = Yen(13001) },
+         [ StatutoryDeduction { kind = HealthInsurancePremium, amount = Yen(6500) }
+         , StatutoryDeduction { kind = HealthInsurancePremium, amount = Yen(6501) }
+         ])
+        -> PaySlip { month = PayMonth(Date("2026-11-01"))
+                   , earnings = Earnings { fixed = Yen(0), uplift = Yen(13001) }
+                   , deductions = [ StatutoryDeduction { kind = HealthInsurancePremium, amount = Yen(6500) }
+                                  , StatutoryDeduction { kind = HealthInsurancePremium, amount = Yen(6501) }
+                                  ]
+                   , net = Yen(0)
+                   }
+    | "a fixed part of ten trillion yen, the most it may be, is paid out less the deductions" :
+        (PayMonth(Date("2026-07-01")),
+         Earnings { fixed = Yen(10000000000000), uplift = Yen(0) },
+         [ shortDeduction ])
+        -> PaySlip { month = PayMonth(Date("2026-07-01"))
+                   , earnings = Earnings { fixed = Yen(10000000000000), uplift = Yen(0) }
+                   , deductions = [ shortDeduction ]
+                   , net = Yen(9999999999999)
+                   }
+    | "an uplift of ten trillion yen, the most it may be, is paid out less the deductions" :
+        (PayMonth(Date("2026-07-01")),
+         Earnings { fixed = Yen(0), uplift = Yen(10000000000000) },
+         [ shortDeduction ])
+        -> PaySlip { month = PayMonth(Date("2026-07-01"))
+                   , earnings = Earnings { fixed = Yen(0), uplift = Yen(10000000000000) }
+                   , deductions = [ shortDeduction ]
+                   , net = Yen(9999999999999)
+                   }
 
 example taxableAmount
     | "gross less the exempt commuting allowance and less this month's premiums" :
@@ -416,3 +468,5 @@ example taxableAmount
         (MonthlyRemuneration { baseSalary = Yen(100000), scheduledAllowances = Yen(30000), commutingAllowance = Yen(0), excludedAllowances = Yen(7000), variableAllowances = Yen(3000) }, Yen(0), Yen(140000)) -> Yen(0)
     | "every kind of pay and an uplift with an over-ceiling commuting allowance, spent by exactly the premium" :
         (MonthlyRemuneration { baseSalary = Yen(20000), scheduledAllowances = Yen(3000), commutingAllowance = Yen(150001), excludedAllowances = Yen(1000), variableAllowances = Yen(500) }, Yen(700), Yen(25201)) -> Yen(0)
+    | "a premium of a single yen comes off a commuting allowance under the ceiling" :
+        (pay300k, Yen(0), Yen(1)) -> Yen(284999)

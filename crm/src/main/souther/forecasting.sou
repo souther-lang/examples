@@ -943,6 +943,13 @@ example rollupThrough
         -> MixedCurrencies { currencies = [ CurrencyCode("JPY"), CurrencyCode("USD") ] }
     | "a manager whose team has filed nothing has no forecast, not a forecast of zero" :
         (acmeOrg, [ ]) -> NoTeamForecast { manager = UserId("u-mgr") }
+    | "a role with nobody under it is its own number" :
+        (RoleNode { role = RoleName("Rep"), holder = UserId("u-rep"), reports = [] },
+            [ (UserId("u-rep"), repForecast) ])
+        -> repForecast
+    | "a role with nobody under it that has filed nothing has no forecast" :
+        (RoleNode { role = RoleName("Rep"), holder = UserId("u-rep"), reports = [] }, [ ])
+        -> NoTeamForecast { manager = UserId("u-rep") }
 
 // === topPerformers ===
 // Rank by what each owner closed. The amounts have done their work once the list is in order, so what comes

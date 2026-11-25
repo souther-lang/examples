@@ -131,6 +131,9 @@ example chainTo
         (acmeOrg, UserId("u-ceo")) -> ReportingChain { steps = [ UserId("u-ceo") ] }
     | "somebody outside the tree has no line at all" :
         (acmeOrg, UserId("u-nobody")) -> NotInHierarchy { user = UserId("u-nobody") }
+    | "a role with nobody under it that is not the person asked about has no line either" :
+        (RoleNode { role = RoleName("x"), holder = UserId("x"), reports = [] }, UserId("y"))
+        -> NotInHierarchy { user = UserId("y") }
 
 example teamOf
     | "a node's team is itself and everyone under it" :

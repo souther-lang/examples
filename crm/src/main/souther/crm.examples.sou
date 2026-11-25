@@ -152,6 +152,15 @@ example convertLead
          bothOnFile, noContacts)
         -> ConversionBlocked
             { reasons = [ DuplicateAccount { existing = AccountId("001000000000002") } ] }
+    | "two accounts on this domain are both named" :
+        (QualifiedLead { ...acmeQualifiedLead
+                       , reach = EmailOnly { email = EmailAddress("h@beta.example.com") } },
+         ConversionRequest { ...conversionRequest, intent = NoOpportunity },
+         AccountBook([ betaAccount, Account { ...betaAccount, id = AccountId("001000000000004") } ]),
+         noContacts)
+        -> ConversionBlocked
+            { reasons = [ DuplicateAccount { existing = AccountId("001000000000002") }
+                        , DuplicateAccount { existing = AccountId("001000000000004") } ] }
     | "a phone inquiry from a customer already on file converts to an account with no website, and no title" :
         (toConvertViaPhone,
          ConversionRequest { ...conversionRequest, accountType = Customer { since = Date("2024-04-01") }, industry = Manufacturing, intent = OpportunityRequested { amount = Amount(0.0m), closeDate = Date("2026-09-30") } },

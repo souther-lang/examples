@@ -694,6 +694,8 @@ example settleYearEnd
         (Yen(0), Yen(0)) -> Settled
     | "withholding a yen short of a tax of 72,404 collects that yen" :
         (Yen(72404), Yen(72403)) -> AdditionalCollection { amount = Yen(1) }
+    | "nothing owed and a yen withheld refunds that yen" :
+        (Yen(0), Yen(1)) -> Refund { amount = Yen(1) }
 
 // Four people who differ in every field the employment states carry: sex, employment type, contract and
 // schooling. The first is hanakoEmployed's own terms.
